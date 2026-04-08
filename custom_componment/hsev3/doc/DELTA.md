@@ -17,6 +17,45 @@ Si tu lis ce fichier, tu dois :
    - **EXPLORATION** → on réfléchit, rien n'est écrit, on ajoute une ligne `EN_DISCUSSION` si la discussion dure
    - **COMMIT** → décision prise, on génère le patch doc + patch code + on ferme la ligne dans ce fichier
 
+### 📚 Documents de référence IA — lire dans cet ordre avant tout
+
+| Priorité | Fichier | Rôle |
+|---|---|---|
+| 1 | `DELTA.md` (ce fichier) | Écarts actifs — **priorité absolue** |
+| 2 | `00_methode_front_commune.md` | Contrat frontend V3 (règles R1–R5, hseFetch, user_prefs) |
+| 3 | `10_api_contrat.md` | Shape exact de tous les endpoints — source de vérité API |
+| 4 | `hse_v3_synthese.md` | **Toutes les décisions architecturales tranchées** (V1+V2 → V3) |
+
+> ⚠️ **`hse_v3_synthese.md` contient les décisions définitives issues des deux analyses (analyse0.md + analyse.md).**
+> Avant de poser une question sur un choix architectural, vérifier d'abord dans ce fichier.
+> Les sujets couverts : domaine HA, structure dossiers, nommage API, token auth, persistance préférences,
+> moteurs métier, sources de fichiers V1/V2, fichiers exclus de V3, plan de phases, checklist pré-commit.
+
+---
+
+## 📋 Index des décisions tranchées
+
+> Résumé rapide des choix définitifs. Source complète : `hse_v3_synthese.md`.
+
+| Sujet | Décision | Fichier source |
+|---|---|---|
+| Domaine HA | `hse` (pas `hsev3`) | `hse_v3_synthese.md` §1 |
+| Préfixe API | `/api/hse/` | `hse_v3_synthese.md` §3.1 |
+| Auth token | `hse.fetch.js` injecte `Bearer` auto | `hse_v3_synthese.md` §4 |
+| Persistance préfs UI | `PATCH /api/hse/user_prefs` — **jamais localStorage** | Règle R4 |
+| Stockage `user_prefs` | `StorageManager` dans `storage/manager.py` (Store HA natif) | `hse_v3_synthese.md` §7 |
+| Valeurs par défaut `user_prefs` | `active_tab: "overview"`, `*_period: "day"/"month"`, `theme: "default"`, booleans `false` | `hse_v3_synthese.md` §6 |
+| Structure backend | Sous-dossiers `catalogue/`, `meta/`, `engine/`, `storage/`, `api/` | `hse_v3_synthese.md` §3.2 |
+| `engine/cost.py` | `shared_cost_engine.py` V2 — **INTACT, ne pas modifier** | `hse_v3_synthese.md` §7 |
+| Pas de `sensor.py` | Interdit — pattern `hse_sensors_ready` event à la place | `hse_v3_synthese.md` §2 |
+| `__init__.py` | < 200 lignes, orchestration uniquement | `hse_v3_synthese.md` §3.2 |
+| Fichiers statiques | `StaticPathConfig` — pas de `shutil.copytree` | `hse_v3_synthese.md` §4 |
+| `proxy_api.py` | **Supprimé définitivement** | `hse_v3_synthese.md` §8 |
+| Format erreur API | HA natif : code HTTP + `{"message": "..."}` | `10_api_contrat.md` |
+| Merge `PATCH` | Partiel pour `user_prefs`, complet pour tous les autres | `10_api_contrat.md` règle 9 |
+| Sécurité | `requires_auth=True` + `cors_allowed=False` sur tous les endpoints | `hse_v3_synthese.md` §4 |
+| Panel HA | `require_admin=True` | `hse_v3_synthese.md` §4 |
+
 ---
 
 ## Légende des statuts
