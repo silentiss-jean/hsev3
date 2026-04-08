@@ -32,57 +32,28 @@ Si tu lis ce fichier, tu dois :
 
 ## Ordre de résolution décidé (session 2026-04-08)
 
-La stratégie retenue est **backend-first**. Le frontend ne peut pas être codé proprement
-sans que les contrats d'API soient définis. L'ordre de résolution des écarts est donc :
+Stratégie retenue : **backend-first**.
 
 ```
-DELTA-005  →  DELTA-004 (blocs 1→2→3→4)  →  DELTA-001  →  DELTA-002  →  DELTA-003
-(contrat API)  (code backend)               (user_prefs)  (hse.fetch)   (views JS)
+[FAIT] DELTA-005  →  DELTA-004 (blocs 1→2→3→4)  →  DELTA-002  →  DELTA-003
+[FAIT] DELTA-001     (code backend)                  (hse.fetch)   (views JS)
 ```
 
 ---
 
 ## Écarts actifs
 
-### [DELTA-005] 🟠 EN_DISCUSSION — Doc `10_api_contrat.md` manquante
-- **Constat** : toute la doc existante est orientée frontend (onglets, contrat de rendering R1–R5).
-  Il n'existe aucun fichier spécifiant le **shape JSON** des endpoints backend.
-- **Ce qui manque** : pour chaque endpoint (`/overview`, `/costs`, `/diagnostic`, `/scan`,
-  `/catalogue/*`, `/meta`, `/settings/pricing`, `/user_prefs`, `/migration/*`, `/history`, `/ping`) :
-  - méthode HTTP + URL complète
-  - paramètres query string / body
-  - shape exact de la réponse JSON (champs, types, valeurs possibles)
-  - codes d'erreur retournés
-  - règles de validation des inputs
-- **Décision prise** : rédiger `10_api_contrat.md` **avant tout code backend ou frontend**
-- **Prochaine action** : réfléchir à la structure de ce fichier (format, niveau de détail,
-  quel endpoint en premier)
-- **Débloque** : DELTA-004 (on sait quoi coder), DELTA-001 (payload user_prefs défini),
-  DELTA-002 (hse.fetch connaît le format des réponses), DELTA-003 (les onglets savent ce qu'ils consomment)
-
----
-
 ### [DELTA-004] 🔴 DOC_AHEAD — Backend Python V3
-- **Doc concernée** : `hse_v3_synthese.md` §3, §9 (architecture + plan de phases)
+- **Doc concernée** : `hse_v3_synthese.md` §3, §9 + `10_api_contrat.md`
 - **Ce que la doc dit** : structure en sous-dossiers `catalogue/`, `meta/`, `engine/`, `storage/`, `api/`
 - **État du code** : aucun code backend V3 produit
 - **Impact** : tous les endpoints consommés par le frontend n'existent pas
-- **Séquence de résolution** (une fois DELTA-005 fermé) :
+- **Séquence de résolution** :
   - Bloc 1 — Squelette : `manifest.json` + `__init__.py` + `api/base.py` + `GET /api/hse/ping`
   - Bloc 2 — Data : `storage/manager.py` + `meta/` + `options_flow.py`
   - Bloc 3 — Moteurs : `engine/cost.py` + `engine/calculation.py` + `engine/group_totals.py` + `engine/analytics.py`
-  - Bloc 4 — Views API : toutes les views `api/views/` avec `HseBaseView`
+  - Bloc 4 — Views API : toutes les views `api/views/` avec `HseBaseView` (shape défini dans `10_api_contrat.md`)
 - **Bloquant pour** : tout
-
----
-
-### [DELTA-001] 🔴 DOC_AHEAD — Endpoint `user_prefs`
-- **Doc concernée** : `00_methode_front_commune.md` §R4, tous les onglets avec sélecteur de période
-- **Ce que la doc dit** : tout état persistant passe par `PATCH /api/hse/user_prefs`
-- **État du code** : endpoint non encore créé dans le backend
-- **Impact** : tous les onglets qui mémorisent une période (overview, costs, cards) sont bloqués
-- **Décision à prendre** : structure du payload `user_prefs` à définir dans `10_api_contrat.md`
-- **Bloquant pour** : `overview.view.js`, `costs.view.js`, `cards.view.js`
 
 ---
 
@@ -90,8 +61,7 @@ DELTA-005  →  DELTA-004 (blocs 1→2→3→4)  →  DELTA-001  →  DELTA-002 
 - **Doc concernée** : `00_methode_front_commune.md` §5, `09_squelette_hse_tab_base.md`
 - **Ce que la doc dit** : tous les appels HTTP passent par `hseFetch` injecté dans `ctx`, token via `window.__hseToken`
 - **État du code** : fichier `hse.fetch.js` non créé, shell non écrit
-- **Note** : la signature finale de `hseFetch` (gestion erreurs, format retour) dépend du shape
-  des réponses API défini dans `10_api_contrat.md`
+- **Note** : la signature `hseFetch` connaît désormais le format des réponses (défini dans `10_api_contrat.md`)
 - **Impact** : aucun onglet ne peut faire de fetch sans ce fichier
 - **Bloquant pour** : tous les onglets
 
@@ -111,7 +81,8 @@ DELTA-005  →  DELTA-004 (blocs 1→2→3→4)  →  DELTA-001  →  DELTA-002 
 
 | ID | Fermé le | Description |
 |---|---|---|
-| — | — | Pas encore d'alignements résolus — projet en phase initiale |
+| DELTA-005 | 2026-04-08 | `10_api_contrat.md` rédigé — fiches compactes, format erreur HA natif, 22 endpoints définis |
+| DELTA-001 | 2026-04-08 | Payload `user_prefs` défini dans `10_api_contrat.md` (champs + valeurs valides + merge partiel) |
 
 ---
 
