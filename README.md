@@ -25,6 +25,15 @@ Règles pour l'IA :
 
 ---
 
+```
+## 🧵 État courant de la session (à mettre à jour si thread long)
+- Sujet du jour : [ex: implémentation overview.view.js]
+- Décisions prises : [ex: polling 30s endpoint unique, pas de double fetch]
+- Prochaine étape : [ex: générer le patch _render()]
+```
+
+---
+
 ## Structure du repo
 
 ```
