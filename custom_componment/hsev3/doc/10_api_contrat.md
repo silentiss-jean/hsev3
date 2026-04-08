@@ -21,8 +21,8 @@
 | 4 | Ressource absente → `404 Not Found` |
 | 5 | Moteurs non initialisés → `503 Service Unavailable` |
 | 6 | Dates en ISO 8601 avec timezone : `2026-04-08T18:30:00+02:00` |
-| 7 | Montants euros arondis à 2 décimales, énergies en `kwh` (float), puissances en `w` (int) |
-| 8 | Listes paginnées : `{ total, page, per_page, items[] }` |
+| 7 | Montants euros arrondis à 2 décimales, énergies en `kwh` (float), puissances en `w` (int) |
+| 8 | Listes paginniées : `{ total, page, per_page, items[] }` |
 | 9 | `PATCH /user_prefs` = merge partiel. Tous les autres endpoints remplacent complètement. |
 | 10 | `cors_allowed = False` sans exception |
 
@@ -197,12 +197,20 @@
 
 ### `GET /api/hse/user_prefs`
 - **Params** : aucun
-- **Réponse 200** : `{ active_tab: str|null, overview_period: str|null, costs_period: str|null, theme: str|null, glassmorphism: bool, dynamic_bg: bool }`
+- **Réponse 200** : `{ active_tab, overview_period, costs_period, theme, glassmorphism, dynamic_bg }`
+- **Valeurs par défaut** (retournées si jamais modifiées) :
+  - `active_tab: "overview"`
+  - `overview_period: "day"`
+  - `costs_period: "month"`
+  - `theme: "default"`
+  - `glassmorphism: false`
+  - `dynamic_bg: false`
+- **Stockage backend** : `StorageManager` dans `storage/manager.py` — fichier HA natif `.storage/hse_user_prefs` (Store HA)
 - **Erreurs** : 401
 
 ### `PATCH /api/hse/user_prefs`
-- **Body** : un ou plusieurs champs de la réponse GET (merge partiel)
-- **Réponse 200** : objet complet après merge (même shape que GET)
+- **Body** : un ou plusieurs champs (merge partiel — seuls les champs envoyés sont écrasés)
+- **Réponse 200** : objet **complet** après merge (même shape que GET, pas juste les champs modifiés)
 - **Champs valides** :
   - `active_tab` : `overview|diagnostic|scan|config|custom|cards|migration|costs`
   - `overview_period` / `costs_period` : `day|week|month|year`
