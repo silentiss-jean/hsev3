@@ -27,7 +27,7 @@ Règles pour l'IA :
 
 ```
 ## 🧵 État courant de la session (à mettre à jour si thread long)
-- Sujet du jour : [ex: implémentation overview.view.js]
+- Sujet du jour : [ex: implémentation overview_view.js]
 - Décisions prises : [ex: polling 30s endpoint unique, pas de double fetch]
 - Prochaine étape : [ex: générer le patch _render()]
 ```
@@ -56,13 +56,22 @@ hsev3/
 │   │   ├── const.py
 │   │   ├── time_utils.py
 │   │   │
-│   │   ├── api/                     ← ✅ Bloc 1
+│   │   ├── api/                     ← ✅ Blocs 1 & 4
 │   │   │   ├── __init__.py
 │   │   │   ├── base.py              ← HseBaseView (requires_auth=True, cors_allowed=False)
 │   │   │   └── views/
-│   │   │       ├── __init__.py
-│   │   │       └── ping.py          ← GET /api/hse/ping ✅ Bloc 1
-│   │   │       ← (autres views : ⏳ Blocs 3 & 4 — voir DELTA-004)
+│   │   │       ├── __init__.py      ← enregistrement de toutes les routes
+│   │   │       ├── ping.py          ← GET /api/hse/ping ✅ Bloc 1
+│   │   │       ├── catalogue.py     ← GET/PATCH /api/hse/catalogue ✅ Bloc 4
+│   │   │       ├── costs.py         ← GET /api/hse/costs ✅ Bloc 4
+│   │   │       ├── diagnostic.py    ← GET /api/hse/diagnostic ✅ Bloc 4
+│   │   │       ├── frontend_manifest.py ← GET /api/hse/frontend_manifest ✅ Bloc 4
+│   │   │       ├── meta.py          ← GET/PATCH /api/hse/meta ✅ Bloc 4
+│   │   │       ├── migration.py     ← GET/POST /api/hse/migration ✅ Bloc 4
+│   │   │       ├── overview.py      ← GET /api/hse/overview ✅ Bloc 4
+│   │   │       ├── scan.py          ← POST /api/hse/scan ✅ Bloc 4
+│   │   │       ├── settings.py      ← GET/PATCH /api/hse/settings ✅ Bloc 4
+│   │   │       └── user_prefs.py    ← GET/PATCH /api/hse/user_prefs ✅ Bloc 4
 │   │   │
 │   │   ├── catalogue/               ← ✅ Bloc 2 (V2 conservé)
 │   │   │   ├── __init__.py
@@ -80,39 +89,47 @@ hsev3/
 │   │   │
 │   │   ├── storage/                 ← ✅ Bloc 2
 │   │   │   ├── __init__.py
-│   │   │   └── manager.py           ← StorageManager V1 épuré
+│   │   │   └── manager.py           ← StorageManager V1 épuré + user_prefs
 │   │   │
-│   │   ├── engine/                  ← ⏳ Bloc 3 (pas encore créé)
-│   │   │   ← cost.py, calculation.py, group_totals.py, analytics.py
+│   │   ├── engine/                  ← ✅ Bloc 3
+│   │   │   ├── __init__.py
+│   │   │   ├── cost.py              ← shared_cost_engine V2 INTACT
+│   │   │   ├── calculation.py
+│   │   │   ├── group_totals.py
+│   │   │   └── analytics.py
 │   │   │
-│   │   ├── sensors/                 ← ⏳ Bloc 3 (pas encore créé)
-│   │   │   ← quality_scorer.py, sync_manager.py, name_fixer.py
+│   │   ├── sensors/                 ← ✅ Bloc 3
+│   │   │   ├── __init__.py
+│   │   │   ├── quality_scorer.py
+│   │   │   ├── sync_manager.py
+│   │   │   └── name_fixer.py
 │   │   │
-│   │   ├── translations/            ← ⏳ (pas encore créé)
-│   │   │   ← fr.json, en.json
-│   │   │
-│   │   ├── web_static/              ← ⏳ Phase 5 (pas encore créé)
+│   │   ├── web_static/              ← ✅ DELTA-002 & DELTA-003
 │   │   │   └── panel/
-│   │   │       ├── hse_panel.html
-│   │   │       ├── hse_panel.js
-│   │   │       ├── style.hse.panel.css
-│   │   │       ├── features/
-│   │   │       │   ├── overview/
-│   │   │       │   ├── diagnostic/
-│   │   │       │   ├── scan/
-│   │   │       │   ├── config/
-│   │   │       │   ├── custom/
-│   │   │       │   ├── cards/
-│   │   │       │   ├── migration/
-│   │   │       │   └── costs/
-│   │   │       └── shared/
-│   │   │           ├── hse_fetch.js ← ⏳ DELTA-002
-│   │   │           ├── hse_store.js
-│   │   │           ├── core/
-│   │   │           └── styles/
+│   │   │       ├── shared/
+│   │   │       │   ├── hse_fetch.js ← client HTTP, inject Bearer auto ✅ DELTA-002
+│   │   │       │   ├── hse_store.js ← store réactif partagé ✅ DELTA-002
+│   │   │       │   └── hse_shell.js ← shell panel + routing onglets ✅ DELTA-002
+│   │   │       └── features/
+│   │   │           ├── overview/
+│   │   │           │   └── overview_view.js     ✅ DELTA-003
+│   │   │           ├── diagnostic/
+│   │   │           │   └── diagnostic_view.js   ✅ DELTA-003
+│   │   │           ├── scan/
+│   │   │           │   └── scan_view.js         ✅ DELTA-003
+│   │   │           ├── config/
+│   │   │           │   └── config_view.js       ✅ DELTA-003
+│   │   │           ├── custom/
+│   │   │           │   └── custom_view.js       ✅ DELTA-003
+│   │   │           ├── cards/
+│   │   │           │   └── cards_view.js        ✅ DELTA-003
+│   │   │           ├── migration/
+│   │   │           │   └── migration_view.js    ✅ DELTA-003
+│   │   │           └── costs/
+│   │   │               └── costs_view.js        ✅ DELTA-003
 │   │   │
-│   │   └── doc/                     ← 📚 Documentation IA (miroir de hsev3/doc)
-│   │       ├── DELTA.md             ← 🔴 écarts doc/code actifs
+│   │   └── doc/                     ← 📚 Documentation IA (source de vérité)
+│   │       ├── DELTA.md             ← ✅ Aucun écart actif
 │   │       ├── 00_methode_front_commune.md
 │   │       ├── 01_onglet_overview.md
 │   │       ├── 02_onglet_diagnostic.md
@@ -138,9 +155,18 @@ hsev3/
 | Bloc | Contenu | Statut |
 |---|---|---|
 | Bloc 1 | `manifest.json` + `__init__.py` + `api/base.py` + `GET /api/hse/ping` | ✅ TERMINÉ — 2026-04-09 |
-| Bloc 2 | `storage/manager.py` + `catalogue/` + `meta/` + `options_flow.py` | 🔴 EN COURS |
-| Bloc 3 | `engine/` + `sensors/` | ⏳ À faire |
-| Bloc 4 | Toutes les views `api/views/` | ⏳ À faire |
+| Bloc 2 | `storage/manager.py` + `catalogue/` + `meta/` + `options_flow.py` | ✅ TERMINÉ — 2026-04-09 |
+| Bloc 3 | `engine/` + `sensors/` | ✅ TERMINÉ — 2026-04-09 |
+| Bloc 4 | Toutes les views `api/views/` (11 fichiers, 19 classes) | ✅ TERMINÉ — 2026-04-09 |
+
+## Avancement Frontend (DELTA-002 & DELTA-003)
+
+| Tâche | Contenu | Statut |
+|---|---|---|
+| DELTA-002 | `hse_fetch.js` + `hse_store.js` + `hse_shell.js` dans `web_static/panel/shared/` | ✅ TERMINÉ — 2026-04-09 |
+| DELTA-003 | 8 views JS dans `web_static/panel/features/<id>/<id>_view.js` | ✅ TERMINÉ — 2026-04-09 |
+
+> **DELTA.md = vide** → doc et code parfaitement alignés ✅
 
 ---
 
