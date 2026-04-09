@@ -14,7 +14,6 @@ from __future__ import annotations
 from aiohttp import web
 from homeassistant.core import HomeAssistant
 
-from ..__init__ import HseBaseView  # noqa: F401  — import relatif propre
 from .. import HseBaseView
 from ... import DOMAIN, VERSION
 
