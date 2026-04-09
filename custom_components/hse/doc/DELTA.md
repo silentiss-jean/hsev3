@@ -69,7 +69,7 @@ Si tu lis ce fichier, tu dois :
 ## Ordre de résolution
 
 ```
-[FAIT] DELTA-005 → [BLOC 1 ✅] DELTA-004 Bloc 1 → [BLOC 2 ✅ PARTIEL] → [SUIVANT] Bloc 2 fin → Bloc 3 → Bloc 4 → DELTA-002 → DELTA-003
+[FAIT] DELTA-005 → [BLOC 1 ✅] DELTA-004 Bloc 1 → [BLOC 2 ✅] DELTA-004 Bloc 2 → [SUIVANT] Bloc 3 → Bloc 4 → DELTA-002 → DELTA-003
 [FAIT] DELTA-001
 [FAIT] DELTA-006 / 007 / 008 / 009 / 010
 ```
@@ -82,9 +82,8 @@ Si tu lis ce fichier, tu dois :
 - **Doc concernée** : `hse_v3_synthese.md` §3 + `10_api_contrat.md`
 - **Progression** :
   - ✅ Bloc 1 **TERMINÉ** — `manifest.json` + `__init__.py` + `api/base.py` + `GET /api/hse/ping` (commit 2026-04-09)
-  - ✅ Bloc 2 **QUASI-TERMINÉ** (audit 2026-04-09) — `storage/manager.py` ✅ + `catalogue/` complet ✅ + `options_flow.py` ✅
-    - 🔴 **Manquants** : `meta/store.py` + `meta/assignments.py`
-  - ⏳ Bloc 3 — `engine/cost.py` (V2) + `engine/calculation.py` (V1) + `engine/group_totals.py` (V1) + `engine/analytics.py` (V1)
+  - ✅ Bloc 2 **TERMINÉ** — `storage/manager.py` + `catalogue/` + `meta/` complet + `options_flow.py` (commit 2026-04-09)
+  - 🔴 Bloc 3 **EN COURS** — `engine/cost.py` (V2) + `engine/calculation.py` (V1) + `engine/group_totals.py` (V1) + `engine/analytics.py` (V1)
   - ⏳ Bloc 4 — Toutes les views `api/views/` — migration = Hypothèse A
 - **Bloquant pour** : tout
 - **Dépendances** : aucune — toutes les questions préalables tranchées
@@ -112,7 +111,7 @@ Si tu lis ce fichier, tu dois :
 
 | ID | Fermé le | Description |
 |---|---|---|
-| DELTA-004 Bloc 2 (partiel) | 2026-04-09 | `storage/manager.py` + `catalogue/` complet + `options_flow.py` ✅ — `meta/store.py` + `meta/assignments.py` encore manquants |
+| DELTA-004 Bloc 2 | 2026-04-09 | `storage/manager.py` + `catalogue/` + `meta/` (`store.py` + `assignments.py`) + `options_flow.py` |
 | DELTA-004 Bloc 1 | 2026-04-09 | `manifest.json` + `__init__.py` + `api/base.py` + `GET /api/hse/ping` |
 | DELTA-010 | 2026-04-08 | `frontend_manifest.py` conservé |
 | DELTA-009 | 2026-04-08 | Capteur référence → `storage/manager.py` |
