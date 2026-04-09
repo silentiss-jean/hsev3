@@ -38,6 +38,8 @@ Règles pour l'IA :
 
 > ⚠️ Le dossier HACS installé est `custom_components/hse/` (domaine `hse`, DELTA-004 acté).
 > `custom_components/hsev3/` ne contient que la documentation miroir.
+>
+> 🔴 **Fichiers marqués `ÉCART DELTA-0XX` = non encore créés — voir DELTA.md pour le détail.**
 
 ```
 hsev3/
@@ -51,10 +53,15 @@ hsev3/
 │   ├── hse/                         ← 🟢 DOSSIER HACS (domaine: hse)
 │   │   ├── __init__.py              ← orchestration < 200 lignes ✅ Bloc 1
 │   │   ├── manifest.json            ← version: 3.0.0, domain: hse ✅ Bloc 1
-│   │   ├── config_flow.py
+│   │   ├── config_flow.py           ✅
 │   │   ├── options_flow.py          ← capteur référence + tarif €/kWh ✅ Bloc 2
-│   │   ├── const.py
-│   │   ├── time_utils.py
+│   │   ├── const.py                 ✅
+│   │   ├── time_utils.py            ✅
+│   │   ├── services.yaml            ← 9 services HA 🔴 MANQUANT (ÉCART DELTA-014)
+│   │   ├── repairs.py               ← HA Repairs natif 🔴 MANQUANT (ÉCART DELTA-013)
+│   │   ├── translations/
+│   │   │   ├── fr.json              ← 🔴 MANQUANT — BLOQUANT HACS (ÉCART DELTA-012)
+│   │   │   └── en.json              ← 🔴 MANQUANT — BLOQUANT HACS (ÉCART DELTA-012)
 │   │   │
 │   │   ├── api/                     ← ✅ Blocs 1 & 4
 │   │   │   ├── __init__.py
@@ -71,7 +78,9 @@ hsev3/
 │   │   │       ├── overview.py      ← GET /api/hse/overview ✅ Bloc 4
 │   │   │       ├── scan.py          ← POST /api/hse/scan ✅ Bloc 4
 │   │   │       ├── settings.py      ← GET/PATCH /api/hse/settings ✅ Bloc 4
-│   │   │       └── user_prefs.py    ← GET/PATCH /api/hse/user_prefs ✅ Bloc 4
+│   │   │       ├── user_prefs.py    ← GET/PATCH /api/hse/user_prefs ✅ Bloc 4
+│   │   │       ├── history.py       ← GET /api/hse/history 🔴 MANQUANT (ÉCART DELTA-015)
+│   │   │       └── export_api.py    ← export CSV/JSON 🔴 MANQUANT (ÉCART DELTA-015)
 │   │   │
 │   │   ├── catalogue/               ← ✅ Bloc 2 (V2 conservé)
 │   │   │   ├── __init__.py
@@ -104,12 +113,24 @@ hsev3/
 │   │   │   ├── sync_manager.py
 │   │   │   └── name_fixer.py
 │   │   │
-│   │   ├── web_static/              ← ✅ DELTA-002 & DELTA-003
+│   │   ├── web_static/
 │   │   │   └── panel/
+│   │   │       ├── hse_panel.html       ← point d'entrée HTML 🔴 MANQUANT (ÉCART DELTA-011)
+│   │   │       ├── hse_panel.js         ← déclaration panel HA 🔴 RÉÉCRITURE (ÉCART DELTA-011)
+│   │   │       │                          ⚠️ Ne PAS récupérer V2 — buggé
+│   │   │       ├── style.hse.panel.css  ← CSS global hors shadow DOM 🔴 MANQUANT (ÉCART DELTA-011)
 │   │   │       ├── shared/
-│   │   │       │   ├── hse_fetch.js ← client HTTP, inject Bearer auto ✅ DELTA-002
-│   │   │       │   ├── hse_store.js ← store réactif partagé ✅ DELTA-002
-│   │   │       │   └── hse_shell.js ← shell panel + routing onglets ✅ DELTA-002
+│   │   │       │   ├── hse_fetch.js     ← client HTTP, inject Bearer auto ✅ DELTA-002
+│   │   │       │   ├── hse_store.js     ← store réactif partagé ✅ DELTA-002
+│   │   │       │   ├── hse_shell.js     ← custom element <hse-panel> + routing ✅ DELTA-002
+│   │   │       │   ├── ui/
+│   │   │       │   │   ├── dom.js           ← utilitaires DOM 🔴 MANQUANT (ÉCART DELTA-016)
+│   │   │       │   │   └── table.js         ← utilitaires tableau 🔴 MANQUANT (ÉCART DELTA-016)
+│   │   │       │   └── styles/
+│   │   │       │       ├── hse_tokens.shadow.css  ← 🔴 MANQUANT (ÉCART DELTA-016)
+│   │   │       │       ├── hse_themes.shadow.css  ← 🔴 MANQUANT (ÉCART DELTA-016)
+│   │   │       │       ├── hse_alias.v2.css       ← 🔴 MANQUANT (ÉCART DELTA-016)
+│   │   │       │       └── tokens.css             ← 🔴 MANQUANT (ÉCART DELTA-016)
 │   │   │       └── features/
 │   │   │           ├── overview/
 │   │   │           │   └── overview_view.js     ✅ DELTA-003
@@ -129,7 +150,7 @@ hsev3/
 │   │   │               └── costs_view.js        ✅ DELTA-003
 │   │   │
 │   │   └── doc/                     ← 📚 Documentation IA (source de vérité)
-│   │       ├── DELTA.md             ← ✅ Aucun écart actif
+│   │       ├── DELTA.md             ← 🔴 6 écarts actifs (DELTA-011 à 016)
 │   │       ├── 00_methode_front_commune.md
 │   │       ├── 01_onglet_overview.md
 │   │       ├── 02_onglet_diagnostic.md
@@ -150,7 +171,9 @@ hsev3/
 
 ---
 
-## Avancement DELTA-004 (backend Python V3)
+## Avancement global
+
+### Backend Python V3 (DELTA-004)
 
 | Bloc | Contenu | Statut |
 |---|---|---|
@@ -159,20 +182,29 @@ hsev3/
 | Bloc 3 | `engine/` + `sensors/` | ✅ TERMINÉ — 2026-04-09 |
 | Bloc 4 | Toutes les views `api/views/` (11 fichiers, 19 classes) | ✅ TERMINÉ — 2026-04-09 |
 
-## Avancement Frontend (DELTA-002 & DELTA-003)
+### Frontend JS (DELTA-002 & DELTA-003)
 
 | Tâche | Contenu | Statut |
 |---|---|---|
-| DELTA-002 | `hse_fetch.js` + `hse_store.js` + `hse_shell.js` dans `web_static/panel/shared/` | ✅ TERMINÉ — 2026-04-09 |
-| DELTA-003 | 8 views JS dans `web_static/panel/features/<id>/<id>_view.js` | ✅ TERMINÉ — 2026-04-09 |
+| DELTA-002 | `hse_fetch.js` + `hse_store.js` + `hse_shell.js` | ✅ TERMINÉ — 2026-04-09 |
+| DELTA-003 | 8 views JS `features/<id>/<id>_view.js` | ✅ TERMINÉ — 2026-04-09 |
 
-> **DELTA.md = vide** → doc et code parfaitement alignés ✅
+### Écarts actifs — DELTA.md
+
+| ID | Titre | Bloquant | Statut |
+|---|---|---|---|
+| DELTA-011 | Panel HA — `hse_panel.html` + `hse_panel.js` (réécriture) + `style.hse.panel.css` | ✅ OUI — rien ne s'affiche | 🔴 À faire |
+| DELTA-012 | Translations — `fr.json` + `en.json` | ✅ OUI — HACS refuse | 🔴 À faire |
+| DELTA-013 | `repairs.py` | Non | 🔴 À faire |
+| DELTA-014 | `services.yaml` | Non | 🔴 À faire |
+| DELTA-015 | `api/views/history.py` + `api/views/export_api.py` | Onglet Costs | 🔴 À faire |
+| DELTA-016 | `shared/ui/dom.js` + `table.js` + 4 CSS tokens/themes | Rendering | 🔴 À faire |
+
+> Voir `custom_components/hse/doc/DELTA.md` pour le détail complet de chaque écart.
 
 ---
 
 ## Workflow doc ↔ code
-
-Voir `custom_components/hse/doc/DELTA.md` pour l'état d'alignement en temps réel.
 
 | Phase | Action |
 |---|---|
