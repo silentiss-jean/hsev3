@@ -12,8 +12,8 @@ Stack : Home Assistant custom integration, Python backend, JS frontend (vanilla,
 Domaine HA : hse
 
 Avant toute chose, lis ces fichiers dans l'ordre :
-1. custom_componment/hsev3/doc/DELTA.md         → écarts doc/code actifs (priorité absolue)
-2. custom_componment/hsev3/doc/00_methode_front_commune.md → contrat frontend V3
+1. custom_componment/hse/doc/DELTA.md         → écarts doc/code actifs (priorité absolue)
+2. custom_componment/hse/doc/00_methode_front_commune.md → contrat frontend V3
 3. hse_v3_synthese.md                           → synthèse architecture V3
 
 Règles pour l'IA :
@@ -43,7 +43,7 @@ hsev3/
 ├── analyse0.md                      ← analyse V1/V2 (backend)
 ├── hse_v3_synthese.md               ← synthèse des deux analyses → base V3
 └── custom_componment/
-    └── hsev3/
+    └── hse/
         ├── doc/
         │   ├── DELTA.md             ← 🔴 écarts doc/code actifs
         │   ├── 00_methode_front_commune.md
@@ -64,7 +64,7 @@ hsev3/
 
 ## Workflow doc ↔ code
 
-Voir `custom_componment/hsev3/doc/DELTA.md` pour l'état d'alignement en temps réel.
+Voir `custom_componment/hse/doc/DELTA.md` pour l'état d'alignement en temps réel.
 
 | Phase | Action |
 |---|---|
