@@ -75,14 +75,88 @@ Si tu lis ce fichier, tu dois :
 [FAIT] DELTA-001
 [FAIT] DELTA-006 / 007 / 008 / 009 / 010
 
-→ Section "Écarts actifs" vide = doc et code alignés ✅
+→ En cours : DELTA-011 → DELTA-012 → DELTA-013 → DELTA-014 → DELTA-015 → DELTA-016
 ```
 
 ---
 
 ## Écarts actifs
 
-> ✅ **Aucun écart actif.** Doc et code sont parfaitement alignés.
+### 🔴 DELTA-011 — Panel HA : point d'entrée manquant
+**Statut :** `DOC_AHEAD`  
+**Ouvert le :** 2026-04-09  
+**Fichiers manquants** (prévus `hse_v3_synthese.md` §3.2 Phase 5) :
+- `web_static/panel/hse_panel.html`
+- `web_static/panel/hse_panel.js`
+- `web_static/panel/style.hse.panel.css`
+
+**Impact :** BLOQUANT — sans ces 3 fichiers le panel HA ne s'affiche pas du tout.  
+**Dépendances :** `hse_shell.js` déjà présent, attend `hse_panel.js` pour s'initialiser.
+
+---
+
+### 🔴 DELTA-012 — Translations manquantes
+**Statut :** `DOC_AHEAD`  
+**Ouvert le :** 2026-04-09  
+**Fichiers manquants** (prévus §3.2 + checklist §10 item bloquant) :
+- `translations/fr.json`
+- `translations/en.json`
+
+**Impact :** BLOQUANT HACS — HA refuse de charger une intégration sans `translations/`.  
+**Source :** V2 existant à récupérer et adapter au domaine `hse` V3.
+
+---
+
+### 🔴 DELTA-013 — `repairs.py` manquant
+**Statut :** `DOC_AHEAD`  
+**Ouvert le :** 2026-04-09  
+**Fichier manquant** (prévu §3.2, source V2) :
+- `repairs.py`
+
+**Impact :** HA Repairs natif non actif — les alertes capteurs ne remontent pas dans l'UI HA.  
+**Source :** `repairs.py` V2 à adapter au domaine `hse`.
+
+---
+
+### 🔴 DELTA-014 — `services.yaml` manquant
+**Statut :** `DOC_AHEAD`  
+**Ouvert le :** 2026-04-09  
+**Fichier manquant** (prévu §3.2 + §7, source V1) :
+- `services.yaml`
+
+**Impact :** Les 9 services HA ne sont pas déclarés (generate_local_data, migrate_cleanup, export_data, etc.) — non appelables depuis les automations HA.  
+**Source :** Extraire de `__init__.py` V1.
+
+---
+
+### 🔴 DELTA-015 — Views API manquantes
+**Statut :** `DOC_AHEAD`  
+**Ouvert le :** 2026-04-09  
+**Fichiers manquants** (prévus §3.2 Phase 4) :
+- `api/views/history.py` — `GET /api/hse/history` (wraps `engine/analytics.py`) — **requis par onglet Costs**
+- `api/views/export_api.py` — export CSV/JSON — **requis par onglet Costs bouton export**
+
+**Impact :** Onglet `costs` non fonctionnel (historique 12 mois + export CSV manquants).
+
+---
+
+### 🔴 DELTA-016 — Fichiers shared frontend manquants
+**Statut :** `DOC_AHEAD`  
+**Ouvert le :** 2026-04-09  
+**Fichiers manquants** (prévus §3.2 Phase 5) :
+
+*Utilitaires JS :*
+- `web_static/panel/shared/ui/dom.js`
+- `web_static/panel/shared/ui/table.js`
+
+*Styles CSS :*
+- `web_static/panel/shared/styles/hse_tokens.shadow.css`
+- `web_static/panel/shared/styles/hse_themes.shadow.css`
+- `web_static/panel/shared/styles/hse_alias.v2.css`
+- `web_static/panel/shared/styles/tokens.css`
+
+**Impact :** Les `*_view.js` existants ne peuvent pas importer les utilitaires DOM/table ni appliquer les tokens CSS. Rendering dégradé ou cassé.  
+**Source :** V2 existant à migrer.
 
 ---
 
