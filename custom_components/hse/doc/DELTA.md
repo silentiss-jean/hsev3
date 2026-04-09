@@ -69,7 +69,7 @@ Si tu lis ce fichier, tu dois :
 ## Ordre de résolution
 
 ```
-[FAIT] DELTA-005 → [BLOC 1 ✅] DELTA-004 Bloc 1 → [BLOC 2 ✅] DELTA-004 Bloc 2 → [SUIVANT] Bloc 3 → Bloc 4 → DELTA-002 → DELTA-003
+[FAIT] DELTA-005 → [BLOC 1 ✅] → [BLOC 2 ✅] → [BLOC 3 ✅] → [SUIVANT] Bloc 4 → DELTA-002 → DELTA-003
 [FAIT] DELTA-001
 [FAIT] DELTA-006 / 007 / 008 / 009 / 010
 ```
@@ -83,10 +83,10 @@ Si tu lis ce fichier, tu dois :
 - **Progression** :
   - ✅ Bloc 1 **TERMINÉ** — `manifest.json` + `__init__.py` + `api/base.py` + `GET /api/hse/ping` (commit 2026-04-09)
   - ✅ Bloc 2 **TERMINÉ** — `storage/manager.py` + `catalogue/` + `meta/` complet + `options_flow.py` (commit 2026-04-09)
-  - 🔴 Bloc 3 **EN COURS** — `engine/cost.py` (V2) + `engine/calculation.py` (V1) + `engine/group_totals.py` (V1) + `engine/analytics.py` (V1)
-  - ⏳ Bloc 4 — Toutes les views `api/views/` — migration = Hypothèse A
-- **Bloquant pour** : tout
-- **Dépendances** : aucune — toutes les questions préalables tranchées
+  - ✅ Bloc 3 **TERMINÉ** — `engine/__init__.py` + `engine/cost.py` (V2 INTACT) + `engine/calculation.py` + `engine/group_totals.py` + `engine/analytics.py` (vérifié 2026-04-09)
+  - 🔴 Bloc 4 **EN COURS** — Toutes les views `api/views/` — migration = Hypothèse A
+- **Bloquant pour** : DELTA-002, DELTA-003
+- **Dépendances** : Bloc 3 ✅
 
 ---
 
@@ -95,7 +95,7 @@ Si tu lis ce fichier, tu dois :
 - **État** : fichier non créé, shell non écrit
 - **Note** : nommage `hse_fetch.js` (underscore) acté — doc `00_methode_front_commune.md` à patcher au COMMIT
 - **Bloquant pour** : tous les onglets
-- **Dépendance** : DELTA-004 Bloc 1 ✅
+- **Dépendance** : DELTA-004 Bloc 4
 
 ---
 
@@ -111,6 +111,7 @@ Si tu lis ce fichier, tu dois :
 
 | ID | Fermé le | Description |
 |---|---|---|
+| DELTA-004 Bloc 3 | 2026-04-09 | `engine/__init__.py` + `cost.py` (V2 INTACT) + `calculation.py` + `group_totals.py` + `analytics.py` |
 | DELTA-004 Bloc 2 | 2026-04-09 | `storage/manager.py` + `catalogue/` + `meta/` (`store.py` + `assignments.py`) + `options_flow.py` |
 | DELTA-004 Bloc 1 | 2026-04-09 | `manifest.json` + `__init__.py` + `api/base.py` + `GET /api/hse/ping` |
 | DELTA-010 | 2026-04-08 | `frontend_manifest.py` conservé |
