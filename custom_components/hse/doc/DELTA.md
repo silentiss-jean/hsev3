@@ -69,7 +69,7 @@ Si tu lis ce fichier, tu dois :
 ## Ordre de résolution
 
 ```
-[FAIT] DELTA-005 → [BLOC 1 ✅] → [BLOC 2 ✅] → [BLOC 3 ✅] → [SUIVANT] Bloc 4 → DELTA-002 → DELTA-003
+[FAIT] DELTA-005 → [BLOC 1 ✅] → [BLOC 2 ✅] → [BLOC 3 ✅] → [BLOC 4 ✅] → DELTA-002 (ACTIF) → DELTA-003
 [FAIT] DELTA-001
 [FAIT] DELTA-006 / 007 / 008 / 009 / 010
 ```
@@ -78,32 +78,33 @@ Si tu lis ce fichier, tu dois :
 
 ## Écarts actifs
 
-### [DELTA-004] 🔴 DOC_AHEAD — Backend Python V3
-- **Doc concernée** : `hse_v3_synthese.md` §3 + `10_api_contrat.md`
-- **Progression** :
-  - ✅ Bloc 1 **TERMINÉ** — `manifest.json` + `__init__.py` + `api/base.py` + `GET /api/hse/ping` (commit 2026-04-09)
-  - ✅ Bloc 2 **TERMINÉ** — `storage/manager.py` + `catalogue/` + `meta/` complet + `options_flow.py` (commit 2026-04-09)
-  - ✅ Bloc 3 **TERMINÉ** — `engine/__init__.py` + `engine/cost.py` (V2 INTACT) + `engine/calculation.py` + `engine/group_totals.py` + `engine/analytics.py` (vérifié 2026-04-09)
-  - 🔴 Bloc 4 **EN COURS** — Toutes les views `api/views/` — migration = Hypothèse A
-- **Bloquant pour** : DELTA-002, DELTA-003
-- **Dépendances** : Bloc 3 ✅
-
----
-
-### [DELTA-002] 🔴 DOC_AHEAD — `hse_fetch.js` + injection token
+### [DELTA-002] 🔴 DOC_AHEAD — `hse_fetch.js` + shell JS + injection token ← **PROCHAIN BLOC**
 - **Ce que la doc dit** : tous les appels HTTP passent par `hseFetch(ctx)`, token via `window.__hseToken`
-- **État** : fichier non créé, shell non écrit
-- **Note** : nommage `hse_fetch.js` (underscore) acté — doc `00_methode_front_commune.md` à patcher au COMMIT
-- **Bloquant pour** : tous les onglets
-- **Dépendance** : DELTA-004 Bloc 4
+- **Contrat** : `00_methode_front_commune.md` — règles R1–R5
+- **À créer** :
+  - `www/hse_fetch.js` — client HTTP mutualisé (Bearer auto, error handling)
+  - `www/hse_store.js` — state global (onglet actif, prefs)
+  - `www/hse_shell.js` — chargement du panel, routing onglets, bootstrap
+- **Note** : nommage `hse_fetch.js` (underscore) acté — DELTA-006 ✅
+- **Bloquant pour** : DELTA-003 (8 onglets)
+- **Dépendance** : DELTA-004 ✅ (tous les Blocs 1–4 terminés)
 
 ---
 
 ### [DELTA-003] 🔴 DOC_AHEAD — 8 onglets (views JS)
 - **Ce que la doc dit** : 8 fichiers `*_view.js` avec contrat `mount / update_hass / unmount`
 - **État** : aucun fichier créé
-- **Bloquant pour** : tout le frontend
-- **Dépendance** : DELTA-002 + DELTA-004 Bloc 4
+- **À créer** :
+  - `www/overview_view.js`
+  - `www/diagnostic_view.js`
+  - `www/scan_view.js`
+  - `www/config_view.js`
+  - `www/custom_view.js`
+  - `www/cards_view.js`
+  - `www/migration_view.js`
+  - `www/costs_view.js`
+- **Bloquant pour** : tout le frontend visible
+- **Dépendance** : DELTA-002
 
 ---
 
@@ -111,6 +112,7 @@ Si tu lis ce fichier, tu dois :
 
 | ID | Fermé le | Description |
 |---|---|---|
+| DELTA-004 Bloc 4 | 2026-04-09 | Toutes les views `api/views/` — 19 classes, 11 fichiers (frontend_manifest, overview, diagnostic, catalogue×4, scan, meta×3, settings, costs/history/export, migration×2, user_prefs) |
 | DELTA-004 Bloc 3 | 2026-04-09 | `engine/__init__.py` + `cost.py` (V2 INTACT) + `calculation.py` + `group_totals.py` + `analytics.py` |
 | DELTA-004 Bloc 2 | 2026-04-09 | `storage/manager.py` + `catalogue/` + `meta/` (`store.py` + `assignments.py`) + `options_flow.py` |
 | DELTA-004 Bloc 1 | 2026-04-09 | `manifest.json` + `__init__.py` + `api/base.py` + `GET /api/hse/ping` |
