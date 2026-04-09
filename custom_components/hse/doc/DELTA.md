@@ -53,6 +53,7 @@ Si tu lis ce fichier, tu dois :
 | Polling onglets "action" | ZÉRO auto — refresh sur action uniquement | Session 2026-04-08 |
 | Polling onglets "lecture" | Autorisé mais suspendu si onglet inactif | Session 2026-04-08 |
 | Chemin fichiers statiques | `web_static/panel/shared/` (Option B) | DELTA-002 — 2026-04-09 |
+| Chemin views frontend | `web_static/panel/features/<id>/<id>_view.js` | DELTA-003 — 2026-04-09 |
 
 ---
 
@@ -70,30 +71,18 @@ Si tu lis ce fichier, tu dois :
 ## Ordre de résolution
 
 ```
-[FAIT] DELTA-005 → [BLOC 1 ✅] → [BLOC 2 ✅] → [BLOC 3 ✅] → [BLOC 4 ✅] → [DELTA-002 ✅] → DELTA-003 (ACTIF)
+[FAIT] DELTA-005 → [BLOC 1 ✅] → [BLOC 2 ✅] → [BLOC 3 ✅] → [BLOC 4 ✅] → [DELTA-002 ✅] → [DELTA-003 ✅]
 [FAIT] DELTA-001
 [FAIT] DELTA-006 / 007 / 008 / 009 / 010
+
+→ Section "Écarts actifs" vide = doc et code alignés ✅
 ```
 
 ---
 
 ## Écarts actifs
 
-### [DELTA-003] 🔴 DOC_AHEAD — 8 onglets (views JS) ← **PROCHAIN BLOC**
-- **Ce que la doc dit** : 8 fichiers `*_view.js` avec contrat `mount / update_hass / unmount`
-- **État** : aucun fichier créé
-- **À créer** (chemin acté : `web_static/panel/features/<id>/<id>_view.js`) :
-  - `web_static/panel/features/overview/overview_view.js`
-  - `web_static/panel/features/diagnostic/diagnostic_view.js`
-  - `web_static/panel/features/scan/scan_view.js`
-  - `web_static/panel/features/config/config_view.js`
-  - `web_static/panel/features/custom/custom_view.js`
-  - `web_static/panel/features/cards/cards_view.js`
-  - `web_static/panel/features/migration/migration_view.js`
-  - `web_static/panel/features/costs/costs_view.js`
-- **Contrat** : `00_methode_front_commune.md` — règles R1–R5 obligatoires
-- **Bloquant pour** : tout le frontend visible
-- **Dépendance** : DELTA-002 ✅
+> ✅ **Aucun écart actif.** Doc et code sont parfaitement alignés.
 
 ---
 
@@ -101,10 +90,11 @@ Si tu lis ce fichier, tu dois :
 
 | ID | Fermé le | Description |
 |---|---|---|
-| DELTA-002 | 2026-04-09 | Shell JS — `hse_fetch.js` + `hse_store.js` + `hse_shell.js` dans `web_static/panel/shared/` (Option B actée) |
-| DELTA-004 Bloc 4 | 2026-04-09 | Toutes les views `api/views/` — 19 classes, 11 fichiers (frontend_manifest, overview, diagnostic, catalogue×4, scan, meta×3, settings, costs/history/export, migration×2, user_prefs) |
+| DELTA-003 | 2026-04-09 | 8 views JS — `web_static/panel/features/<id>/<id>_view.js` — R1–R5 sur chaque view |
+| DELTA-002 | 2026-04-09 | Shell JS — `hse_fetch.js` + `hse_store.js` + `hse_shell.js` dans `web_static/panel/shared/` |
+| DELTA-004 Bloc 4 | 2026-04-09 | Toutes les views `api/views/` — 19 classes, 11 fichiers |
 | DELTA-004 Bloc 3 | 2026-04-09 | `engine/__init__.py` + `cost.py` (V2 INTACT) + `calculation.py` + `group_totals.py` + `analytics.py` |
-| DELTA-004 Bloc 2 | 2026-04-09 | `storage/manager.py` + `catalogue/` + `meta/` (`store.py` + `assignments.py`) + `options_flow.py` |
+| DELTA-004 Bloc 2 | 2026-04-09 | `storage/manager.py` + `catalogue/` + `meta/` + `options_flow.py` |
 | DELTA-004 Bloc 1 | 2026-04-09 | `manifest.json` + `__init__.py` + `api/base.py` + `GET /api/hse/ping` |
 | DELTA-010 | 2026-04-08 | `frontend_manifest.py` conservé |
 | DELTA-009 | 2026-04-08 | Capteur référence → `storage/manager.py` |
