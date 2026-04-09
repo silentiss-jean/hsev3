@@ -54,6 +54,9 @@ Si tu lis ce fichier, tu dois :
 | Polling onglets "lecture" | Autorisé mais suspendu si onglet inactif | Session 2026-04-08 |
 | Chemin fichiers statiques | `web_static/panel/shared/` (Option B) | DELTA-002 — 2026-04-09 |
 | Chemin views frontend | `web_static/panel/features/<id>/<id>_view.js` | DELTA-003 — 2026-04-09 |
+| `hse_panel.js` | **RÉÉCRITURE complète** — V2 BUGÉ, ne pas récupérer | DELTA-011 — 2026-04-09 |
+| Rôle `hse_shell.js` | Custom element `<hse-panel>` + bootstrap + routing onglets | DELTA-011 — 2026-04-09 |
+| Rôle `hse_panel.js` | Point d'entrée HA : enregistre le panel + charge `hse_shell.js` | DELTA-011 — 2026-04-09 |
 
 ---
 
@@ -75,7 +78,7 @@ Si tu lis ce fichier, tu dois :
 [FAIT] DELTA-001
 [FAIT] DELTA-006 / 007 / 008 / 009 / 010
 
-→ En cours : DELTA-011 → DELTA-012 → DELTA-013 → DELTA-014 → DELTA-015 → DELTA-016
+→ En cours : DELTA-011 → DELTA-012 → DELTA-016 → DELTA-015 → DELTA-013 → DELTA-014
 ```
 
 ---
@@ -85,13 +88,38 @@ Si tu lis ce fichier, tu dois :
 ### 🔴 DELTA-011 — Panel HA : point d'entrée manquant
 **Statut :** `DOC_AHEAD`  
 **Ouvert le :** 2026-04-09  
-**Fichiers manquants** (prévus `hse_v3_synthese.md` §3.2 Phase 5) :
-- `web_static/panel/hse_panel.html`
-- `web_static/panel/hse_panel.js`
-- `web_static/panel/style.hse.panel.css`
+
+#### État réel du code (audit 2026-04-09)
+
+`hse_shell.js` est **déjà présent** dans `web_static/panel/shared/` et implémente :
+- Le custom element `<hse-panel>` enregistré auprès de HA
+- Le bootstrap complet (token, manifest, user_prefs)
+- Le routing onglets avec `mount()` / `unmount()` / `update_hass()`
+- Le chargement dynamique des `features/<id>/<id>_view.js`
+
+Mais `hse_shell.js` joue le rôle de l'**implémentation** du panel, pas du **point d'entrée** HA.
+Il lui manque le fichier qui l'appelle et qui déclare le panel auprès de HA.
+
+#### Décision tranchée (session 2026-04-09)
+
+> **`hse_panel.js` V2 est buggé — il ne faut PAS le récupérer.**  
+> Il sera **réécrit intégralement** en V3, sans importer de code V2.
+
+Les bugs V2 connus de `hse_panel.js` :
+- `localStorage` utilisé directement (viole R4)
+- Logique bootstrap mélangée avec le rendu DOM
+- Absence de gestion propre du cycle de vie custom element
+
+#### Fichiers à créer (RÉÉCRITURE, pas de récup V2)
+
+| Fichier | Rôle V3 | Contrainte |
+|---|---|---|
+| `web_static/panel/hse_panel.html` | Point d'entrée HTML : charge `hse_panel.js` en `<script type="module">` | Minimaliste |
+| `web_static/panel/hse_panel.js` | Déclare le panel HA (`customPanelInfo`) + importe `hse_shell.js` | RÉÉCRITURE propre, zéro localStorage |
+| `web_static/panel/style.hse.panel.css` | CSS global hors shadow DOM (variables HA, reset minimal) | Hors shadow DOM |
 
 **Impact :** BLOQUANT — sans ces 3 fichiers le panel HA ne s'affiche pas du tout.  
-**Dépendances :** `hse_shell.js` déjà présent, attend `hse_panel.js` pour s'initialiser.
+**Doit respecter :** R4 (zéro localStorage), `require_admin=True`, `hse_fetch.js` pour tous les appels.
 
 ---
 
@@ -103,7 +131,7 @@ Si tu lis ce fichier, tu dois :
 - `translations/en.json`
 
 **Impact :** BLOQUANT HACS — HA refuse de charger une intégration sans `translations/`.  
-**Source :** V2 existant à récupérer et adapter au domaine `hse` V3.
+**Source :** V2 existant à adapter au domaine `hse` V3 (renommage des clés domain uniquement).
 
 ---
 
@@ -114,7 +142,7 @@ Si tu lis ce fichier, tu dois :
 - `repairs.py`
 
 **Impact :** HA Repairs natif non actif — les alertes capteurs ne remontent pas dans l'UI HA.  
-**Source :** `repairs.py` V2 à adapter au domaine `hse`.
+**Source :** `repairs.py` V2 à adapter au domaine `hse` (vérifier qu'il n'a pas de bugs connus avant récup).
 
 ---
 
@@ -156,7 +184,7 @@ Si tu lis ce fichier, tu dois :
 - `web_static/panel/shared/styles/tokens.css`
 
 **Impact :** Les `*_view.js` existants ne peuvent pas importer les utilitaires DOM/table ni appliquer les tokens CSS. Rendering dégradé ou cassé.  
-**Source :** V2 existant à migrer.
+**Source :** V2 existant à migrer (vérifier présence de localStorage avant tout import).
 
 ---
 
