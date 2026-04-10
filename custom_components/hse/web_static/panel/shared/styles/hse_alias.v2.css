@@ -1,0 +1,21 @@
+/*
+ * HSE V3 — shared/styles/hse_alias.v2.css
+ * Aliases de compatibilité V2 → V3 pour les composants qui
+ * utilisaient encore les noms V2 (hse_border, hse_muted, etc.).
+ *
+ * V3 : aucune variable new — uniquement remap des anciens noms
+ * vers les tokens V3 courants (hse_tokens.shadow.css).
+ * Supprimer ce fichier quand toutes les views auront migré.
+ */
+
+:host {
+  --hse_border:   var(--hse-border);
+  --hse_muted:    var(--hse-text-muted);
+  --hse_card_bg:  var(--hse-surface);
+  --hse_danger:   var(--hse-error);
+  --hse_accent:   var(--hse-accent);
+  --hse_gap:      var(--hse-spacing-md);
+  --hse_radius:   var(--hse-radius-lg);
+  --hse_fg:       var(--hse-text);
+  --hse_code_bg:  var(--hse-surface-muted, #f1f5f9);
+}
