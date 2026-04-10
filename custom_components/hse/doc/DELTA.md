@@ -200,6 +200,7 @@ hsev3/
 | `.DS_Store` | Supprimé du repo + `.gitignore` ajouté à la racine | DELTA-018 — 2026-04-10 |
 | Nom fichier `hse_fetch.js` | Correction doc : séparateur `_` (pas `.`) confirmé dans `00_methode_front_commune.md` §5 | DELTA-019 — 2026-04-10 |
 | Stubs `week/month/year` + distinction REST vs service HA | Notes ajoutées dans `10_api_contrat.md` (§overview + §catalogue/refresh + §history) | DELTA-020 — 2026-04-10 |
+| Nature du chantier API Phase 2–3 | Modules V2 à **réorganiser**, pas à réinventer — voir DELTA-021 | DELTA-021 — 2026-04-10 |
 
 ---
 
@@ -231,14 +232,91 @@ hsev3/
 [FAIT] DELTA-019 ✅ 2026-04-10 — hse.fetch.js → hse_fetch.js dans 00_methode_front_commune.md §5
 [FAIT] DELTA-020 ✅ 2026-04-10 — stubs week/month/year + distinction REST vs service HA dans 10_api_contrat.md
 
-✅ Aucun écart actif — doc et code sont alignés.
+[EN COURS] DELTA-021 🟠 2026-04-10 — chantier API : nature réelle des phases 2 et 3
 ```
 
 ---
 
 ## Écarts actifs
 
-> ✅ **Aucun écart actif.** Doc et code sont parfaitement alignés.
+### 🟠 DELTA-021 — `EN_DISCUSSION` — Nature réelle du chantier API (Phases 2 et 3)
+
+**Ouvert le :** 2026-04-10  
+**Source :** Relecture comparée de `analyse.md`, `analyse0.md` et `hse_v3_synthese.md`  
+**Priorité :** HAUTE — touche la stratégie de développement des phases restantes
+
+#### Problème identifié
+
+La `hse_v3_synthese.md` (§9 Plan de développement, Phases 2 et 3) présente les modules backend comme un **travail de création**, alors qu'ils existaient déjà en V2 (`hse`) et **fonctionnaient**.
+
+La confusion vient du fait que les deux analyses (`analyse.md` et `analyse0.md`) ont été produites sur les **repos V1 et V2 d'origine**, non sur `hsev3`. La synthèse a fusionné les deux plans sans distinguer :
+- ce qui était **déjà fait en V2** (et doit être porté/réorganisé)
+- ce qui est **vraiment nouveau en V3** (fichiers créés ex nihilo)
+
+#### Ce qui était déjà fonctionnel en V2 (repo `silentiss-jean/hse`)
+
+| Module | Fichier V2 | Statut V2 | Action V3 |
+|---|---|---|---|
+| Moteur de coût | `shared_cost_engine.py` | ✅ Fonctionnel, testé | Portage → `engine/cost.py` INTACT |
+| Catalogue scan | `catalogue_manager.py` + `scan_engine.py` | ✅ Fonctionnel | Portage → `catalogue/` |
+| Catalogue stockage | `catalogue_store.py` + `catalogue_schema.py` | ✅ Fonctionnel | Portage → `catalogue/` |
+| Meta rooms/types | `meta_store.py` + `meta_sync.py` | ✅ Fonctionnel | Portage → `meta/` |
+| API REST 30+ endpoints | `api/unified_api.py` | ✅ Fonctionnel | Refactorisé en `api/views/*.py` |
+| Repairs HA natif | `repairs.py` | ✅ Fonctionnel | Portage + adaptation storage |
+| Translations | `translations/fr.json` + `en.json` | ✅ Présents | Portés tels quels |
+| Auth sécurité | `requires_auth = True` | ✅ Déjà en V2 | **Non à réinventer** |
+
+> **Conséquence directe :** Le plan de développement V3 "Phase 2 — Meta, Storage, Options" et "Phase 3 — Moteurs métier" décrivent en réalité des **portages et réorganisations structurelles**, pas des réécritures. L'IA qui travaillera sur ces phases doit partir du code V2 existant, pas d'une feuille blanche.
+
+#### Ce qui est réellement nouveau en V3 (n'existait ni en V1 ni en V2)
+
+| Fichier | Raison d'être nouveau |
+|---|---|
+| `api/base.py` (`HseBaseView`) | Classe de base explicite — V2 répétait `requires_auth` partout |
+| `api/views/user_prefs.py` | Remplace `localStorage` — concept nouveau V3 |
+| `api/views/migration_apply.py` | Étape 3 du wizard migration — absent des deux versions |
+| `meta/assignments.py` | Logique d'assignation capteur→pièce/type extraite de `meta_sync.py` |
+| `storage/manager.py` (V3) | Unification Storage V1 épuré + adaptation V2 |
+| `hse_tab_base.js` (si créé) | Module JS des règles R1–R5 — nouveau contrat |
+| `hse_fetch.js` (modifié) | Injection token HA centralisée — V2 le faisait inline |
+
+#### Ce qui vient de V1 et doit être **réintégré** (absent de V2)
+
+| Fichier V1 | Module V3 cible | Statut |
+|---|---|---|
+| `history_analytics.py` | `engine/analytics.py` | À porter depuis V1 |
+| `calculation_engine.py` | `engine/calculation.py` | À porter depuis V1 |
+| `group_totals.py` | `engine/group_totals.py` | À porter depuis V1 |
+| `sensor_quality_scorer.py` | `sensors/quality_scorer.py` | À porter depuis V1 |
+| `sensor_sync_manager.py` (épuré) | `sensors/sync_manager.py` | À porter depuis V1, épuré |
+| `sensor_name_fixer.py` | `sensors/name_fixer.py` | À porter depuis V1 |
+| `storage_manager.py` (épuré) | `storage/manager.py` | À porter depuis V1, épuré |
+| `options_flow.py` (complet) | `options_flow.py` | À porter depuis V1 |
+| Services HA (dans `__init__.py` V1) | `services.yaml` | Extraits et déclarés |
+| `energy_export.py` + `export.py` | `api/views/costs.py` (`HseExportView`) | À porter depuis V1 |
+
+#### Consigne pour l'IA qui traitera ce DELTA
+
+> **Ne jamais réécrire de zéro ce qui vient de V2.**
+> Toujours commencer par lire le fichier source V2 dans `https://github.com/silentiss-jean/hse` avant de générer un équivalent V3.
+> Pour les portages V1, lire le fichier source V1 dans `https://github.com/silentiss-jean/home_suivi_elec`.
+> Le travail est : lire → adapter (structure + sécurité + storage) → intégrer. Pas réécrire.
+
+#### Questions ouvertes (à trancher avant fermeture)
+
+1. **Les fichiers backend de `hsev3` (`engine/`, `catalogue/`, `meta/`, etc.) ont-ils été portés depuis V2, ou sont-ils des stubs vides ?** → Vérifier le contenu réel de chaque fichier (pas juste la présence).
+2. **`hse_v3_synthese.md` doit-il être amendé** pour corriger la description des phases 2 et 3, ou est-ce suffisant de l'indiquer ici ?
+3. **`analyse.md` et `analyse0.md` décrivent une architecture cible**, pas l'état du code. La synthèse doit-elle l'indiquer explicitement en entête ?
+
+#### Prochaine action recommandée
+
+```
+MODE : EXPLORATION → vérification du contenu réel des fichiers backend hsev3
+TÂCHE : lire 3-5 fichiers backend clés (engine/cost.py, catalogue/manager.py, meta/sync.py)
+        et vérifier s'ils sont des portages complets ou des stubs
+RÉSULTAT : si stubs → ouvrir DELTA-022 "contenu backend incomplet"
+           si portages complets → fermer DELTA-021 et amender hse_v3_synthese.md
+```
 
 ---
 
