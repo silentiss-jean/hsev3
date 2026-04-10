@@ -198,6 +198,8 @@ hsev3/
 | `services.yaml` | 8 services déclarés (catalogue_refresh, meta_sync, export_data, migrate_cleanup, reset_*, set_*) | DELTA-014 — 2026-04-10 |
 | 8 `*_view.js` | Présents et vérifiés — audit fichier par fichier confirmé | DELTA-017 — 2026-04-10 |
 | `.DS_Store` | Supprimé du repo + `.gitignore` ajouté à la racine | DELTA-018 — 2026-04-10 |
+| Nom fichier `hse_fetch.js` | Correction doc : séparateur `_` (pas `.`) confirmé dans `00_methode_front_commune.md` §5 | DELTA-019 — 2026-04-10 |
+| Stubs `week/month/year` + distinction REST vs service HA | Notes ajoutées dans `10_api_contrat.md` (§overview + §catalogue/refresh + §history) | DELTA-020 — 2026-04-10 |
 
 ---
 
@@ -208,7 +210,7 @@ hsev3/
 | 🟠 | `EN_DISCUSSION` | En cours de discussion |
 | 🔴 | `DOC_AHEAD` | Doc en avance sur le code |
 | 🟡 | `CODE_AHEAD` | Code en avance sur la doc |
-| ✅ | `ALIGNED` | Résolu et committé |
+| ✅ | `ALIGNED` | Résolu et commité |
 
 ---
 
@@ -226,6 +228,8 @@ hsev3/
 [FAIT] DELTA-016 ✅ 2026-04-10
 [FAIT] DELTA-017 ✅ 2026-04-10 — audit réel : 8 views JS présentes et vérifiées
 [FAIT] DELTA-018 ✅ 2026-04-10 — .DS_Store supprimé + .gitignore ajouté
+[FAIT] DELTA-019 ✅ 2026-04-10 — hse.fetch.js → hse_fetch.js dans 00_methode_front_commune.md §5
+[FAIT] DELTA-020 ✅ 2026-04-10 — stubs week/month/year + distinction REST vs service HA dans 10_api_contrat.md
 
 ✅ Aucun écart actif — doc et code sont alignés.
 ```
@@ -242,6 +246,8 @@ hsev3/
 
 | ID | Fermé le | Description |
 |---|---|---|
+| DELTA-020 | 2026-04-10 | `10_api_contrat.md` : note stubs `0.0` sur `week/month/year` (§overview) + note distinction `POST /catalogue/refresh` REST vs service HA `hse.catalogue_refresh` + note stub `points: []` sur `/history` |
+| DELTA-019 | 2026-04-10 | `00_methode_front_commune.md` §5 : `hse.fetch.js` → `hse_fetch.js` (séparateur `_` conforme DELTA-006) + note explicative ajoutée |
 | DELTA-018 | 2026-04-10 | `.DS_Store` supprimé du repo + `.gitignore` ajouté à la racine |
 | DELTA-017 | 2026-04-10 | 8 `*_view.js` — audit réel confirmé : tous présents (overview, diagnostic, scan, config, custom, cards, migration, costs) |
 | DELTA-016 | 2026-04-10 | Shared frontend — `shared/ui/dom.js` + `table.js` (ES modules) + 4 fichiers CSS |
