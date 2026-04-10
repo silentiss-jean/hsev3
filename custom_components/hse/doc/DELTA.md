@@ -43,7 +43,7 @@ hsev3/
 │
 └── custom_components/hse/
     │
-    ├── __init__.py                              ✅ (panel registration + toutes les views)
+    ├── __init__.py                              ✅ (panel + toutes les views, incl. History + Export)
     ├── manifest.json                            ✅
     ├── config_flow.py                           ✅
     ├── options_flow.py                          ✅
@@ -63,7 +63,7 @@ hsev3/
     │       ├── __init__.py                      ✅
     │       ├── ping.py                          ✅
     │       ├── catalogue.py                     ✅
-    │       ├── costs.py                         ✅
+    │       ├── costs.py                         ✅ (HseCostsView + HseHistoryView + HseExportView)
     │       ├── diagnostic.py                    ✅
     │       ├── frontend_manifest.py             ✅
     │       ├── meta.py                          ✅
@@ -71,9 +71,8 @@ hsev3/
     │       ├── overview.py                      ✅
     │       ├── scan.py                          ✅
     │       ├── settings.py                      ✅
-    │       ├── user_prefs.py                    ✅
-    │       ├── history.py                       🔴 DELTA-015
-    │       └── export_api.py                    🔴 DELTA-015
+    │       └── user_prefs.py                    ✅
+    │       └── ⚠️ history.py / export_api.py     ❌ NON créés — classes dans costs.py (décision V3)
     │
     ├── catalogue/
     │   ├── __init__.py                          ✅
@@ -152,11 +151,11 @@ hsev3/
 
 | Catégorie | ✅ Présents | 🔴 Manquants |
 |---|---|---|
-| Backend Python | 30 | 4 (services.yaml, repairs.py, history.py, export_api.py) |
+| Backend Python | 32 | 2 (services.yaml, repairs.py) |
 | Frontend JS/CSS | 20 | 0 |
 | Translations | 2 | 0 |
 | Documentation | 13 | 0 |
-| **Total** | **65** | **4** |
+| **Total** | **67** | **2** |
 
 ---
 
@@ -192,6 +191,7 @@ hsev3/
 | URL statiques | `/hse-static/` → `web_static/panel/` | DELTA-011 — 2026-04-10 |
 | Panel module_url | `/hse-static/hse_panel.js` | DELTA-011 — 2026-04-10 |
 | Translations | `fr.json` + `en.json` — config_flow + options_flow + issues | DELTA-012 — 2026-04-10 |
+| History + Export views | `HseHistoryView` + `HseExportView` dans `costs.py` (pas de fichiers séparés) | DELTA-015 — 2026-04-10 |
 | Shared UI/CSS | `shared/ui/dom.js`, `table.js` — ES modules (migration V2 IIFE→ES) | DELTA-016 — 2026-04-10 |
 | Shared styles | `hse_tokens.shadow.css`, `hse_themes.shadow.css`, `hse_alias.v2.css`, `tokens.css` | DELTA-016 — 2026-04-10 |
 
@@ -216,9 +216,10 @@ hsev3/
 [FAIT] DELTA-006 / 007 / 008 / 009 / 010
 [FAIT] DELTA-011 ✅ 2026-04-10
 [FAIT] DELTA-012 ✅ 2026-04-10
+[FAIT] DELTA-015 ✅ 2026-04-10
 [FAIT] DELTA-016 ✅ 2026-04-10
 
-→ En cours : DELTA-015 → DELTA-013 → DELTA-014
+→ En cours : DELTA-013 → DELTA-014
 ```
 
 ---
@@ -247,21 +248,11 @@ hsev3/
 
 ---
 
-### 🔴 DELTA-015 — Views API manquantes
-**Statut :** `DOC_AHEAD`
-**Ouvert le :** 2026-04-09
-**Fichiers manquants** (prévus §3.2 Phase 4) :
-- `api/views/history.py` — `GET /api/hse/history` (wraps `engine/analytics.py`) — **requis par onglet Costs**
-- `api/views/export_api.py` — export CSV/JSON — **requis par onglet Costs bouton export**
-
-**Impact :** Onglet `costs` non fonctionnel (historique 12 mois + export CSV manquants).
-
----
-
 ## Historique
 
 | ID | Fermé le | Description |
 |---|---|---|
+| DELTA-015 | 2026-04-10 | `HseHistoryView` + `HseExportView` — classes déjà dans `costs.py`, enregistrement ajouté dans `__init__.py` (pas de fichiers `history.py`/`export_api.py` séparés — décision V3) |
 | DELTA-016 | 2026-04-10 | Shared frontend — `shared/ui/dom.js` + `table.js` (ES modules) + 4 fichiers CSS (`hse_tokens.shadow.css`, `hse_themes.shadow.css`, `hse_alias.v2.css`, `tokens.css`) |
 | DELTA-012 | 2026-04-10 | `translations/fr.json` + `translations/en.json` — config_flow + options_flow + issues |
 | DELTA-011 | 2026-04-10 | `hse_panel.html` + `hse_panel.js` (réécriture V3) + `style.hse.panel.css` + `__init__.py` panel registration |
