@@ -131,7 +131,7 @@ La reconstruction complète du DOM n'est autorisée que dans `mount()`.
 Tous les appels HTTP passent par `hseFetch` injecté dans `ctx` :
 
 ```javascript
-// hse.fetch.js
+// hse_fetch.js  (← nom exact du fichier — séparateur _ conformément à DELTA-006)
 export function hseFetch(path, options = {}) {
   return fetch(path, {
     ...options,
@@ -146,6 +146,9 @@ export function hseFetch(path, options = {}) {
 
 `window.__hseToken` est positionné par le shell depuis `hass.auth.data.access_token`.
 
+> ⚠️ Le fichier s'appelle **`hse_fetch.js`** (underscore), conformément à la convention de nommage
+> décidée en DELTA-006. Ne pas écrire `hse.fetch.js` (point).
+
 ---
 
 ## 6. Structure type d'un fichier d'onglet
@@ -156,7 +159,7 @@ export class MonOngletView {
     this._mounted  = false;
     this._fetching = false;
     this._lastSig  = null;
-    this._timer    = null;
+    this._timer    = null;   // null si l'onglet n'utilise pas de polling
     this._abortCtl = null;
     this._hass     = null;
     this._ctx      = null;
@@ -219,6 +222,11 @@ export class MonOngletView {
   }
 }
 ```
+
+> **Note sur `_timer`** : les onglets sans polling (ex : `diagnostic`, `scan`, `config`, `migration`,
+> `custom`, `cards`) déclarent quand même `this._timer = null` dans le constructor pour uniformité
+> avec le squelette. L’absence de `setInterval` dans `mount()` suffit à indiquer qu'il n'y a pas
+> de polling — pas besoin de supprimer la déclaration.
 
 ---
 
