@@ -106,30 +106,30 @@ hsev3/
     │   └── name_fixer.py                        ✅
     │
     ├── web_static/panel/
-    │   ├── hse_panel.html                       ✅
-    │   ├── hse_panel.js                         ✅
-    │   ├── style.hse.panel.css                  ✅
+    │   ├── hse_panel.html                       ✅ DELTA-011 fermé 2026-04-10
+    │   ├── hse_panel.js                         ✅ DELTA-011 fermé 2026-04-10
+    │   ├── style.hse.panel.css                  ✅ DELTA-011 fermé 2026-04-10
     │   ├── shared/
     │   │   ├── hse_fetch.js                     ✅
     │   │   ├── hse_store.js                     ✅
     │   │   ├── hse_shell.js                     ✅
     │   │   ├── ui/
-    │   │   │   ├── dom.js                       ✅
-    │   │   │   └── table.js                     ✅
+    │   │   │   ├── dom.js                       ✅ DELTA-016 fermé 2026-04-10
+    │   │   │   └── table.js                     ✅ DELTA-016 fermé 2026-04-10
     │   │   └── styles/
-    │   │       ├── hse_tokens.shadow.css         ✅
-    │   │       ├── hse_themes.shadow.css         ✅
-    │   │       ├── hse_alias.v2.css             ✅
-    │   │       └── tokens.css                   ✅
+    │   │       ├── hse_tokens.shadow.css        ✅ DELTA-016 fermé 2026-04-10
+    │   │       ├── hse_themes.shadow.css        ✅ DELTA-016 fermé 2026-04-10
+    │   │       ├── hse_alias.v2.css             ✅ DELTA-016 fermé 2026-04-10
+    │   │       └── tokens.css                   ✅ DELTA-016 fermé 2026-04-10
     │   └── features/
-    │       ├── overview/overview_view.js         🔴 DELTA-017
-    │       ├── diagnostic/diagnostic_view.js     🔴 DELTA-017
-    │       ├── scan/scan_view.js                 🔴 DELTA-017
-    │       ├── config/config_view.js             🔴 DELTA-017
-    │       ├── custom/custom_view.js             🔴 DELTA-017
-    │       ├── cards/cards_view.js               🔴 DELTA-017
-    │       ├── migration/migration_view.js       🔴 DELTA-017
-    │       └── costs/costs_view.js              🔴 DELTA-017
+    │       ├── overview/overview_view.js        ✅ DELTA-017 fermé 2026-04-10
+    │       ├── diagnostic/diagnostic_view.js    ✅ DELTA-017 fermé 2026-04-10
+    │       ├── scan/scan_view.js                ✅ DELTA-017 fermé 2026-04-10
+    │       ├── config/config_view.js            ✅ DELTA-017 fermé 2026-04-10
+    │       ├── custom/custom_view.js            ✅ DELTA-017 fermé 2026-04-10
+    │       ├── cards/cards_view.js              ✅ DELTA-017 fermé 2026-04-10
+    │       ├── migration/migration_view.js      ✅ DELTA-017 fermé 2026-04-10
+    │       └── costs/costs_view.js              ✅ DELTA-017 fermé 2026-04-10
     │
     └── doc/
         ├── DELTA.md                             ✅ (ce fichier)
@@ -153,10 +153,10 @@ hsev3/
 |---|---|---|
 | Backend Python | 34 | 0 |
 | Frontend JS/CSS — shell + shared | 12 | 0 |
-| Frontend JS — views onglets | 0 | 8 (DELTA-017) |
+| Frontend JS — views onglets | 8 | 0 |
 | Translations | 2 | 0 |
 | Documentation | 13 | 0 |
-| **Total** | **61** | **8** |
+| **Total** | **69** | **0** |
 
 ---
 
@@ -197,6 +197,7 @@ hsev3/
 | Shared styles | `hse_tokens.shadow.css`, `hse_themes.shadow.css`, `hse_alias.v2.css`, `tokens.css` | DELTA-016 — 2026-04-10 |
 | `repairs.py` | Adapté V2→V3 — lecture via `HseStorageManager`, appel au démarrage (non bloquant) | DELTA-013 — 2026-04-10 |
 | `services.yaml` | 8 services déclarés (catalogue_refresh, meta_sync, export_data, migrate_cleanup, reset_*, set_*) | DELTA-014 — 2026-04-10 |
+| 8 `*_view.js` | Présents et vérifiés — audit fichier par fichier confirmé | DELTA-017 — 2026-04-10 |
 
 ---
 
@@ -223,8 +224,9 @@ hsev3/
 [FAIT] DELTA-014 ✅ 2026-04-10
 [FAIT] DELTA-015 ✅ 2026-04-10
 [FAIT] DELTA-016 ✅ 2026-04-10
+[FAIT] DELTA-017 ✅ 2026-04-10 — audit réel : 8 views JS présentes et vérifiées
 
-→ Prochain : DELTA-017 (8 views JS) → DELTA-018 (.DS_Store)
+→ Seul écart restant : DELTA-018 (.DS_Store)
 ```
 
 ---
@@ -233,7 +235,6 @@ hsev3/
 
 | ID | Statut | Description | Impact |
 |---|---|---|---|
-| **DELTA-017** | 🔴 DOC_AHEAD | 8 fichiers `*_view.js` manquants dans `features/` — dossiers créés mais vides : `overview_view.js`, `diagnostic_view.js`, `scan_view.js`, `config_view.js`, `custom_view.js`, `cards_view.js`, `migration_view.js`, `costs_view.js` | **BLOQUANT** — panel HA vide, aucun onglet ne s'affiche |
 | **DELTA-018** | 🟡 CODE_AHEAD | `.DS_Store` committé dans `custom_components/hse/` — fichier macOS à supprimer du repo et ajouter au `.gitignore` | Cosmétique — pollue le repo |
 
 ---
@@ -242,6 +243,7 @@ hsev3/
 
 | ID | Fermé le | Description |
 |---|---|---|
+| DELTA-017 | 2026-04-10 | 8 `*_view.js` — audit réel confirmé : tous présents (overview, diagnostic, scan, config, custom, cards, migration, costs) |
 | DELTA-016 | 2026-04-10 | Shared frontend — `shared/ui/dom.js` + `table.js` (ES modules) + 4 fichiers CSS |
 | DELTA-015 | 2026-04-10 | `HseHistoryView` + `HseExportView` — classes dans `costs.py`, enregistrement ajouté dans `__init__.py` |
 | DELTA-014 | 2026-04-10 | `services.yaml` — 8 services déclarés : catalogue_refresh, meta_sync, export_data, migrate_cleanup, reset_catalogue, reset_settings, reset_meta, set_entity_assignment, set_triage_policy |
