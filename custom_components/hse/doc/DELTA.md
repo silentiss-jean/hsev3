@@ -53,8 +53,8 @@ hsev3/
     ├── repairs.py                               🔴 DELTA-013
     │
     ├── translations/
-    │   ├── fr.json                              🔴 DELTA-012 ⛔ BLOQUANT HACS
-    │   └── en.json                              🔴 DELTA-012 ⛔ BLOQUANT HACS
+    │   ├── fr.json                              ✅ DELTA-012 fermé 2026-04-10
+    │   └── en.json                              ✅ DELTA-012 fermé 2026-04-10
     │
     ├── api/
     │   ├── __init__.py                          ✅
@@ -108,7 +108,7 @@ hsev3/
     │
     ├── web_static/panel/
     │   ├── hse_panel.html                       ✅ DELTA-011 fermé 2026-04-10
-    │   ├── hse_panel.js                         ✅ DELTA-011 fermé 2026-04-10 (réécriture V3)
+    │   ├── hse_panel.js                         ✅ DELTA-011 fermé 2026-04-10
     │   ├── style.hse.panel.css                  ✅ DELTA-011 fermé 2026-04-10
     │   ├── shared/
     │   │   ├── hse_fetch.js                     ✅
@@ -154,9 +154,9 @@ hsev3/
 |---|---|---|
 | Backend Python | 30 | 4 (services.yaml, repairs.py, history.py, export_api.py) |
 | Frontend JS/CSS | 14 | 6 (2 ui/ + 4 styles/) |
-| Translations | 0 | 2 |
+| Translations | 2 | 0 |
 | Documentation | 13 | 0 |
-| **Total** | **57** | **12** |
+| **Total** | **59** | **10** |
 
 ---
 
@@ -191,6 +191,7 @@ hsev3/
 | Rôle `hse_panel.js` | Point d'entrée HA : `customPanelInfo` + `import hse_shell.js` | DELTA-011 — 2026-04-10 |
 | URL statiques | `/hse-static/` → `web_static/panel/` | DELTA-011 — 2026-04-10 |
 | Panel module_url | `/hse-static/hse_panel.js` | DELTA-011 — 2026-04-10 |
+| Translations | `fr.json` + `en.json` — config_flow + options_flow + issues | DELTA-012 — 2026-04-10 |
 
 ---
 
@@ -212,25 +213,14 @@ hsev3/
 [FAIT] DELTA-001
 [FAIT] DELTA-006 / 007 / 008 / 009 / 010
 [FAIT] DELTA-011 ✅ 2026-04-10
+[FAIT] DELTA-012 ✅ 2026-04-10
 
-→ En cours : DELTA-012 → DELTA-016 → DELTA-015 → DELTA-013 → DELTA-014
+→ En cours : DELTA-016 → DELTA-015 → DELTA-013 → DELTA-014
 ```
 
 ---
 
 ## Écarts actifs
-
-### 🔴 DELTA-012 — Translations manquantes
-**Statut :** `DOC_AHEAD`
-**Ouvert le :** 2026-04-09
-**Fichiers manquants** (prévus §3.2 + checklist §10 item bloquant) :
-- `translations/fr.json`
-- `translations/en.json`
-
-**Impact :** BLOQUANT HACS — HA refuse de charger une intégration sans `translations/`.
-**Source :** V2 existant à adapter au domaine `hse` V3 (renommage des clés domain uniquement).
-
----
 
 ### 🔴 DELTA-013 — `repairs.py` manquant
 **Statut :** `DOC_AHEAD`
@@ -289,6 +279,7 @@ hsev3/
 
 | ID | Fermé le | Description |
 |---|---|---|
+| DELTA-012 | 2026-04-10 | `translations/fr.json` + `translations/en.json` — config_flow + options_flow + issues |
 | DELTA-011 | 2026-04-10 | `hse_panel.html` + `hse_panel.js` (réécriture V3) + `style.hse.panel.css` + `__init__.py` panel registration |
 | DELTA-003 | 2026-04-09 | 8 views JS — `web_static/panel/features/<id>/<id>_view.js` — R1–R5 sur chaque view |
 | DELTA-002 | 2026-04-09 | Shell JS — `hse_fetch.js` + `hse_store.js` + `hse_shell.js` dans `web_static/panel/shared/` |
