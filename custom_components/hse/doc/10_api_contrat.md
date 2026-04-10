@@ -88,6 +88,10 @@
   - `generated_at: datetime`
 - **Erreurs** : 401, 503
 
+> **⚠️ Stubs — Phase 1** : `week_kwh`, `week_eur`, `month_kwh`, `month_eur`, `year_kwh`, `year_eur`
+> sont retournés à `0.0` jusqu'au branchement du recorder HA (prévu phase 2).
+> `today_kwh` et `today_eur` sont calculés depuis l'état live des capteurs sélectionnés.
+
 ---
 
 ### `GET /api/hse/diagnostic`
@@ -127,6 +131,11 @@
 - **Réponse 200** : `{ triggered: bool }`
 - **Erreurs** : 401, 409 (scan déjà en cours)
 
+> **⚠️ Ne pas confondre** avec le service HA `hse.catalogue_refresh` déclaré dans `services.yaml`.
+> Ces deux surfaces déclenchent le même scan interne mais par des vecteurs différents :
+> - `POST /api/hse/catalogue/refresh` — appel REST direct depuis le frontend
+> - `hse.catalogue_refresh` — service HA invocable via automations / scripts / DevTools
+
 ---
 
 ### `GET /api/hse/scan`
@@ -143,7 +152,7 @@
 
 ### `POST /api/hse/meta/sync/preview`
 - **Body** : `{ assignments: list[{ entity_id, room, type }] }`
-- **Réponse 200** : `{ to_add: list, to_update: list, to_remove: list, unchanged: int }`
+- **Réponse 200** : `{ to_add: list, to_update: list, to_remove: list, unchanged: int }` 
 - **Erreurs** : 401, 422
 
 ### `POST /api/hse/meta/sync/apply`
@@ -174,6 +183,9 @@
 - **Params** : `?entity_id=str` (optionnel — si absent : global), `?granularity=month|week` (défaut `month`)
 - **Réponse 200** : `{ entity_id: str|null, granularity, points: list[{ label: "YYYY-MM", kwh, eur_ttc }] }`
 - **Erreurs** : 401, 404 (si entity_id fourni mais inconnu)
+
+> **⚠️ Stub — Phase 1** : `points` est toujours retourné vide (`[]`).
+> Le branchement du recorder HA est prévu en phase 2.
 
 ### `GET /api/hse/export`
 - **Params** : `?period=day|week|month|year`, `?format=csv|json` (défaut `csv`)
