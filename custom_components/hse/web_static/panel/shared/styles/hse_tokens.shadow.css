@@ -1,147 +1,141 @@
 /*
- * HSE V3 — shared/styles/hse_tokens.shadow.css
- * Tokens sémantiques UI — base neutre (fallback light)
- * Importé via adoptedStyleSheets ou <link> dans chaque Shadow DOM de view.
+ * hse_tokens.shadow.css — Tokens CSS pour Shadow DOM
  *
- * V3 : identique V2, zero localStorage, aucune référence à window.
- * Les thèmes (hse_themes.shadow.css) surchargent ces valeurs.
+ * À importer via adoptedStyleSheets ou <style> dans le shadow root.
+ * Utilise :host pour que les variables soient disponibles partout dans le shadow.
+ *
+ * Convention :
+ *   --hse-*          → tokens HSE (ne pas écraser les variables HA natives)
+ *   --primary-color  → réutilisé depuis HA pour la cohérence thème
+ *
+ * Hiérarchie :
+ *   tokens.css (global :root)  →  hse_tokens.shadow.css (:host)
+ *   hse_themes.shadow.css surcharge les valeurs pour dark/light
  */
 
-/* ════════════════════════════════════════════════════════════════════════════
-   HSE UI TOKENS (base neutre — fallback si aucun thème actif)
-   ════════════════════════════════════════════════════════════════════════════ */
+:host {
+  /* ── Couleurs de surface ────────────────────────────────────────────────── */
+  --hse-surface-0:      var(--card-background-color,  #ffffff);
+  --hse-surface-1:      var(--secondary-background-color, #f5f5f5);
+  --hse-surface-2:      color-mix(in oklch, var(--hse-surface-1) 85%, var(--hse-surface-0));
+  --hse-surface-raised: var(--hse-surface-0);
+  --hse-divider:        var(--divider-color, rgba(0,0,0,0.12));
+  --hse-border:         var(--divider-color, rgba(0,0,0,0.10));
+
+  /* ── Couleurs de texte ─────────────────────────────────────────────────── */
+  --hse-text:           var(--primary-text-color,    #212121);
+  --hse-text-muted:     var(--secondary-text-color,  #757575);
+  --hse-text-faint:     var(--disabled-text-color,   #bdbdbd);
+  --hse-text-inverse:   #ffffff;
+  --hse-text-on-accent: #ffffff;
+
+  /* ── Couleur d'accentuation ────────────────────────────────────────────── */
+  --hse-accent:         var(--primary-color,         #03a9f4);
+  --hse-accent-hover:   color-mix(in oklch, var(--hse-accent) 80%, #000);
+  --hse-accent-light:   color-mix(in oklch, var(--hse-accent) 15%, transparent);
+
+  /* ── États sémantiques ─────────────────────────────────────────────────── */
+  --hse-success:        #4caf50;
+  --hse-success-bg:     color-mix(in oklch, #4caf50 12%, transparent);
+  --hse-warning:        #ff9800;
+  --hse-warning-bg:     color-mix(in oklch, #ff9800 12%, transparent);
+  --hse-error:          #f44336;
+  --hse-error-bg:       color-mix(in oklch, #f44336 12%, transparent);
+  --hse-info:           #2196f3;
+  --hse-info-bg:        color-mix(in oklch, #2196f3 12%, transparent);
+
+  /* ── Typographie ───────────────────────────────────────────────────────── */
+  --hse-font:           var(--paper-font-body1_-_font-family, 'Roboto', sans-serif);
+  --hse-font-mono:      'Roboto Mono', 'Courier New', monospace;
+
+  --hse-text-xs:   0.75rem;   /* 12px — labels, badges             */
+  --hse-text-sm:   0.875rem;  /* 14px — boutons, nav               */
+  --hse-text-base: 1rem;      /* 16px — corps par défaut           */
+  --hse-text-lg:   1.125rem;  /* 18px — sous-titres                */
+  --hse-text-xl:   1.375rem;  /* 22px — titres de section          */
+  --hse-text-2xl:  1.75rem;   /* 28px — valeur hero (puissance)    */
+  --hse-text-3xl:  2.25rem;   /* 36px — grand affichage            */
+
+  --hse-font-normal:   400;
+  --hse-font-medium:   500;
+  --hse-font-semibold: 600;
+  --hse-font-bold:     700;
+
+  --hse-leading-tight:  1.25;
+  --hse-leading-normal: 1.5;
+  --hse-leading-loose:  1.75;
+
+  /* ── Espacements (base 4px) ────────────────────────────────────────────── */
+  --hse-space-1:  0.25rem;   /*  4px */
+  --hse-space-2:  0.5rem;    /*  8px */
+  --hse-space-3:  0.75rem;   /* 12px */
+  --hse-space-4:  1rem;      /* 16px */
+  --hse-space-5:  1.25rem;   /* 20px */
+  --hse-space-6:  1.5rem;    /* 24px */
+  --hse-space-8:  2rem;      /* 32px */
+  --hse-space-10: 2.5rem;    /* 40px */
+  --hse-space-12: 3rem;      /* 48px */
+  --hse-space-16: 4rem;      /* 64px */
+
+  /* ── Rayons de bordure ─────────────────────────────────────────────────── */
+  --hse-radius-xs:   0.25rem;   /*  4px */
+  --hse-radius-sm:   0.375rem;  /*  6px */
+  --hse-radius-md:   0.5rem;    /*  8px */
+  --hse-radius-lg:   0.75rem;   /* 12px */
+  --hse-radius-xl:   1rem;      /* 16px */
+  --hse-radius-2xl:  1.5rem;    /* 24px */
+  --hse-radius-full: 9999px;
+
+  /* ── Ombres ────────────────────────────────────────────────────────────── */
+  --hse-shadow-xs: 0 1px 2px  oklch(0 0 0 / 0.06);
+  --hse-shadow-sm: 0 2px 4px  oklch(0 0 0 / 0.08), 0 1px 2px oklch(0 0 0 / 0.04);
+  --hse-shadow-md: 0 4px 12px oklch(0 0 0 / 0.10), 0 2px 4px oklch(0 0 0 / 0.06);
+  --hse-shadow-lg: 0 8px 24px oklch(0 0 0 / 0.12), 0 4px 8px oklch(0 0 0 / 0.08);
+
+  /* ── Transitions ───────────────────────────────────────────────────────── */
+  --hse-transition-fast:   120ms cubic-bezier(0.16, 1, 0.3, 1);
+  --hse-transition-normal: 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  --hse-transition-slow:   350ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ── Z-index ───────────────────────────────────────────────────────────── */
+  --hse-z-base:    0;
+  --hse-z-raised:  10;
+  --hse-z-overlay: 100;
+  --hse-z-modal:   200;
+  --hse-z-toast:   300;
+
+  /* ── Layout ────────────────────────────────────────────────────────────── */
+  --hse-content-narrow:  640px;
+  --hse-content-default: 960px;
+  --hse-content-wide:    1200px;
+
+  /* ── Tableau ───────────────────────────────────────────────────────────── */
+  --hse-table-header-bg:    var(--hse-surface-1);
+  --hse-table-row-hover:    color-mix(in oklch, var(--hse-accent) 6%, var(--hse-surface-0));
+  --hse-table-row-stripe:   color-mix(in oklch, var(--hse-surface-1) 50%, var(--hse-surface-0));
+  --hse-table-border:       var(--hse-border);
+
+  /* ── Skeleton ──────────────────────────────────────────────────────────── */
+  --hse-skeleton-base:    color-mix(in oklch, var(--hse-surface-1) 100%, transparent);
+  --hse-skeleton-shine:   color-mix(in oklch, var(--hse-surface-0) 80%, var(--hse-accent));
+  --hse-skeleton-speed:   1.5s;
+}
+
+/* ── Reset minimal dans shadow DOM ─────────────────────────────────────────── */
 
 :host {
-  /* Typography */
-  --hse-font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
-    Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-  --hse-mono-font-family: ui-monospace, SFMono-Regular, Menlo, Monaco,
-    Consolas, "Liberation Mono", "Courier New", monospace;
-  --hse-font-tracking: 0.1px;
+  display: block;
+  box-sizing: border-box;
+  font-family: var(--hse-font);
+  font-size: var(--hse-text-base);
+  color: var(--hse-text);
+  line-height: var(--hse-leading-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
 
-  --hse-font-size-title:  1.05rem;
-  --hse-font-size-body:   0.95rem;
-  --hse-font-size-muted:  0.86rem;
-
-  --hse-font-weight-title:  800;
-  --hse-font-weight-body:   520;
-  --hse-font-weight-strong: 700;
-
-  --hse-number-font-family:   var(--hse-mono-font-family);
-  --hse-value-accent-color:   var(--hse-primary);
-
-  /* Panel */
-  --hse-panel-radius:  var(--hse-radius-lg);
-  --hse-panel-padding: 16px;
-  --hse-panel-shadow:  var(--hse-shadow-md);
-  --hse-panel-border:  1px solid var(--hse-border);
-
-  /* Table */
-  --hse-table-header-bg:     var(--hse-gradient-header);
-  --hse-table-header-color:  var(--hse-on-header);
-  --hse-table-header-weight: 800;
-
-  /* Overview — pills & KPI */
-  --hse-pill-bg:         var(--hse-gradient-header);
-  --hse-pill-fg:         var(--hse-on-header);
-  --hse-kpi-bg:          color-mix(in srgb, var(--hse-surface) 86%, var(--hse-bg) 14%);
-  --hse-kpi-border:      var(--hse-border);
-  --hse-kpi-value-color: var(--hse-text);
-  --hse-kpi-total-color: var(--hse-primary);
-
-  /* Surfaces (fallback) */
-  --hse-bg:           #f7f9ff;
-  --hse-bg-secondary: #f3f4f6;
-  --hse-surface:      #ffffff;
-  --hse-surface-muted:#f1f5f9;
-
-  /* Borders */
-  --hse-border:        #e5e7eb;
-  --hse-border-soft:   #eef2f7;
-  --hse-border-strong: #cbd5e1;
-
-  /* Text */
-  --hse-text:         #1f2937;
-  --hse-text-main:    var(--hse-text);
-  --hse-text-muted:   #6b7280;
-  --hse-text-soft:    #7b8697;
-  --hse-text-inverse: #ffffff;
-
-  /* Brand / accents */
-  --hse-primary:      #2563eb;
-  --hse-primary-dark: #1d4ed8;
-  --hse-accent:       #7c3aed;
-  --hse-accent-hover: #6d28d9;
-  --hse-accent-soft:  rgba(124,58,237,0.12);
-  --hse-hover:        rgba(37,99,235,0.08);
-
-  /* Semantic */
-  --hse-info:          #0ea5e9;
-  --hse-info-dark:     #0284c7;
-  --hse-success:       #16a34a;
-  --hse-success-dark:  #15803d;
-  --hse-warning:       #f59e0b;
-  --hse-warning-dark:  #b45309;
-  --hse-error:         #ef4444;
-  --hse-error-dark:    #dc2626;
-
-  --hse-success-soft: rgba(22,163,74,0.12);
-  --hse-warning-soft: rgba(245,158,11,0.16);
-  --hse-error-soft:   rgba(239,68,68,0.12);
-  --hse-info-soft:    rgba(14,165,233,0.12);
-
-  /* Gradients */
-  --hse-gradient-primary: linear-gradient(135deg, rgba(37,99,235,1), rgba(124,58,237,1));
-  --hse-gradient-header:  linear-gradient(135deg, rgba(37,99,235,0.95), rgba(14,165,233,0.85));
-  --hse-gradient-info:    linear-gradient(135deg, rgba(14,165,233,0.18), rgba(14,165,233,0.08));
-  --hse-gradient-warning: linear-gradient(135deg, rgba(245,158,11,0.22), rgba(245,158,11,0.10));
-  --hse-gradient-success: linear-gradient(135deg, rgba(22,163,74,0.22), rgba(22,163,74,0.10));
-  --hse-gradient-danger:  linear-gradient(135deg, rgba(239,68,68,0.22), rgba(239,68,68,0.10));
-
-  --hse-on-accent:  #ffffff;
-  --hse-on-header:  #ffffff;
-
-  /* Backdrop (vide par défaut — activé par thèmes glass) */
-  --hse-backdrop-filter: none;
-
-  /* Shadows */
-  --hse-shadow-sm:   0 1px 2px rgba(0,0,0,0.06);
-  --hse-shadow-md:   0 10px 24px rgba(0,0,0,0.12);
-  --hse-shadow-lg:   0 22px 56px rgba(0,0,0,0.16);
-  --hse-shadow-glow: 0 0 18px rgba(124,58,237,0.18);
-
-  /* Motion */
-  --hse-transition-fast: 120ms ease;
-  --hse-transition-base: 180ms ease;
-  --hse-transition-slow: 320ms ease;
-
-  /* Radius */
-  --hse-radius-sm: 8px;
-  --hse-radius-md: 12px;
-  --hse-radius-lg: 18px;
-  --hse-radius-xl: 26px;
-
-  /* Spacing */
-  --hse-spacing-xs: 4px;
-  --hse-spacing-sm: 8px;
-  --hse-spacing-md: 16px;
-  --hse-spacing-lg: 24px;
-  --hse-spacing-xl: 32px;
-
-  /* Container */
-  --hse-container-max-width: 1280px;
-
-  /* Badge */
-  --hse-badge-bg:      rgba(0,0,0,0.04);
-  --hse-badge-border:  rgba(0,0,0,0.10);
-  --hse-badge-fg:      var(--hse-text);
-  --hse-badge-radius:  999px;
-  --hse-badge-padding: 2px 8px;
-
-  /* Dynamic BG */
-  --hse-bg-dynamic-opacity: 0.55;
-  --hse-bg-dynamic:
-    radial-gradient(900px 700px at 10% 10%, rgba(37,99,235,0.18), transparent 60%),
-    radial-gradient(900px 700px at 90% 20%, rgba(124,58,237,0.16), transparent 60%),
-    radial-gradient(900px 700px at 50% 95%, rgba(14,165,233,0.14), transparent 60%);
+*,
+*::before,
+*::after {
+  box-sizing: inherit;
 }
