@@ -1,0 +1,119 @@
+# HSE V3 — services.yaml
+# Déclaration des services HA appelables depuis les automations.
+# Source : __init__.py V1 + hse_v3_synthese.md §7
+
+catalogue_refresh:
+  name: Rafraîchir le catalogue
+  description: >-
+    Force un nouveau scan des capteurs HA et met à jour le catalogue HSE
+    (détection de capteurs, mise à jour des statuts, sync Repairs).
+  fields: {}
+
+meta_sync:
+  name: Synchroniser les méta-données
+  description: >-
+    Force une synchronisation des méta-données HA (pièces, types, assignations)
+    avec l'état actuel du registre HA.
+  fields: {}
+
+export_data:
+  name: Exporter les données
+  description: >-
+    Génère un export CSV ou JSON des consommations et coûts pour la période demandée.
+  fields:
+    period:
+      name: Période
+      description: "Période d'export : day, week, month ou year."
+      required: false
+      default: month
+      selector:
+        select:
+          options:
+            - day
+            - week
+            - month
+            - year
+    format:
+      name: Format
+      description: "Format d'export : csv ou json."
+      required: false
+      default: csv
+      selector:
+        select:
+          options:
+            - csv
+            - json
+
+migrate_cleanup:
+  name: Nettoyer après migration
+  description: >-
+    Supprime les données V1/V2 résiduelles après une migration validée.
+  fields: {}
+
+reset_catalogue:
+  name: Réinitialiser le catalogue
+  description: >-
+    Vide le catalogue HSE (tous les capteurs seront re-scannés au prochain
+    rafraîchissement). ⚠️ Action irréversible.
+  fields: {}
+
+reset_settings:
+  name: Réinitialiser les paramètres
+  description: >-
+    Remet les paramètres tarifaires à leurs valeurs par défaut.
+  fields: {}
+
+reset_meta:
+  name: Réinitialiser les méta-données
+  description: >-
+    Vide les pièces, types et assignations. ⚠️ Action irréversible.
+  fields: {}
+
+set_entity_assignment:
+  name: Assigner un capteur
+  description: >-
+    Assigne un capteur à une pièce et/ou un type d'appareil via une automation.
+  fields:
+    entity_id:
+      name: Capteur
+      description: L'entity_id du capteur à assigner.
+      required: true
+      selector:
+        entity:
+          domain: sensor
+    room_id:
+      name: Pièce
+      description: Identifiant de la pièce (slug).
+      required: false
+      selector:
+        text:
+    type_id:
+      name: Type d'appareil
+      description: Identifiant du type (slug).
+      required: false
+      selector:
+        text:
+
+set_triage_policy:
+  name: Définir la politique de triage
+  description: >-
+    Force la politique de triage d'un capteur du catalogue
+    (selected, ignored, removed).
+  fields:
+    entity_id:
+      name: Capteur
+      description: L'entity_id du capteur à modifier.
+      required: true
+      selector:
+        entity:
+          domain: sensor
+    policy:
+      name: Politique
+      description: "selected, ignored ou removed."
+      required: true
+      selector:
+        select:
+          options:
+            - selected
+            - ignored
+            - removed
