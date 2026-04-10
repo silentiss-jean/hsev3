@@ -43,7 +43,7 @@ hsev3/
 │
 └── custom_components/hse/
     │
-    ├── __init__.py                              ✅
+    ├── __init__.py                              ✅ (panel registration + toutes les views)
     ├── manifest.json                            ✅
     ├── config_flow.py                           ✅
     ├── options_flow.py                          ✅
@@ -107,9 +107,9 @@ hsev3/
     │   └── name_fixer.py                        ✅
     │
     ├── web_static/panel/
-    │   ├── hse_panel.html                       🔴 DELTA-011 ⛔ BLOQUANT
-    │   ├── hse_panel.js                         🔴 DELTA-011 ⛔ BLOQUANT (RÉÉCRITURE)
-    │   ├── style.hse.panel.css                  🔴 DELTA-011
+    │   ├── hse_panel.html                       ✅ DELTA-011 fermé 2026-04-10
+    │   ├── hse_panel.js                         ✅ DELTA-011 fermé 2026-04-10 (réécriture V3)
+    │   ├── style.hse.panel.css                  ✅ DELTA-011 fermé 2026-04-10
     │   ├── shared/
     │   │   ├── hse_fetch.js                     ✅
     │   │   ├── hse_store.js                     ✅
@@ -153,10 +153,10 @@ hsev3/
 | Catégorie | ✅ Présents | 🔴 Manquants |
 |---|---|---|
 | Backend Python | 30 | 4 (services.yaml, repairs.py, history.py, export_api.py) |
-| Frontend JS/CSS | 11 | 9 (hse_panel.html/js/css + 2 ui/ + 4 styles/) |
+| Frontend JS/CSS | 14 | 6 (2 ui/ + 4 styles/) |
 | Translations | 0 | 2 |
 | Documentation | 13 | 0 |
-| **Total** | **54** | **15** |
+| **Total** | **57** | **12** |
 
 ---
 
@@ -186,9 +186,11 @@ hsev3/
 | Polling onglets "lecture" | Autorisé mais suspendu si onglet inactif | Session 2026-04-08 |
 | Chemin fichiers statiques | `web_static/panel/shared/` (Option B) | DELTA-002 — 2026-04-09 |
 | Chemin views frontend | `web_static/panel/features/<id>/<id>_view.js` | DELTA-003 — 2026-04-09 |
-| `hse_panel.js` | **RÉÉCRITURE complète** — V2 BUGÉ, ne pas récupérer | DELTA-011 — 2026-04-09 |
-| Rôle `hse_shell.js` | Custom element `<hse-panel>` + bootstrap + routing onglets | DELTA-011 — 2026-04-09 |
-| Rôle `hse_panel.js` | Point d'entrée HA : enregistre le panel + charge `hse_shell.js` | DELTA-011 — 2026-04-09 |
+| `hse_panel.js` | **RÉÉCRITURE complète** V3 — import `hse_shell.js` + `customPanelInfo` | DELTA-011 — 2026-04-10 |
+| Rôle `hse_shell.js` | Custom element `<hse-panel>` + bootstrap + routing onglets | DELTA-011 — 2026-04-10 |
+| Rôle `hse_panel.js` | Point d'entrée HA : `customPanelInfo` + `import hse_shell.js` | DELTA-011 — 2026-04-10 |
+| URL statiques | `/hse-static/` → `web_static/panel/` | DELTA-011 — 2026-04-10 |
+| Panel module_url | `/hse-static/hse_panel.js` | DELTA-011 — 2026-04-10 |
 
 ---
 
@@ -209,89 +211,52 @@ hsev3/
 [FAIT] DELTA-005 → [BLOC 1 ✅] → [BLOC 2 ✅] → [BLOC 3 ✅] → [BLOC 4 ✅] → [DELTA-002 ✅] → [DELTA-003 ✅]
 [FAIT] DELTA-001
 [FAIT] DELTA-006 / 007 / 008 / 009 / 010
+[FAIT] DELTA-011 ✅ 2026-04-10
 
-→ En cours : DELTA-011 → DELTA-012 → DELTA-016 → DELTA-015 → DELTA-013 → DELTA-014
+→ En cours : DELTA-012 → DELTA-016 → DELTA-015 → DELTA-013 → DELTA-014
 ```
 
 ---
 
 ## Écarts actifs
 
-### 🔴 DELTA-011 — Panel HA : point d'entrée manquant
-**Statut :** `DOC_AHEAD`  
-**Ouvert le :** 2026-04-09  
-
-#### État réel du code (audit 2026-04-09)
-
-`hse_shell.js` est **déjà présent** dans `web_static/panel/shared/` et implémente :
-- Le custom element `<hse-panel>` enregistré auprès de HA
-- Le bootstrap complet (token, manifest, user_prefs)
-- Le routing onglets avec `mount()` / `unmount()` / `update_hass()`
-- Le chargement dynamique des `features/<id>/<id>_view.js`
-
-Mais `hse_shell.js` joue le rôle de l'**implémentation** du panel, pas du **point d'entrée** HA.
-Il lui manque le fichier qui l'appelle et qui déclare le panel auprès de HA.
-
-#### Décision tranchée (session 2026-04-09)
-
-> **`hse_panel.js` V2 est buggé — il ne faut PAS le récupérer.**  
-> Il sera **réécrit intégralement** en V3, sans importer de code V2.
-
-Les bugs V2 connus de `hse_panel.js` :
-- `localStorage` utilisé directement (viole R4)
-- Logique bootstrap mélangée avec le rendu DOM
-- Absence de gestion propre du cycle de vie custom element
-
-#### Fichiers à créer (RÉÉCRITURE, pas de récup V2)
-
-| Fichier | Rôle V3 | Contrainte |
-|---|---|---|
-| `web_static/panel/hse_panel.html` | Point d'entrée HTML : charge `hse_panel.js` en `<script type="module">` | Minimaliste |
-| `web_static/panel/hse_panel.js` | Déclare le panel HA (`customPanelInfo`) + importe `hse_shell.js` | RÉÉCRITURE propre, zéro localStorage |
-| `web_static/panel/style.hse.panel.css` | CSS global hors shadow DOM (variables HA, reset minimal) | Hors shadow DOM |
-
-**Impact :** BLOQUANT — sans ces 3 fichiers le panel HA ne s'affiche pas du tout.  
-**Doit respecter :** R4 (zéro localStorage), `require_admin=True`, `hse_fetch.js` pour tous les appels.
-
----
-
 ### 🔴 DELTA-012 — Translations manquantes
-**Statut :** `DOC_AHEAD`  
-**Ouvert le :** 2026-04-09  
+**Statut :** `DOC_AHEAD`
+**Ouvert le :** 2026-04-09
 **Fichiers manquants** (prévus §3.2 + checklist §10 item bloquant) :
 - `translations/fr.json`
 - `translations/en.json`
 
-**Impact :** BLOQUANT HACS — HA refuse de charger une intégration sans `translations/`.  
+**Impact :** BLOQUANT HACS — HA refuse de charger une intégration sans `translations/`.
 **Source :** V2 existant à adapter au domaine `hse` V3 (renommage des clés domain uniquement).
 
 ---
 
 ### 🔴 DELTA-013 — `repairs.py` manquant
-**Statut :** `DOC_AHEAD`  
-**Ouvert le :** 2026-04-09  
+**Statut :** `DOC_AHEAD`
+**Ouvert le :** 2026-04-09
 **Fichier manquant** (prévu §3.2, source V2) :
 - `repairs.py`
 
-**Impact :** HA Repairs natif non actif — les alertes capteurs ne remontent pas dans l'UI HA.  
+**Impact :** HA Repairs natif non actif — les alertes capteurs ne remontent pas dans l'UI HA.
 **Source :** `repairs.py` V2 à adapter au domaine `hse` (vérifier qu'il n'a pas de bugs connus avant récup).
 
 ---
 
 ### 🔴 DELTA-014 — `services.yaml` manquant
-**Statut :** `DOC_AHEAD`  
-**Ouvert le :** 2026-04-09  
+**Statut :** `DOC_AHEAD`
+**Ouvert le :** 2026-04-09
 **Fichier manquant** (prévu §3.2 + §7, source V1) :
 - `services.yaml`
 
-**Impact :** Les 9 services HA ne sont pas déclarés (generate_local_data, migrate_cleanup, export_data, etc.) — non appelables depuis les automations HA.  
+**Impact :** Les 9 services HA ne sont pas déclarés (generate_local_data, migrate_cleanup, export_data, etc.) — non appelables depuis les automations HA.
 **Source :** Extraire de `__init__.py` V1.
 
 ---
 
 ### 🔴 DELTA-015 — Views API manquantes
-**Statut :** `DOC_AHEAD`  
-**Ouvert le :** 2026-04-09  
+**Statut :** `DOC_AHEAD`
+**Ouvert le :** 2026-04-09
 **Fichiers manquants** (prévus §3.2 Phase 4) :
 - `api/views/history.py` — `GET /api/hse/history` (wraps `engine/analytics.py`) — **requis par onglet Costs**
 - `api/views/export_api.py` — export CSV/JSON — **requis par onglet Costs bouton export**
@@ -301,8 +266,8 @@ Les bugs V2 connus de `hse_panel.js` :
 ---
 
 ### 🔴 DELTA-016 — Fichiers shared frontend manquants
-**Statut :** `DOC_AHEAD`  
-**Ouvert le :** 2026-04-09  
+**Statut :** `DOC_AHEAD`
+**Ouvert le :** 2026-04-09
 **Fichiers manquants** (prévus §3.2 Phase 5) :
 
 *Utilitaires JS :*
@@ -315,7 +280,7 @@ Les bugs V2 connus de `hse_panel.js` :
 - `web_static/panel/shared/styles/hse_alias.v2.css`
 - `web_static/panel/shared/styles/tokens.css`
 
-**Impact :** Les `*_view.js` existants ne peuvent pas importer les utilitaires DOM/table ni appliquer les tokens CSS. Rendering dégradé ou cassé.  
+**Impact :** Les `*_view.js` existants ne peuvent pas importer les utilitaires DOM/table ni appliquer les tokens CSS. Rendering dégradé ou cassé.
 **Source :** V2 existant à migrer (vérifier présence de localStorage avant tout import).
 
 ---
@@ -324,6 +289,7 @@ Les bugs V2 connus de `hse_panel.js` :
 
 | ID | Fermé le | Description |
 |---|---|---|
+| DELTA-011 | 2026-04-10 | `hse_panel.html` + `hse_panel.js` (réécriture V3) + `style.hse.panel.css` + `__init__.py` panel registration |
 | DELTA-003 | 2026-04-09 | 8 views JS — `web_static/panel/features/<id>/<id>_view.js` — R1–R5 sur chaque view |
 | DELTA-002 | 2026-04-09 | Shell JS — `hse_fetch.js` + `hse_store.js` + `hse_shell.js` dans `web_static/panel/shared/` |
 | DELTA-004 Bloc 4 | 2026-04-09 | Toutes les views `api/views/` — 19 classes, 11 fichiers |
