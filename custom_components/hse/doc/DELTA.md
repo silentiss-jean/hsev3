@@ -32,7 +32,7 @@ Si tu lis ce fichier, tu dois :
 ## 🗂️ Carte du repo — état réel au 2026-04-10
 
 > Mise à jour à chaque commit ajoutant ou supprimant un fichier.
-> ✅ = fichier présent et conforme | 🔴 = manquant (voir écart DELTA-0XX)
+> ✅ = fichier présent et conforme | 🔴 = manquant (voir écart DELTA-0XX) | ⚠️ = présent mais problème
 
 ```
 hsev3/
@@ -43,6 +43,7 @@ hsev3/
 │
 └── custom_components/hse/
     │
+    ├── .DS_Store                                ⚠️ DELTA-018 — à supprimer + .gitignore
     ├── __init__.py                              ✅ (panel + vues + repairs au démarrage)
     ├── manifest.json                            ✅
     ├── config_flow.py                           ✅
@@ -121,14 +122,14 @@ hsev3/
     │   │       ├── hse_alias.v2.css             ✅
     │   │       └── tokens.css                   ✅
     │   └── features/
-    │       ├── overview/overview_view.js         ✅
-    │       ├── diagnostic/diagnostic_view.js     ✅
-    │       ├── scan/scan_view.js                 ✅
-    │       ├── config/config_view.js             ✅
-    │       ├── custom/custom_view.js             ✅
-    │       ├── cards/cards_view.js               ✅
-    │       ├── migration/migration_view.js       ✅
-    │       └── costs/costs_view.js              ✅
+    │       ├── overview/overview_view.js         🔴 DELTA-017
+    │       ├── diagnostic/diagnostic_view.js     🔴 DELTA-017
+    │       ├── scan/scan_view.js                 🔴 DELTA-017
+    │       ├── config/config_view.js             🔴 DELTA-017
+    │       ├── custom/custom_view.js             🔴 DELTA-017
+    │       ├── cards/cards_view.js               🔴 DELTA-017
+    │       ├── migration/migration_view.js       🔴 DELTA-017
+    │       └── costs/costs_view.js              🔴 DELTA-017
     │
     └── doc/
         ├── DELTA.md                             ✅ (ce fichier)
@@ -151,10 +152,11 @@ hsev3/
 | Catégorie | ✅ Présents | 🔴 Manquants |
 |---|---|---|
 | Backend Python | 34 | 0 |
-| Frontend JS/CSS | 20 | 0 |
+| Frontend JS/CSS — shell + shared | 12 | 0 |
+| Frontend JS — views onglets | 0 | 8 (DELTA-017) |
 | Translations | 2 | 0 |
 | Documentation | 13 | 0 |
-| **Total** | **69** | **0** |
+| **Total** | **61** | **8** |
 
 ---
 
@@ -222,14 +224,17 @@ hsev3/
 [FAIT] DELTA-015 ✅ 2026-04-10
 [FAIT] DELTA-016 ✅ 2026-04-10
 
-→ Plus d'écarts actifs — doc et code alignés 🎉
+→ Prochain : DELTA-017 (8 views JS) → DELTA-018 (.DS_Store)
 ```
 
 ---
 
 ## Écarts actifs
 
-> ✅ **Aucun écart actif** — doc et code parfaitement alignés au 2026-04-10.
+| ID | Statut | Description | Impact |
+|---|---|---|---|
+| **DELTA-017** | 🔴 DOC_AHEAD | 8 fichiers `*_view.js` manquants dans `features/` — dossiers créés mais vides : `overview_view.js`, `diagnostic_view.js`, `scan_view.js`, `config_view.js`, `custom_view.js`, `cards_view.js`, `migration_view.js`, `costs_view.js` | **BLOQUANT** — panel HA vide, aucun onglet ne s'affiche |
+| **DELTA-018** | 🟡 CODE_AHEAD | `.DS_Store` committé dans `custom_components/hse/` — fichier macOS à supprimer du repo et ajouter au `.gitignore` | Cosmétique — pollue le repo |
 
 ---
 
@@ -237,13 +242,13 @@ hsev3/
 
 | ID | Fermé le | Description |
 |---|---|---|
+| DELTA-016 | 2026-04-10 | Shared frontend — `shared/ui/dom.js` + `table.js` (ES modules) + 4 fichiers CSS |
+| DELTA-015 | 2026-04-10 | `HseHistoryView` + `HseExportView` — classes dans `costs.py`, enregistrement ajouté dans `__init__.py` |
 | DELTA-014 | 2026-04-10 | `services.yaml` — 8 services déclarés : catalogue_refresh, meta_sync, export_data, migrate_cleanup, reset_catalogue, reset_settings, reset_meta, set_entity_assignment, set_triage_policy |
 | DELTA-013 | 2026-04-10 | `repairs.py` — adaptation V2→V3 (lecture via `HseStorageManager`), appel non bloquant au démarrage dans `__init__.py` |
-| DELTA-015 | 2026-04-10 | `HseHistoryView` + `HseExportView` — classes déjà dans `costs.py`, enregistrement ajouté dans `__init__.py` |
-| DELTA-016 | 2026-04-10 | Shared frontend — `shared/ui/dom.js` + `table.js` (ES modules) + 4 fichiers CSS |
 | DELTA-012 | 2026-04-10 | `translations/fr.json` + `translations/en.json` — config_flow + options_flow + issues |
 | DELTA-011 | 2026-04-10 | `hse_panel.html` + `hse_panel.js` (réécriture V3) + `style.hse.panel.css` + panel registration |
-| DELTA-003 | 2026-04-09 | 8 views JS — `web_static/panel/features/<id>/<id>_view.js` — R1–R5 sur chaque view |
+| DELTA-003 | 2026-04-09 | 8 dossiers views JS créés — `web_static/panel/features/<id>/` |
 | DELTA-002 | 2026-04-09 | Shell JS — `hse_fetch.js` + `hse_store.js` + `hse_shell.js` |
 | DELTA-004 Bloc 4 | 2026-04-09 | Toutes les views `api/views/` — 19 classes, 11 fichiers |
 | DELTA-004 Bloc 3 | 2026-04-09 | `engine/__init__.py` + `cost.py` + `calculation.py` + `group_totals.py` + `analytics.py` |
