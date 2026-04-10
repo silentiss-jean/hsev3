@@ -20,7 +20,7 @@ from homeassistant.config_entries import ConfigEntry
 
 from .api.views.ping import HsePingView
 from .api.views.catalogue import HseCatalogueView
-from .api.views.costs import HseCostsView
+from .api.views.costs import HseCostsView, HseHistoryView, HseExportView
 from .api.views.diagnostic import HseDiagnosticView
 from .api.views.frontend_manifest import HseFrontendManifestView
 from .api.views.meta import HseMetaView
@@ -60,12 +60,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {}
 
-    # ── Fichiers statiques ──────────────────────────────────────────────────
+    # ── Fichiers statiques ─────────────────────────────────────────────────────────
     await hass.http.async_register_static_paths([
         StaticPathConfig(_STATIC_URL, str(_STATIC_DIR), cache_headers=False),
     ])
 
-    # ── Panel HA ────────────────────────────────────────────────────────────
+    # ── Panel HA ─────────────────────────────────────────────────────────────────
     # require_admin=True : panel visible uniquement pour les admins HA
     # (hse_v3_synthese.md §4)
     await async_register_built_in_panel(
@@ -85,11 +85,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         require_admin=True,
     )
 
-    # ── Vues API ────────────────────────────────────────────────────────────
+    # ── Vues API ─────────────────────────────────────────────────────────────────
     for view in [
         HsePingView(hass),
         HseCatalogueView(hass),
         HseCostsView(hass),
+        HseHistoryView(hass),
+        HseExportView(hass),
         HseDiagnosticView(hass),
         HseFrontendManifestView(hass),
         HseMetaView(hass),
