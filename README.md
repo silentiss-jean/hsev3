@@ -137,7 +137,7 @@ hsev3/
         │           └── costs/costs_view.js             ✅
         │
         └── doc/                     ← 📚 Documentation IA
-            ├── DELTA.md             ← ✅ Aucun écart actif
+            ├── DELTA.md             ← 🟠 1 écart actif (DELTA-021)
             ├── 00_methode_front_commune.md
             ├── 01_onglet_overview.md
             ├── 02_onglet_diagnostic.md
@@ -177,7 +177,9 @@ hsev3/
 
 ### Écarts actifs
 
-> ✅ **Aucun écart actif.** Doc et code sont parfaitement alignés.
+> 🟠 **1 écart actif — DELTA-021 EN_DISCUSSION.**
+> Sujet : nature réelle du chantier API (phases 2–3) — modules V2 à réorganiser, pas à réécrire.
+> Voir `doc/DELTA.md` pour le détail complet.
 
 ---
 
@@ -187,6 +189,6 @@ hsev3/
 |---|---|
 | Discussion en cours | Ajouter ligne `EN_DISCUSSION` dans DELTA.md |
 | Décision prise, pas encore codée | Passer à `DOC_AHEAD` ou `CODE_AHEAD` |
-| Doc + code committés ensemble | Supprimer la ligne de DELTA.md |
+| Doc + code commités ensemble | Supprimer la ligne de DELTA.md |
 
 **Règle d'or : si DELTA.md est vide → doc et code sont alignés.**
