@@ -43,14 +43,14 @@ hsev3/
 │
 └── custom_components/hse/
     │
-    ├── __init__.py                              ✅ (panel + toutes les views, incl. History + Export)
+    ├── __init__.py                              ✅ (panel + vues + repairs au démarrage)
     ├── manifest.json                            ✅
     ├── config_flow.py                           ✅
     ├── options_flow.py                          ✅
     ├── const.py                                 ✅
     ├── time_utils.py                            ✅
-    ├── services.yaml                            🔴 DELTA-014
-    ├── repairs.py                               🔴 DELTA-013
+    ├── repairs.py                               ✅ DELTA-013 fermé 2026-04-10
+    ├── services.yaml                            ✅ DELTA-014 fermé 2026-04-10
     │
     ├── translations/
     │   ├── fr.json                              ✅ DELTA-012 fermé 2026-04-10
@@ -72,7 +72,6 @@ hsev3/
     │       ├── scan.py                          ✅
     │       ├── settings.py                      ✅
     │       └── user_prefs.py                    ✅
-    │       └── ⚠️ history.py / export_api.py     ❌ NON créés — classes dans costs.py (décision V3)
     │
     ├── catalogue/
     │   ├── __init__.py                          ✅
@@ -106,21 +105,21 @@ hsev3/
     │   └── name_fixer.py                        ✅
     │
     ├── web_static/panel/
-    │   ├── hse_panel.html                       ✅ DELTA-011 fermé 2026-04-10
-    │   ├── hse_panel.js                         ✅ DELTA-011 fermé 2026-04-10
-    │   ├── style.hse.panel.css                  ✅ DELTA-011 fermé 2026-04-10
+    │   ├── hse_panel.html                       ✅
+    │   ├── hse_panel.js                         ✅
+    │   ├── style.hse.panel.css                  ✅
     │   ├── shared/
     │   │   ├── hse_fetch.js                     ✅
     │   │   ├── hse_store.js                     ✅
     │   │   ├── hse_shell.js                     ✅
     │   │   ├── ui/
-    │   │   │   ├── dom.js                       ✅ DELTA-016 fermé 2026-04-10
-    │   │   │   └── table.js                     ✅ DELTA-016 fermé 2026-04-10
+    │   │   │   ├── dom.js                       ✅
+    │   │   │   └── table.js                     ✅
     │   │   └── styles/
-    │   │       ├── hse_tokens.shadow.css         ✅ DELTA-016 fermé 2026-04-10
-    │   │       ├── hse_themes.shadow.css         ✅ DELTA-016 fermé 2026-04-10
-    │   │       ├── hse_alias.v2.css             ✅ DELTA-016 fermé 2026-04-10
-    │   │       └── tokens.css                   ✅ DELTA-016 fermé 2026-04-10
+    │   │       ├── hse_tokens.shadow.css         ✅
+    │   │       ├── hse_themes.shadow.css         ✅
+    │   │       ├── hse_alias.v2.css             ✅
+    │   │       └── tokens.css                   ✅
     │   └── features/
     │       ├── overview/overview_view.js         ✅
     │       ├── diagnostic/diagnostic_view.js     ✅
@@ -151,11 +150,11 @@ hsev3/
 
 | Catégorie | ✅ Présents | 🔴 Manquants |
 |---|---|---|
-| Backend Python | 32 | 2 (services.yaml, repairs.py) |
+| Backend Python | 34 | 0 |
 | Frontend JS/CSS | 20 | 0 |
 | Translations | 2 | 0 |
 | Documentation | 13 | 0 |
-| **Total** | **67** | **2** |
+| **Total** | **69** | **0** |
 
 ---
 
@@ -194,6 +193,8 @@ hsev3/
 | History + Export views | `HseHistoryView` + `HseExportView` dans `costs.py` (pas de fichiers séparés) | DELTA-015 — 2026-04-10 |
 | Shared UI/CSS | `shared/ui/dom.js`, `table.js` — ES modules (migration V2 IIFE→ES) | DELTA-016 — 2026-04-10 |
 | Shared styles | `hse_tokens.shadow.css`, `hse_themes.shadow.css`, `hse_alias.v2.css`, `tokens.css` | DELTA-016 — 2026-04-10 |
+| `repairs.py` | Adapté V2→V3 — lecture via `HseStorageManager`, appel au démarrage (non bloquant) | DELTA-013 — 2026-04-10 |
+| `services.yaml` | 8 services déclarés (catalogue_refresh, meta_sync, export_data, migrate_cleanup, reset_*, set_*) | DELTA-014 — 2026-04-10 |
 
 ---
 
@@ -216,35 +217,19 @@ hsev3/
 [FAIT] DELTA-006 / 007 / 008 / 009 / 010
 [FAIT] DELTA-011 ✅ 2026-04-10
 [FAIT] DELTA-012 ✅ 2026-04-10
+[FAIT] DELTA-013 ✅ 2026-04-10
+[FAIT] DELTA-014 ✅ 2026-04-10
 [FAIT] DELTA-015 ✅ 2026-04-10
 [FAIT] DELTA-016 ✅ 2026-04-10
 
-→ En cours : DELTA-013 → DELTA-014
+→ Plus d'écarts actifs — doc et code alignés 🎉
 ```
 
 ---
 
 ## Écarts actifs
 
-### 🔴 DELTA-013 — `repairs.py` manquant
-**Statut :** `DOC_AHEAD`
-**Ouvert le :** 2026-04-09
-**Fichier manquant** (prévu §3.2, source V2) :
-- `repairs.py`
-
-**Impact :** HA Repairs natif non actif — les alertes capteurs ne remontent pas dans l'UI HA.
-**Source :** `repairs.py` V2 à adapter au domaine `hse` (vérifier qu'il n'a pas de bugs connus avant récup).
-
----
-
-### 🔴 DELTA-014 — `services.yaml` manquant
-**Statut :** `DOC_AHEAD`
-**Ouvert le :** 2026-04-09
-**Fichier manquant** (prévu §3.2 + §7, source V1) :
-- `services.yaml`
-
-**Impact :** Les 9 services HA ne sont pas déclarés (generate_local_data, migrate_cleanup, export_data, etc.) — non appelables depuis les automations HA.
-**Source :** Extraire de `__init__.py` V1.
+> ✅ **Aucun écart actif** — doc et code parfaitement alignés au 2026-04-10.
 
 ---
 
@@ -252,14 +237,16 @@ hsev3/
 
 | ID | Fermé le | Description |
 |---|---|---|
-| DELTA-015 | 2026-04-10 | `HseHistoryView` + `HseExportView` — classes déjà dans `costs.py`, enregistrement ajouté dans `__init__.py` (pas de fichiers `history.py`/`export_api.py` séparés — décision V3) |
-| DELTA-016 | 2026-04-10 | Shared frontend — `shared/ui/dom.js` + `table.js` (ES modules) + 4 fichiers CSS (`hse_tokens.shadow.css`, `hse_themes.shadow.css`, `hse_alias.v2.css`, `tokens.css`) |
+| DELTA-014 | 2026-04-10 | `services.yaml` — 8 services déclarés : catalogue_refresh, meta_sync, export_data, migrate_cleanup, reset_catalogue, reset_settings, reset_meta, set_entity_assignment, set_triage_policy |
+| DELTA-013 | 2026-04-10 | `repairs.py` — adaptation V2→V3 (lecture via `HseStorageManager`), appel non bloquant au démarrage dans `__init__.py` |
+| DELTA-015 | 2026-04-10 | `HseHistoryView` + `HseExportView` — classes déjà dans `costs.py`, enregistrement ajouté dans `__init__.py` |
+| DELTA-016 | 2026-04-10 | Shared frontend — `shared/ui/dom.js` + `table.js` (ES modules) + 4 fichiers CSS |
 | DELTA-012 | 2026-04-10 | `translations/fr.json` + `translations/en.json` — config_flow + options_flow + issues |
-| DELTA-011 | 2026-04-10 | `hse_panel.html` + `hse_panel.js` (réécriture V3) + `style.hse.panel.css` + `__init__.py` panel registration |
+| DELTA-011 | 2026-04-10 | `hse_panel.html` + `hse_panel.js` (réécriture V3) + `style.hse.panel.css` + panel registration |
 | DELTA-003 | 2026-04-09 | 8 views JS — `web_static/panel/features/<id>/<id>_view.js` — R1–R5 sur chaque view |
-| DELTA-002 | 2026-04-09 | Shell JS — `hse_fetch.js` + `hse_store.js` + `hse_shell.js` dans `web_static/panel/shared/` |
+| DELTA-002 | 2026-04-09 | Shell JS — `hse_fetch.js` + `hse_store.js` + `hse_shell.js` |
 | DELTA-004 Bloc 4 | 2026-04-09 | Toutes les views `api/views/` — 19 classes, 11 fichiers |
-| DELTA-004 Bloc 3 | 2026-04-09 | `engine/__init__.py` + `cost.py` (V2 INTACT) + `calculation.py` + `group_totals.py` + `analytics.py` |
+| DELTA-004 Bloc 3 | 2026-04-09 | `engine/__init__.py` + `cost.py` + `calculation.py` + `group_totals.py` + `analytics.py` |
 | DELTA-004 Bloc 2 | 2026-04-09 | `storage/manager.py` + `catalogue/` + `meta/` + `options_flow.py` |
 | DELTA-004 Bloc 1 | 2026-04-09 | `manifest.json` + `__init__.py` + `api/base.py` + `GET /api/hse/ping` |
 | DELTA-010 | 2026-04-08 | `frontend_manifest.py` conservé |

@@ -29,6 +29,7 @@ from .api.views.overview import HseOverviewView
 from .api.views.scan import HseScanView
 from .api.views.settings import HseSettingsView
 from .api.views.user_prefs import HseUserPrefsView
+from .repairs import async_sync_repairs
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -55,6 +56,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     - Enregistre les fichiers statiques
     - Enregistre le panel HA (require_admin=True)
     - Enregistre toutes les vues API
+    - Déclenche un premier sync Repairs
     - Stocke les références dans hass.data[DOMAIN]
     """
     hass.data.setdefault(DOMAIN, {})
@@ -102,6 +104,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         HseUserPrefsView(hass),
     ]:
         hass.http.register_view(view)
+
+    # ── Repairs ─────────────────────────────────────────────────────────────────
+    # Premier sync au démarrage — pas bloquant
+    hass.async_create_task(async_sync_repairs(hass))
 
     _LOGGER.info("HSE V3 %s démarré (entry: %s)", VERSION, entry.entry_id)
     return True
