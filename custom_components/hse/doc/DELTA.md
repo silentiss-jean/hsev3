@@ -32,18 +32,17 @@ Si tu lis ce fichier, tu dois :
 ## 🗂️ Carte du repo — état réel au 2026-04-10
 
 > Mise à jour à chaque commit ajoutant ou supprimant un fichier.
-> ✅ = fichier présent et conforme | 🔴 = manquant (voir écart DELTA-0XX) | ⚠️ = présent mais problème
+> ✅ = fichier présent et conforme | 🔴 = manquant (voir écart DELTA-0XX)
 
 ```
 hsev3/
 ├── README.md                                    ✅
+├── .gitignore                                   ✅ DELTA-018 fermé 2026-04-10
 ├── analyse.md                                   ✅
 ├── analyse0.md                                  ✅
 ├── hse_v3_synthese.md                           ✅
 │
 └── custom_components/hse/
-    │
-    ├── .DS_Store                                ⚠️ DELTA-018 — à supprimer + .gitignore
     ├── __init__.py                              ✅ (panel + vues + repairs au démarrage)
     ├── manifest.json                            ✅
     ├── config_flow.py                           ✅
@@ -198,6 +197,7 @@ hsev3/
 | `repairs.py` | Adapté V2→V3 — lecture via `HseStorageManager`, appel au démarrage (non bloquant) | DELTA-013 — 2026-04-10 |
 | `services.yaml` | 8 services déclarés (catalogue_refresh, meta_sync, export_data, migrate_cleanup, reset_*, set_*) | DELTA-014 — 2026-04-10 |
 | 8 `*_view.js` | Présents et vérifiés — audit fichier par fichier confirmé | DELTA-017 — 2026-04-10 |
+| `.DS_Store` | Supprimé du repo + `.gitignore` ajouté à la racine | DELTA-018 — 2026-04-10 |
 
 ---
 
@@ -225,17 +225,16 @@ hsev3/
 [FAIT] DELTA-015 ✅ 2026-04-10
 [FAIT] DELTA-016 ✅ 2026-04-10
 [FAIT] DELTA-017 ✅ 2026-04-10 — audit réel : 8 views JS présentes et vérifiées
+[FAIT] DELTA-018 ✅ 2026-04-10 — .DS_Store supprimé + .gitignore ajouté
 
-→ Seul écart restant : DELTA-018 (.DS_Store)
+✅ Aucun écart actif — doc et code sont alignés.
 ```
 
 ---
 
 ## Écarts actifs
 
-| ID | Statut | Description | Impact |
-|---|---|---|---|
-| **DELTA-018** | 🟡 CODE_AHEAD | `.DS_Store` committé dans `custom_components/hse/` — fichier macOS à supprimer du repo et ajouter au `.gitignore` | Cosmétique — pollue le repo |
+> ✅ **Aucun écart actif.** Doc et code sont parfaitement alignés.
 
 ---
 
@@ -243,6 +242,7 @@ hsev3/
 
 | ID | Fermé le | Description |
 |---|---|---|
+| DELTA-018 | 2026-04-10 | `.DS_Store` supprimé du repo + `.gitignore` ajouté à la racine |
 | DELTA-017 | 2026-04-10 | 8 `*_view.js` — audit réel confirmé : tous présents (overview, diagnostic, scan, config, custom, cards, migration, costs) |
 | DELTA-016 | 2026-04-10 | Shared frontend — `shared/ui/dom.js` + `table.js` (ES modules) + 4 fichiers CSS |
 | DELTA-015 | 2026-04-10 | `HseHistoryView` + `HseExportView` — classes dans `costs.py`, enregistrement ajouté dans `__init__.py` |
