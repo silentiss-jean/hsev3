@@ -1,0 +1,42 @@
+{
+  "title": "Home Suivi Élec",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configurer Home Suivi Élec",
+        "description": "Ajoutez l'intégration HSE pour suivre votre consommation électrique.",
+        "data": {
+          "name": "Nom de l'instance"
+        }
+      }
+    },
+    "error": {
+      "already_configured": "Cette intégration est déjà configurée."
+    },
+    "abort": {
+      "already_configured": "HSE est déjà configuré.",
+      "single_instance_allowed": "Une seule instance de HSE est autorisée."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options Home Suivi Élec",
+        "data": {
+          "reference_sensor": "Capteur de référence (consommation totale)",
+          "energy_price": "Tarif €/kWh"
+        },
+        "data_description": {
+          "reference_sensor": "Entité HA utilisée comme base de calcul des coûts.",
+          "energy_price": "Prix moyen du kWh en euros (ex : 0.2516)."
+        }
+      }
+    }
+  },
+  "issues": {
+    "catalogue_offline": {
+      "title": "Capteur indisponible depuis longtemps",
+      "description": "Le capteur **{entity_id}** est indisponible depuis {since}.\n\nActions possibles dans HSE → Diagnostic :\n- Mute (7/30/90j) pendant une période de dépannage.\n- Mark removed si le capteur a été retiré définitivement.\n\nNiveaux : warning après 15 min (ou immédiat si not_provided), erreur après 24h, action requise après 48h."
+    }
+  }
+}

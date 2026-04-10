@@ -1,0 +1,42 @@
+{
+  "title": "Home Suivi Élec",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Home Suivi Élec",
+        "description": "Add the HSE integration to track your electricity consumption.",
+        "data": {
+          "name": "Instance name"
+        }
+      }
+    },
+    "error": {
+      "already_configured": "This integration is already configured."
+    },
+    "abort": {
+      "already_configured": "HSE is already configured.",
+      "single_instance_allowed": "Only one instance of HSE is allowed."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Home Suivi Élec Options",
+        "data": {
+          "reference_sensor": "Reference sensor (total consumption)",
+          "energy_price": "Energy price €/kWh"
+        },
+        "data_description": {
+          "reference_sensor": "HA entity used as the base for cost calculations.",
+          "energy_price": "Average price per kWh in euros (e.g. 0.2516)."
+        }
+      }
+    }
+  },
+  "issues": {
+    "catalogue_offline": {
+      "title": "Sensor unavailable for a long time",
+      "description": "Sensor **{entity_id}** has been unavailable since {since}.\n\nAvailable actions in HSE → Diagnostic:\n- Mute (7/30/90 days) during a troubleshooting period.\n- Mark removed if the sensor has been permanently removed.\n\nLevels: warning after 15 min (or immediate if not_provided), error after 24h, action required after 48h."
+    }
+  }
+}
