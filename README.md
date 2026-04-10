@@ -42,6 +42,7 @@ Règles pour l'IA :
 ```
 hsev3/
 ├── README.md                        ← ce fichier + brief IA
+├── .gitignore                       ✅
 ├── analyse.md                       ← analyse V1/V2 (frontend)
 ├── analyse0.md                      ← analyse V1/V2 (backend)
 ├── hse_v3_synthese.md               ← synthèse des deux analyses → base V3
@@ -136,7 +137,7 @@ hsev3/
         │           └── costs/costs_view.js             ✅
         │
         └── doc/                     ← 📚 Documentation IA
-            ├── DELTA.md             ← 1 écart actif (DELTA-018 cosmétique)
+            ├── DELTA.md             ← ✅ Aucun écart actif
             ├── 00_methode_front_commune.md
             ├── 01_onglet_overview.md
             ├── 02_onglet_diagnostic.md
@@ -174,13 +175,9 @@ hsev3/
 | Panel | `hse_panel.html` + `hse_panel.js` + `style.hse.panel.css` | ✅ TERMINÉ — 2026-04-10 |
 | Shared UI | `shared/ui/dom.js` + `table.js` + 4 fichiers CSS | ✅ TERMINÉ — 2026-04-10 |
 
-### Écart actif
+### Écarts actifs
 
-| ID | Titre | Impact | Statut |
-|---|---|---|---|
-| DELTA-018 | `.DS_Store` dans le repo — à supprimer + `.gitignore` | Cosmétique | 🟡 À faire |
-
-> Voir `custom_components/hse/doc/DELTA.md` pour le détail complet.
+> ✅ **Aucun écart actif.** Doc et code sont parfaitement alignés.
 
 ---
 
