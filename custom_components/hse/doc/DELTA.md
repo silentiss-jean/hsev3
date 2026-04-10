@@ -115,13 +115,13 @@ hsev3/
     │   │   ├── hse_store.js                     ✅
     │   │   ├── hse_shell.js                     ✅
     │   │   ├── ui/
-    │   │   │   ├── dom.js                       🔴 DELTA-016
-    │   │   │   └── table.js                     🔴 DELTA-016
+    │   │   │   ├── dom.js                       ✅ DELTA-016 fermé 2026-04-10
+    │   │   │   └── table.js                     ✅ DELTA-016 fermé 2026-04-10
     │   │   └── styles/
-    │   │       ├── hse_tokens.shadow.css         🔴 DELTA-016
-    │   │       ├── hse_themes.shadow.css         🔴 DELTA-016
-    │   │       ├── hse_alias.v2.css             🔴 DELTA-016
-    │   │       └── tokens.css                   🔴 DELTA-016
+    │   │       ├── hse_tokens.shadow.css         ✅ DELTA-016 fermé 2026-04-10
+    │   │       ├── hse_themes.shadow.css         ✅ DELTA-016 fermé 2026-04-10
+    │   │       ├── hse_alias.v2.css             ✅ DELTA-016 fermé 2026-04-10
+    │   │       └── tokens.css                   ✅ DELTA-016 fermé 2026-04-10
     │   └── features/
     │       ├── overview/overview_view.js         ✅
     │       ├── diagnostic/diagnostic_view.js     ✅
@@ -153,10 +153,10 @@ hsev3/
 | Catégorie | ✅ Présents | 🔴 Manquants |
 |---|---|---|
 | Backend Python | 30 | 4 (services.yaml, repairs.py, history.py, export_api.py) |
-| Frontend JS/CSS | 14 | 6 (2 ui/ + 4 styles/) |
+| Frontend JS/CSS | 20 | 0 |
 | Translations | 2 | 0 |
 | Documentation | 13 | 0 |
-| **Total** | **59** | **10** |
+| **Total** | **65** | **4** |
 
 ---
 
@@ -192,6 +192,8 @@ hsev3/
 | URL statiques | `/hse-static/` → `web_static/panel/` | DELTA-011 — 2026-04-10 |
 | Panel module_url | `/hse-static/hse_panel.js` | DELTA-011 — 2026-04-10 |
 | Translations | `fr.json` + `en.json` — config_flow + options_flow + issues | DELTA-012 — 2026-04-10 |
+| Shared UI/CSS | `shared/ui/dom.js`, `table.js` — ES modules (migration V2 IIFE→ES) | DELTA-016 — 2026-04-10 |
+| Shared styles | `hse_tokens.shadow.css`, `hse_themes.shadow.css`, `hse_alias.v2.css`, `tokens.css` | DELTA-016 — 2026-04-10 |
 
 ---
 
@@ -214,8 +216,9 @@ hsev3/
 [FAIT] DELTA-006 / 007 / 008 / 009 / 010
 [FAIT] DELTA-011 ✅ 2026-04-10
 [FAIT] DELTA-012 ✅ 2026-04-10
+[FAIT] DELTA-016 ✅ 2026-04-10
 
-→ En cours : DELTA-016 → DELTA-015 → DELTA-013 → DELTA-014
+→ En cours : DELTA-015 → DELTA-013 → DELTA-014
 ```
 
 ---
@@ -255,30 +258,11 @@ hsev3/
 
 ---
 
-### 🔴 DELTA-016 — Fichiers shared frontend manquants
-**Statut :** `DOC_AHEAD`
-**Ouvert le :** 2026-04-09
-**Fichiers manquants** (prévus §3.2 Phase 5) :
-
-*Utilitaires JS :*
-- `web_static/panel/shared/ui/dom.js`
-- `web_static/panel/shared/ui/table.js`
-
-*Styles CSS :*
-- `web_static/panel/shared/styles/hse_tokens.shadow.css`
-- `web_static/panel/shared/styles/hse_themes.shadow.css`
-- `web_static/panel/shared/styles/hse_alias.v2.css`
-- `web_static/panel/shared/styles/tokens.css`
-
-**Impact :** Les `*_view.js` existants ne peuvent pas importer les utilitaires DOM/table ni appliquer les tokens CSS. Rendering dégradé ou cassé.
-**Source :** V2 existant à migrer (vérifier présence de localStorage avant tout import).
-
----
-
 ## Historique
 
 | ID | Fermé le | Description |
 |---|---|---|
+| DELTA-016 | 2026-04-10 | Shared frontend — `shared/ui/dom.js` + `table.js` (ES modules) + 4 fichiers CSS (`hse_tokens.shadow.css`, `hse_themes.shadow.css`, `hse_alias.v2.css`, `tokens.css`) |
 | DELTA-012 | 2026-04-10 | `translations/fr.json` + `translations/en.json` — config_flow + options_flow + issues |
 | DELTA-011 | 2026-04-10 | `hse_panel.html` + `hse_panel.js` (réécriture V3) + `style.hse.panel.css` + `__init__.py` panel registration |
 | DELTA-003 | 2026-04-09 | 8 views JS — `web_static/panel/features/<id>/<id>_view.js` — R1–R5 sur chaque view |
