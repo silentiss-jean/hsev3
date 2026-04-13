@@ -41,6 +41,13 @@ class HseDiagnosticView(HseBaseView):
                 continue
             src = item.get("source") or {}
             eid = src.get("entity_id") or item_id
+
+            # Friendly name depuis l'état HA live (DELTA-026)
+            state_obj = self.hass.states.get(eid)
+            friendly = (
+                (getattr(state_obj, "attributes", {}) or {}).get("friendly_name") or eid
+            )
+
             health = item.get("health") or {}
             escalation = health.get("escalation") or "none"
             issues = []
@@ -55,7 +62,7 @@ class HseDiagnosticView(HseBaseView):
                 ok_count += 1
             sensors_out.append({
                 "entity_id": eid,
-                "name": eid,
+                "name": friendly,
                 "status": status,
                 "issues": issues,
             })
@@ -65,7 +72,7 @@ class HseDiagnosticView(HseBaseView):
         return self.json_ok({
             "score_pct": score_pct,
             "sensors": sensors_out,
-            "repairs": [],
+            "repairs": [],  # TODO DELTA-026 : brancher homeassistant.components.repairs (vérifier dispo >= 2024.1)
             "storage_stats": {
                 "total": total,
                 "selected": selected,
