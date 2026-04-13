@@ -17,7 +17,6 @@ Si tu lis ce fichier, tu dois :
    - **EXPLORATION** → on réfléchit, rien n'est écrit, on ajoute une ligne `EN_DISCUSSION` si la discussion dure
    - **COMMIT** → décision prise, on génère le patch doc + patch code + on ferme la ligne dans ce fichier
 5. **Vérifier la 🗂️ Carte du repo** ci-dessous pour connaître l'état réel de chaque fichier
-6. **Aucun écart actif** — doc et code alignés au 2026-04-13
 
 ### 📚 Documents de référence IA — lire dans cet ordre avant tout
 
@@ -32,15 +31,12 @@ Si tu lis ce fichier, tu dois :
 
 ## 🗂️ Carte du repo — état réel au 2026-04-13
 
-> Mise à jour à chaque commit ajoutant ou supprimant un fichier.
 > ✅ = fichier présent et conforme | 🔴 = manquant ou stub (voir écart DELTA-0XX)
 
 ```
 hsev3/
 ├── README.md                                    ✅
 ├── .gitignore                                   ✅
-├── analyse.md                                   ✅
-├── analyse0.md                                  ✅
 ├── hse_v3_synthese.md                           ✅
 │
 └── custom_components/hse/
@@ -52,100 +48,15 @@ hsev3/
     ├── time_utils.py                            ✅
     ├── repairs.py                               ✅
     ├── services.yaml                            ✅
-    │
-    ├── translations/
-    │   ├── fr.json                              ✅
-    │   └── en.json                              ✅
-    │
-    ├── api/
-    │   ├── __init__.py                          ✅
-    │   ├── base.py                              ✅
-    │   └── views/
-    │       ├── __init__.py                      ✅
-    │       ├── ping.py                          ✅
-    │       ├── catalogue.py                     ✅ (DELTA-025 — 2026-04-13)
-    │       ├── costs.py                         ✅ (DELTA-024 — 2026-04-13)
-    │       ├── diagnostic.py                    ✅ (DELTA-026 — 2026-04-13)
-    │       ├── frontend_manifest.py             ✅
-    │       ├── meta.py                          ✅
-    │       ├── migration.py                     ✅
-    │       ├── overview.py                      ✅ (DELTA-023 — 2026-04-13)
-    │       ├── scan.py                          ✅ (DELTA-025 — 2026-04-13)
-    │       ├── settings.py                      ✅
-    │       └── user_prefs.py                    ✅
-    │
-    ├── catalogue/
-    │   ├── __init__.py                          ✅
-    │   ├── defaults.py                          ✅
-    │   ├── manager.py                           ✅
-    │   ├── scan_engine.py                       ✅
-    │   └── schema.py                            ✅
-    │
-    ├── meta/
-    │   ├── __init__.py                          ✅
-    │   ├── assignments.py                       ✅
-    │   ├── schema.py                            ✅
-    │   ├── store.py                             ✅
-    │   └── sync.py                              ✅
-    │
-    ├── storage/
-    │   ├── __init__.py                          ✅
-    │   └── manager.py                           ✅
-    │
-    ├── engine/
-    │   ├── __init__.py                          ✅
-    │   ├── cost.py                              ✅
-    │   ├── calculation.py                       ✅
-    │   ├── group_totals.py                      ✅
-    │   ├── analytics.py                         ✅ (entity seul — global non implémenté, documenté)
-    │   └── period_stats.py                      ✅ (DELTA-022 — 2026-04-13)
-    │
-    ├── sensors/
-    │   ├── __init__.py                          ✅
-    │   ├── quality_scorer.py                    ✅
-    │   ├── sync_manager.py                      ✅
-    │   └── name_fixer.py                        ✅
-    │
-    ├── web_static/panel/
-    │   ├── hse_panel.html                       ✅
-    │   ├── hse_panel.js                         ✅
-    │   ├── style.hse.panel.css                  ✅
-    │   ├── shared/
-    │   │   ├── hse_fetch.js                     ✅
-    │   │   ├── hse_store.js                     ✅
-    │   │   ├── hse_shell.js                     ✅
-    │   │   ├── ui/
-    │   │   │   ├── dom.js                       ✅
-    │   │   │   └── table.js                     ✅
-    │   │   └── styles/
-    │   │       ├── hse_tokens.shadow.css        ✅
-    │   │       ├── hse_themes.shadow.css        ✅
-    │   │       ├── hse_alias.v2.css             ✅
-    │   │       └── tokens.css                   ✅
-    │   └── features/
-    │       ├── overview/overview_view.js        ✅
-    │       ├── diagnostic/diagnostic_view.js    ✅
-    │       ├── scan/scan_view.js                ✅
-    │       ├── config/config_view.js            ✅ (DELTA-026 — 2026-04-13)
-    │       ├── custom/custom_view.js            ✅
-    │       ├── cards/cards_view.js              ✅
-    │       ├── migration/migration_view.js      ✅
-    │       └── costs/costs_view.js              ✅
-    │
-    └── doc/
-        ├── DELTA.md                             ✅ (ce fichier)
-        ├── 00_methode_front_commune.md          ✅
-        ├── 01_onglet_overview.md                ✅
-        ├── 02_onglet_diagnostic.md              ✅
-        ├── 03_onglet_scan.md                    ✅
-        ├── 04_onglet_config.md                  ✅
-        ├── 05_onglet_custom.md                  ✅
-        ├── 06_onglet_cards.md                   ✅
-        ├── 07_onglet_migration.md               ✅
-        ├── 08_onglet_costs.md                   ✅
-        ├── 09_squelette_hse_tab_base.md         ✅
-        ├── 10_api_contrat.md                    ✅
-        └── hse_v3_synthese.md                   ✅
+    ├── translations/fr.json + en.json           ✅
+    ├── api/base.py + views/* (13 views)         ✅
+    ├── catalogue/* (5 fichiers)                 ✅
+    ├── meta/* (5 fichiers)                      ✅
+    ├── storage/manager.py                       ✅
+    ├── engine/* (6 fichiers)                    ✅
+    ├── sensors/* (4 fichiers)                   ✅
+    ├── web_static/panel/shared/* (5 JS + 4 CSS) ✅
+    └── web_static/panel/features/* (8 views JS) ✅
 ```
 
 ---
@@ -154,49 +65,16 @@ hsev3/
 
 | Sujet | Décision | Source |
 |---|---|---|
-| Domaine HA | `hse` — V3 **remplace** V2 | `hse_v3_synthese.md` §1 |
+| Domaine HA | `hse` — V3 remplace V2 | `hse_v3_synthese.md` §1 |
 | Préfixe API | `/api/hse/` | `hse_v3_synthese.md` §3.1 |
-| Auth token | `hse_fetch.js` injecte `Bearer` auto | `hse_v3_synthese.md` §4 |
-| Persistance préfs UI | `PATCH /api/hse/user_prefs` — **jamais localStorage** | Règle R4 |
-| Stockage `user_prefs` | `StorageManager` dans `storage/manager.py` | `hse_v3_synthese.md` §7 |
+| Auth token | `hse_fetch.js` injecte `Bearer` auto | Règle R4 |
+| Persistance préfs UI | `PATCH /api/hse/user_prefs` — jamais localStorage | Règle R4 |
 | Structure backend | Sous-dossiers `catalogue/`, `meta/`, `engine/`, `storage/`, `api/` | `hse_v3_synthese.md` §3.2 |
 | `engine/cost.py` | `shared_cost_engine.py` V2 — INTACT | `hse_v3_synthese.md` §7 |
 | Pas de `sensor.py` | Interdit — event `hse_sensors_ready` | `hse_v3_synthese.md` §2 |
-| `__init__.py` | < 200 lignes, orchestration uniquement | `hse_v3_synthese.md` §3.2 |
-| Fichiers statiques | `StaticPathConfig` — pas de `shutil.copytree` | `hse_v3_synthese.md` §4 |
 | Sécurité | `requires_auth=True` + `cors_allowed=False` partout | `hse_v3_synthese.md` §4 |
 | Panel HA | `require_admin=True` | `hse_v3_synthese.md` §4 |
-| Nommage frontend | Séparateur `_` : `hse_fetch.js`, `hse_store.js`, etc. | DELTA-006 — 2026-04-08 |
-| Dossier HACS | `custom_components/hse/` | DELTA-004 — 2026-04-08 |
-| Source repo V2 | `https://github.com/silentiss-jean/hse.git` | DELTA-007 — 2026-04-08 |
-| Migration | Hypothèse A — ajout `entity_id` V1 au catalogue V3 | DELTA-008 — 2026-04-08 |
-| Capteur référence | `storage/manager.py` (live, sans restart) | DELTA-009 — 2026-04-08 |
-| `frontend_manifest.py` | Conservé — version + onglets + feature flags | DELTA-010 — 2026-04-08 |
-| Polling onglets "action" | ZÉRO auto — refresh sur action uniquement | Session 2026-04-08 |
-| Polling onglets "lecture" | Autorisé mais suspendu si onglet inactif | Session 2026-04-08 |
-| Chemin fichiers statiques | `web_static/panel/shared/` (Option B) | DELTA-002 — 2026-04-09 |
-| Chemin views frontend | `web_static/panel/features/<id>/<id>_view.js` | DELTA-003 — 2026-04-09 |
-| `hse_panel.js` | **RÉÉCRITURE complète** V3 — import `hse_shell.js` + `customPanelInfo` | DELTA-011 — 2026-04-10 |
-| Rôle `hse_shell.js` | Custom element `<hse-panel>` + bootstrap + routing onglets | DELTA-011 — 2026-04-10 |
-| Rôle `hse_panel.js` | Point d'entrée HA : `customPanelInfo` + `import hse_shell.js` | DELTA-011 — 2026-04-10 |
-| URL statiques | `/hse-static/` → `web_static/panel/` | DELTA-011 — 2026-04-10 |
-| Panel module_url | `/hse-static/hse_panel.js` | DELTA-011 — 2026-04-10 |
-| Translations | `fr.json` + `en.json` — config_flow + options_flow + issues | DELTA-012 — 2026-04-10 |
-| History + Export views | `HseHistoryView` + `HseExportView` dans `costs.py` (pas de fichiers séparés) | DELTA-015 — 2026-04-10 |
-| Shared UI/CSS | `shared/ui/dom.js`, `table.js` — ES modules (migration V2 IIFE→ES) | DELTA-016 — 2026-04-10 |
-| Shared styles | `hse_tokens.shadow.css`, `hse_themes.shadow.css`, `hse_alias.v2.css`, `tokens.css` | DELTA-016 — 2026-04-10 |
-| `repairs.py` | Adapté V2→V3 — lecture via `HseStorageManager`, appel au démarrage (non bloquant) | DELTA-013 — 2026-04-10 |
-| `services.yaml` | 8 services déclarés (catalogue_refresh, meta_sync, export_data, migrate_cleanup, reset_*, set_*) | DELTA-014 — 2026-04-10 |
-| 8 `*_view.js` | Présents et vérifiés — audit fichier par fichier confirmé | DELTA-017 — 2026-04-10 |
-| `.DS_Store` | Supprimé du repo + `.gitignore` ajouté à la racine | DELTA-018 — 2026-04-10 |
-| Nom fichier `hse_fetch.js` | Correction doc : séparateur `_` (pas `.`) confirmé dans `00_methode_front_commune.md` §5 | DELTA-019 — 2026-04-10 |
-| Stubs `week/month/year` + distinction REST vs service HA | Notes ajoutées dans `10_api_contrat.md` (§overview + §catalogue/refresh + §history) | DELTA-020 — 2026-04-10 |
-| Nature chantier API Phases 2–3 | Modules V2 portés, pas réinventés — audit complet réalisé le 2026-04-12 | DELTA-021 — 2026-04-12 |
-| Calcul énergie par période | `engine/period_stats.py` créé — `async_energy_for_period` + `async_total_energy_for_period` | DELTA-022 — 2026-04-13 |
-| `overview.py` — périodes + by_type | Branché sur `period_stats` + `totals_by_type` — today_kwh/eur aussi corrigé | DELTA-023 — 2026-04-13 |
-| `costs.py` — énergie période + historique | `HseCostsView` branché `async_energy_for_period`. `HseHistoryView` branché `async_history_12months` + `cost_eur` enrichissement `eur_ttc`. | DELTA-024 — 2026-04-13 |
-| `quality_score` entier 0-100 | `scan.py` + `catalogue.py` : `score_item()` appelé dans les deux fichiers — déjà présent dans le code, DELTA.md était désynchronisé | DELTA-025 — 2026-04-13 |
-| `diagnostic.py` friendly_name + config checkbox | `diagnostic.py` : friendly_name HA live + TODO repairs. `config_view.js` : cfg-check-all handler | DELTA-026 — 2026-04-13 |
+| Nommage frontend | Séparateur `_` : `hse_fetch.js`, etc. | DELTA-006 |
 
 ---
 
@@ -205,15 +83,141 @@ hsev3/
 | Symbole | Statut | Signification |
 |---|---|---|
 | 🟠 | `EN_DISCUSSION` | En cours de discussion |
-| 🔴 | `CODE_MANQUANT` | Fichier ou fonction absent — bloque l'onglet |
-| 🟡 | `CODE_INCORRECT` | Fichier présent mais retourne une valeur fausse |
+| 🔴 | `AUDIT_EN_COURS` | Phase d'audit démarrée — résultats à venir |
+| 🟡 | `ANOMALIE` | Anomalie trouvée pendant l'audit — correctif requis |
 | ✅ | `ALIGNED` | Résolu et commité |
 
 ---
 
 ## Écarts actifs
 
-> **Aucun écart actif.** Doc et code parfaitement alignés au 2026-04-13.
+### 🔎 AUDIT STATIQUE V3 — Plan en 7 phases
+
+> **Contexte** : HSEv3 est 100% théorique — code écrit mais jamais exécuté ni installé dans HA.
+> Objectif : vérifier logiquement, fichier par fichier, que **tout ce qui est censé fonctionner fonctionnera**.
+> Périmètre : **code uniquement** (doc/synthèse déjà alignée). On ne relance pas l'IA sur la doc.
+> Chaque phase génère ses propres DELTA-0XX si une anomalie est trouvée.
+
+---
+
+| ID | Statut | Phase | Périmètre | Fichiers concernés | Priorité |
+|---|---|---|---|---|---|
+| DELTA-027 | 🔴 AUDIT_EN_COURS | **Phase 1 — Bootstrapping HA** | Séquence d'installation et de démarrage | `manifest.json`, `config_flow.py`, `options_flow.py`, `__init__.py`, `const.py` | 🔴 CRITIQUE |
+| DELTA-028 | ⬜ EN_ATTENTE | **Phase 2 — Sécurité & Auth** | Tous les endpoints + base | `api/base.py`, `api/views/*.py` (13 fichiers) | 🔴 CRITIQUE |
+| DELTA-029 | ⬜ EN_ATTENTE | **Phase 3 — Moteurs backend** | Calculs, cohérence des sorties | `engine/period_stats.py`, `engine/cost.py`, `engine/calculation.py`, `engine/group_totals.py`, `engine/analytics.py` | 🟡 IMPORTANT |
+| DELTA-030 | ⬜ EN_ATTENTE | **Phase 4 — Contrat API ↔ Frontend** | Shape JSON retourné vs shape attendu par les views JS | `api/views/*.py` ↔ `features/*_view.js` (8 paires) | 🔴 CRITIQUE |
+| DELTA-031 | ⬜ EN_ATTENTE | **Phase 5 — Frontend logique** | Règles R1–R5, flux de données, guard re-entrance, gestion erreurs | `hse_shell.js`, `hse_fetch.js`, `hse_store.js`, 8 `*_view.js` | 🟡 IMPORTANT |
+| DELTA-032 | ⬜ EN_ATTENTE | **Phase 6 — Catalogue & Méta** | Cohérence lecture/écriture catalogue, assignments, sync | `catalogue/*.py`, `meta/*.py`, `storage/manager.py` | 🟡 IMPORTANT |
+| DELTA-033 | ⬜ EN_ATTENTE | **Phase 7 — Cas limites & robustesse** | Valeurs manquantes, entités disparues, storage vide, premier démarrage | Tous les modules exposés à l'extérieur | 🟢 QUALITÉ |
+
+---
+
+### Détail de chaque phase
+
+#### DELTA-027 — Phase 1 : Bootstrapping HA
+
+**Ce qu'on vérifie :**
+- `manifest.json` : `domain`, `version`, `config_flow: true`, `requirements` vide (pas de dépendance externe cassante), `iot_class` cohérent
+- `config_flow.py` : flux minimal valide pour HA — step `user`, retour `FlowResultType.CREATE_ENTRY` correct, pas de champ obligatoire manquant
+- `options_flow.py` : capteur référence + tarif correctement lu/écrit dans `entry.options`
+- `__init__.py` : séquence `async_setup_entry` — ordre des enregistrements (static → panel → views → repairs), gestion d'erreur si un enregistrement échoue, `async_unload_entry` propre
+- `const.py` : toutes les constantes utilisées dans les autres modules sont bien définies ici
+
+**Signal de fin :** DELTA-027 fermé quand aucune anomalie n'est trouvée, ou quand chaque anomalie a son propre DELTA-0XX.
+
+---
+
+#### DELTA-028 — Phase 2 : Sécurité & Auth
+
+**Ce qu'on vérifie :**
+- `api/base.py` : `HseBaseView` hérite bien de `HomeAssistantView`, `requires_auth = True`, `cors_allowed = False`
+- Chaque view dans `api/views/` hérite de `HseBaseView` (pas de `HomeAssistantView` directe)
+- Aucune view n'a `requires_auth = False` redéfini
+- Les méthodes HTTP déclarées (`get`, `post`, `patch`, `delete`) correspondent aux besoins réels
+- Gestion cohérente des erreurs HTTP : 400 pour payload invalide, 404 pour entité manquante, 500 pour erreur interne — pas de 200 avec `{"error": ...}` dans le body
+- `user_prefs.py` : `PATCH` fait bien un merge partiel (pas un remplacement complet)
+
+---
+
+#### DELTA-029 — Phase 3 : Moteurs backend
+
+**Ce qu'on vérifie :**
+- `engine/period_stats.py` : `async_energy_for_period` appelle bien le recorder HA (`get_instance(hass)`), gère les entités absentes du recorder (retour `0.0` propre), calcul delta correct (état_fin − état_début pour compteurs cumulatifs)
+- `engine/cost.py` : formule TTC correcte (`kWh × tarif_ht × (1 + tva)`), gestion HP/HC si activé, arrondi à 2 décimales
+- `engine/calculation.py` : cohérence avec les unités — W vs kWh, pas de division par zéro
+- `engine/group_totals.py` : agrégation par room et par type ne double-compte pas les capteurs multi-assignés
+- `engine/analytics.py` : `async_history_12months` retourne bien 12 points, label correct (YYYY-MM), kwh non négatif
+- `time_utils.py` : `start_of_day`, `start_of_week`, `start_of_month`, `start_of_year` retournent des `datetime` timezone-aware (tzinfo non nul)
+
+---
+
+#### DELTA-030 — Phase 4 : Contrat API ↔ Frontend
+
+**Ce qu'on vérifie (paire par paire) :**
+
+| Endpoint | View backend | View frontend | Clés JSON à valider |
+|---|---|---|---|
+| `GET /api/hse/overview` | `overview.py` | `overview_view.js` | `power_now_w`, `consumption.{today,week,month,year}_{kwh,eur}`, `top5[].{name,power_w,pct}`, `status.{level,message}`, `by_type[]` |
+| `GET /api/hse/costs` | `costs.py` | `costs_view.js` | `total_kwh`, `total_ttc_eur`, `items[].{name,entity_id,room,power_w,energy_kwh,cost_ttc_eur,pct_total}` |
+| `GET /api/hse/history` | `costs.py (HseHistoryView)` | `costs_view.js` | `points[].{label,kwh,eur_ttc}` |
+| `GET /api/hse/diagnostic` | `diagnostic.py` | `diagnostic_view.js` | `score`, `sensors[].{entity_id,name,status,issue}`, `stats.{catalogued,selected,ignored}` |
+| `GET /api/hse/scan` | `scan.py` | `scan_view.js` | `entities[].{entity_id,name,quality_score,device,domain}` |
+| `GET/PATCH /api/hse/catalogue` | `catalogue.py` | `config_view.js` | `items[].{entity_id,name,room,type,enabled,power_w}` |
+| `GET/PUT /api/hse/settings` | `settings.py` | `config_view.js` | `tariff.{ht_kwh,tva,abo_eur}`, `reference_sensor` |
+| `GET/PATCH /api/hse/user_prefs` | `user_prefs.py` | `custom_view.js` + `costs_view.js` | `theme`, `glassmorphism`, `dynamic_bg`, `costs_period` |
+
+**Règle :** toute clé lue par le JS doit être produite par le Python. Une clé manquante = affichage silencieusement cassé.
+
+---
+
+#### DELTA-031 — Phase 5 : Frontend logique
+
+**Ce qu'on vérifie :**
+- `hse_panel.js` : déclare bien `customPanelInfo` + importe `hse_shell.js` — pas de `localStorage`
+- `hse_shell.js` : custom element `<hse-panel>` défini, routing onglets correct (index 0–7 → bons modules), `update_hass` propagé à la view active, `unmount` appelé au changement d'onglet
+- `hse_fetch.js` : injecte `Authorization: Bearer` depuis `window.__hseToken`, gère les réponses non-2xx (throw), compatible AbortController
+- `hse_store.js` : `get()` / `patch()` / `set()` cohérents — pas de mutation directe de l'objet retourné
+- Pour chacun des 8 `*_view.js` : R1 (DOM construit dans mount), R2 (guard `_fetching`), R3 (sig JSON), R4 (zéro localStorage), R5 (skeleton), unmount annule le timer, erreur réseau affiche message
+
+---
+
+#### DELTA-032 — Phase 6 : Catalogue & Méta
+
+**Ce qu'on vérifie :**
+- `catalogue/manager.py` : lecture/écriture dans `storage/manager.py` — pas d'accès direct au fichier JSON
+- `catalogue/scan_engine.py` : filtre correctement les domaines non-energy, retourne `quality_score` entier 0–100
+- `catalogue/schema.py` : schéma volontaire (tous champs optionnels sauf `entity_id`) — pas de validation trop stricte qui bloquerait des ajouts partiels
+- `meta/sync.py` : sync ne perd pas les assignments existants lors d'un refresh catalogue
+- `meta/assignments.py` : pas de doublon room/type possible
+- `storage/manager.py` : lecture asynchrone propre, écriture atomique (write temp + rename), gère le cas fichier absent (premier démarrage → dict vide)
+- `sensors/quality_scorer.py` : retourne bien un `int` (pas un `float` ni une `str`)
+
+---
+
+#### DELTA-033 — Phase 7 : Cas limites & robustesse
+
+**Ce qu'on vérifie :**
+- **Premier démarrage** (storage vide) : toutes les views retournent un JSON valide vide, pas d'exception non capturée
+- **Entité HA disparue** : catalogue référence un `entity_id` qui n'existe plus dans HA → overview/costs ne plante pas, affiche 0 W proprement
+- **Recorder vide** : `period_stats.py` appelé sur une entité sans historique recorder → retourne `0.0`, pas `None` ni exception
+- **Payload malformé** : POST/PATCH avec JSON invalide → 400 avec message clair, pas 500
+- **Token expiré/absent** : fetch frontend reçoit 401 → message d'erreur affiché dans la view, pas boucle infinie
+- **Onglet switché pendant un fetch** : `unmount()` annule l'AbortController avant que la réponse arrive — pas de setState sur composant démonté
+- **50+ entités scannées** : `scan_view.js` gère la pagination (ou affiche un warning) — pas de DOM avec 500 lignes
+- **Valeur NaN dans calculs** : `cost.py` + `calculation.py` ne retournent jamais `NaN` ou `Infinity` dans le JSON
+
+---
+
+## Règles d'exécution de l'audit
+
+```
+1. On traite UNE phase à la fois — dans l'ordre numérique
+2. Pour chaque phase : lire le(s) fichier(s) → signaler les anomalies en EXPLORATION
+3. Si anomalie confirmée → ouvrir un sous-DELTA (ex: DELTA-027a, DELTA-027b...) + générer le patch en mode COMMIT
+4. Si aucune anomalie → fermer la phase (DELTA-0XX → ✅ ALIGNED)
+5. Ne pas passer à la phase suivante avant que la précédente soit ✅
+6. Résultat final attendu : DELTA-027 à 033 tous ✅ = V3 prête pour première installation
+```
 
 ---
 
@@ -221,35 +225,26 @@ hsev3/
 
 | ID | Fermé le | Description |
 |---|---|---|
-| DELTA-026 | 2026-04-13 | `diagnostic.py` : friendly_name HA live + TODO repairs. `config_view.js` : cfg-check-all handler. |
-| DELTA-025 | 2026-04-13 | `scan.py` + `catalogue.py` : `score_item()` déjà présent dans le code — DELTA.md était désynchronisé. |
-| DELTA-024 | 2026-04-13 | `costs.py` : `HseCostsView` branché `async_energy_for_period` (period réelle). `HseHistoryView` branché `async_history_12months` + enrichissement `eur_ttc` via `cost_eur`. |
-| DELTA-023 | 2026-04-13 | `overview.py` branché sur `period_stats` (day/week/month/year) + `totals_by_type`. `today_kwh/eur` aussi corrigé. |
-| DELTA-022 | 2026-04-13 | `engine/period_stats.py` créé — `async_energy_for_period` + `async_total_energy_for_period`. |
-| DELTA-021 | 2026-04-12 | Audit exhaustif réalisé — 5 défauts identifiés → DELTA-022 à 026 ouverts. |
-| DELTA-020 | 2026-04-10 | `10_api_contrat.md` : notes stubs + distinction REST vs service HA. |
-| DELTA-019 | 2026-04-10 | `hse_fetch.js` (séparateur `_`) confirmé. |
-| DELTA-018 | 2026-04-10 | `.DS_Store` supprimé + `.gitignore` ajouté. |
-| DELTA-017 | 2026-04-10 | 8 `*_view.js` — tous présents. |
-| DELTA-016 | 2026-04-10 | Shared frontend — `dom.js` + `table.js` + 4 CSS. |
-| DELTA-015 | 2026-04-10 | `HseHistoryView` + `HseExportView` dans `costs.py`. |
-| DELTA-014 | 2026-04-10 | `services.yaml` — 8 services. |
-| DELTA-013 | 2026-04-10 | `repairs.py` adapté V2→V3. |
-| DELTA-012 | 2026-04-10 | `translations/fr.json` + `en.json`. |
-| DELTA-011 | 2026-04-10 | `hse_panel.html` + `hse_panel.js` (réécriture V3). |
-| DELTA-003 | 2026-04-09 | 8 dossiers views JS créés. |
-| DELTA-002 | 2026-04-09 | Shell JS — `hse_fetch.js` + `hse_store.js` + `hse_shell.js`. |
-| DELTA-004 Bloc 4 | 2026-04-09 | Toutes les views `api/views/`. |
-| DELTA-004 Bloc 3 | 2026-04-09 | `engine/` (5 modules). |
-| DELTA-004 Bloc 2 | 2026-04-09 | `storage/`, `catalogue/`, `meta/`, `options_flow.py`. |
-| DELTA-004 Bloc 1 | 2026-04-09 | `manifest.json` + `__init__.py` + `api/base.py` + ping. |
-| DELTA-010 | 2026-04-08 | `frontend_manifest.py` conservé. |
-| DELTA-009 | 2026-04-08 | Capteur référence → `storage/manager.py`. |
-| DELTA-008 | 2026-04-08 | Migration : Hypothèse A. |
-| DELTA-007 | 2026-04-08 | Source repo V2. |
-| DELTA-006 | 2026-04-08 | Nommage frontend : séparateur `_`. |
-| DELTA-005 | 2026-04-08 | `10_api_contrat.md` rédigé. |
-| DELTA-001 | 2026-04-08 | Payload `user_prefs` défini. |
+| DELTA-026 | 2026-04-13 | `diagnostic.py` + `config_view.js` |
+| DELTA-025 | 2026-04-13 | `quality_score` entier — déjà présent |
+| DELTA-024 | 2026-04-13 | `costs.py` — énergie période + historique |
+| DELTA-023 | 2026-04-13 | `overview.py` — périodes + by_type |
+| DELTA-022 | 2026-04-13 | `engine/period_stats.py` créé |
+| DELTA-021 | 2026-04-12 | Audit exhaustif — 5 défauts → DELTA-022 à 026 |
+| DELTA-020 | 2026-04-10 | `10_api_contrat.md` stubs + REST vs service |
+| DELTA-019 | 2026-04-10 | `hse_fetch.js` séparateur `_` confirmé |
+| DELTA-018 | 2026-04-10 | `.DS_Store` supprimé |
+| DELTA-017 | 2026-04-10 | 8 `*_view.js` tous présents |
+| DELTA-016 | 2026-04-10 | Shared frontend — dom.js + table.js + 4 CSS |
+| DELTA-015 | 2026-04-10 | `HseHistoryView` + `HseExportView` dans `costs.py` |
+| DELTA-014 | 2026-04-10 | `services.yaml` — 8 services |
+| DELTA-013 | 2026-04-10 | `repairs.py` adapté V2→V3 |
+| DELTA-012 | 2026-04-10 | `translations/fr.json` + `en.json` |
+| DELTA-011 | 2026-04-10 | `hse_panel.js` réécriture V3 |
+| DELTA-003 | 2026-04-09 | 8 dossiers views JS créés |
+| DELTA-002 | 2026-04-09 | Shell JS — fetch + store + shell |
+| DELTA-004 Blocs 1–4 | 2026-04-09 | Tous les modules backend créés |
+| DELTA-010 à 001 | 2026-04-08 | Décisions fondatrices V3 |
 
 ---
 
