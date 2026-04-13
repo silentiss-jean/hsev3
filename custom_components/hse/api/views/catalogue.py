@@ -20,7 +20,6 @@ from ...sensors.quality_scorer import score_item
 
 _VALID_ACTIONS = ("select", "ignore", "reset")
 _VALID_STATUS = ("all", "selected", "ignored", "pending")
-_SCANNING = False  # flag module-level simple
 
 
 class HseCatalogueView(HseBaseView):
