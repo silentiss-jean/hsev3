@@ -1,7 +1,10 @@
 # HSE V3 — Synthèse décisionnelle & Spécifications consolidées
 
 > Document de référence issu de la comparaison de `analyse0.md` et `analyse.md` du dépôt `hsev3`.  
-> Date : 2026-04-07 | Destinataire : développement de la V3 de Home Suivi Élec
+> Date initiale : 2026-04-07 | Mise à jour nomenclature fichiers : 2026-04-13  
+> Destinataire : développement de la V3 de Home Suivi Élec
+
+> **⚠️ Note** : Pour les écarts résolus post-rédaction, consulter `custom_components/hse/doc/DELTA.md` qui fait foi.
 
 ---
 
@@ -18,7 +21,7 @@ Les deux fichiers d'analyse (`analyse0.md` = analyse0, `analyse.md` = analyse) o
 | **Nommage API** | `/api/hsev3/*` | `/api/hse/*` | **`/api/hse/*`** (cohérent avec le domaine `hse`) |
 | **Plan de phases** | 5 phases (Squelette → Meta → Moteurs → APIs → Frontend) | 4 phases (Fondations → Onglets stables → Réintégration V1 → Polish) | **Fusion** : 5 phases d'analyse0.md + séquençage concret d'analyse.md |
 | **Sensor platform custom** | Explicitement interdit (no `sensor.py`) | Non mentionné | **Pas de sensor.py** (règle d'analyse0.md conservée) |
-| **Token auth** | `window.__hseToken` injecté au mount | `hass.auth.data.access_token` injecté dans `hse.fetch.js` | **`hse.fetch.js`** d'analyse.md — plus propre, centralisé |
+| **Token auth** | `window.__hseToken` injecté au mount | `hass.auth.data.access_token` injecté dans `hse_fetch.js` | **`hse_fetch.js`** d'analyse.md — plus propre, centralisé |
 | **Persistance préférences UI** | Non abordé explicitement | `user_prefs` API (remplace localStorage) | **`user_prefs` API** d'analyse.md — règle R4 |
 
 ---
@@ -29,7 +32,7 @@ Les deux fichiers d'analyse (`analyse0.md` = analyse0, `analyse.md` = analyse) o
 
 - **Règles de rendering R1–R5** (Séparation mount/update, re-entrance guard, JSON.stringify signature, no localStorage, skeleton systématique) — c'est la correction formelle de la régression V2
 - **8 onglets nommés** avec contrat `{ mount, update_hass, unmount }` par onglet — granulaire, maintenable
-- **`hse.fetch.js`** centralisant l'injection du token HA dans tous les appels fetch
+- **`hse_fetch.js`** centralisant l'injection du token HA dans tous les appels fetch
 - **`user_prefs` API** côté backend pour remplacer `localStorage`
 - **Détail des sources de données par onglet** : chaque onglet a son endpoint, sa fréquence de polling, sa règle de rebuild DOM
 - **Exemples de code** : patterns `HseBaseView`, fetch avec token, règles de rendering
@@ -73,63 +76,57 @@ custom_components/hse/
 ├── const.py                  # Constantes métier complètes (V1 enrichi)
 ├── config_flow.py            # Config flow HA (minimal)
 ├── options_flow.py           # Options flow : capteur référence + tarif €/kWh
-├── services.yaml             # 9 services HA (generate_local_data, migrate_cleanup…)
+├── services.yaml             # 8 services HA
 ├── repairs.py                # HA Repairs natif (V2)
 ├── time_utils.py
 │
 ├── catalogue/                # V2 conservé intact
 │   ├── __init__.py
 │   ├── scan_engine.py
-│   ├── manager.py            # (catalogue_manager.py V2)
-│   ├── store.py
+│   ├── manager.py
+│   ├── defaults.py
 │   └── schema.py
 │
 ├── meta/                     # V2 conservé intact
 │   ├── __init__.py
 │   ├── sync.py
 │   ├── store.py
-│   └── assignments.py        # Logique assignation capteur → pièce/type
+│   ├── schema.py
+│   └── assignments.py
 │
 ├── engine/                   # Moteurs métier — V1 réintégrés + V2
 │   ├── __init__.py
 │   ├── cost.py               # shared_cost_engine.py V2 (INTACT)
 │   ├── calculation.py        # calculation_engine.py V1
 │   ├── group_totals.py       # group_totals.py V1
-│   └── analytics.py          # history_analytics.py V1
+│   ├── analytics.py          # history_analytics.py V1
+│   └── period_stats.py       # NOUVEAU V3 — énergie par période (recorder)
 │
 ├── sensors/                  # Gestion capteurs — V1 épuré
 │   ├── __init__.py
-│   ├── quality_scorer.py     # sensor_quality_scorer.py V1
-│   ├── sync_manager.py       # sensor_sync_manager.py V1 (épuré)
-│   └── name_fixer.py         # sensor_name_fixer.py V1
+│   ├── quality_scorer.py
+│   ├── sync_manager.py
+│   └── name_fixer.py
 │
 ├── storage/
 │   ├── __init__.py
-│   └── manager.py            # StorageManager V1 épuré
+│   └── manager.py
 │
 ├── api/
 │   ├── __init__.py
 │   ├── base.py               # HseBaseView(requires_auth=True, cors_allowed=False)
 │   └── views/
 │       ├── ping.py
-│       ├── dashboard_overview.py
-│       ├── catalogue_get.py
-│       ├── catalogue_refresh.py
-│       ├── catalogue_item_triage.py
-│       ├── catalogue_triage_bulk.py
-│       ├── costs_compare.py
-│       ├── diagnostic_check.py
-│       ├── entities_scan.py
-│       ├── history.py          # wraps engine/analytics.py
-│       ├── migration_export.py
-│       ├── migration_apply.py  # NOUVEAU V3
-│       ├── settings_pricing.py
+│       ├── overview.py         # GET /api/hse/overview
+│       ├── catalogue.py        # GET/POST/PATCH /api/hse/catalogue
+│       ├── costs.py            # HseCostsView + HseHistoryView + HseExportView
+│       ├── diagnostic.py
+│       ├── scan.py
+│       ├── settings.py
 │       ├── meta.py
-│       ├── meta_sync_apply.py
-│       ├── meta_sync_preview.py
-│       ├── export_api.py       # export CSV/JSON (V1)
-│       ├── user_prefs.py       # NOUVEAU V3 — remplace localStorage
-│       └── frontend_manifest.py
+│       ├── migration.py
+│       ├── frontend_manifest.py
+│       └── user_prefs.py       # NOUVEAU V3 — remplace localStorage
 │
 ├── translations/
 │   ├── fr.json
@@ -138,31 +135,29 @@ custom_components/hse/
 └── web_static/               # Servis via StaticPathConfig (pas de shutil.copytree)
     └── panel/
         ├── hse_panel.html
-        ├── hse_panel.js         # V2 + fix localStorage → user_prefs API
+        ├── hse_panel.js         # Point d'entrée HA : customPanelInfo + import hse_shell.js
         ├── style.hse.panel.css
+        ├── shared/
+        │   ├── hse_fetch.js     # Séparateur _ (DELTA-006/019) — injection token HA auto
+        │   ├── hse_store.js     # Séparateur _ (DELTA-006)
+        │   ├── hse_shell.js     # Custom element <hse-panel> + bootstrap + routing (DELTA-011)
+        │   ├── ui/
+        │   │   ├── dom.js
+        │   │   └── table.js
+        │   └── styles/
+        │       ├── hse_tokens.shadow.css
+        │       ├── hse_themes.shadow.css
+        │       ├── hse_alias.v2.css
+        │       └── tokens.css
         └── features/
-            ├── overview/        # V2 + règles R1-R5
-            ├── diagnostic/      # V2 + règles R1-R5
-            ├── scan/            # V2 + quality scorer V1
-            ├── config/          # V2 + rooms/types (meta V2) + validation frontend
-            ├── custom/          # V2 conservé
-            ├── cards/           # V2 conservé (yamlComposer.js)
-            ├── migration/       # V2 + wizard 3 étapes
-            └── costs/           # V2 réécrit règles R1-R5 + history V1 + export CSV
-        └── shared/
-            ├── ui/dom.js
-            ├── ui/table.js
-            ├── hse.store.js
-            ├── hse.fetch.js     # MODIFIÉ : inject Authorization header auto
-            ├── core/shell.js
-            ├── core/panel.actions.js
-            ├── core/live.store.js
-            ├── core/live.service.js
-            └── styles/
-                ├── hse_tokens.shadow.css
-                ├── hse_themes.shadow.css
-                ├── hse_alias.v2.css
-                └── tokens.css
+            ├── overview/overview_view.js
+            ├── diagnostic/diagnostic_view.js
+            ├── scan/scan_view.js
+            ├── config/config_view.js
+            ├── custom/custom_view.js
+            ├── cards/cards_view.js
+            ├── migration/migration_view.js
+            └── costs/costs_view.js
 ```
 
 ---
@@ -189,16 +184,14 @@ class HseBaseView(HomeAssistantView):
 ```
 
 ```javascript
-// hse.fetch.js — injection token centralisée
-export function hseFetch(path, options = {}) {
-  return fetch(path, {
-    ...options,
-    headers: {
-      'Authorization': `Bearer ${window.__hseToken}`,
-      'Content-Type': 'application/json',
-      ...options.headers,
-    }
-  });
+// hse_fetch.js — injection token centralisée (séparateur _, DELTA-006/019)
+export async function hseFetch(path, options = {}) {
+  const headers = {
+    'Authorization': `Bearer ${window.__hseToken}`,
+    'Content-Type': 'application/json',
+    ...options.headers,
+  };
+  return fetch(path, { ...options, headers });
 }
 ```
 
@@ -265,7 +258,7 @@ container.querySelector('.power-value').textContent = `${data.power} W`;
 - Capteur de référence avec comparaison vs somme capteurs — **ajout d'analyse0.md**
 - Statut global (OK / warning / erreur) + lien vers Diagnostic
 
-**Source de données :** `GET /api/hse/overview` (polling 30s via `live.service.js`)  
+**Source de données :** `GET /api/hse/overview` (polling 30s via `hse_store.js`)  
 **Rendering :** DOM construit une fois dans `mount()`, `update_hass()` ne touche que les `<span>` numériques
 
 ---
@@ -288,12 +281,12 @@ container.querySelector('.power-value').textContent = `${data.power} W`;
 
 **Affiche :**
 - Entités détectées non encore dans le catalogue
-- Score de qualité par entité (`sensor_quality_scorer.py` V1)
+- Score de qualité par entité (`sensors/quality_scorer.py` V1)
 - Bouton "Ajouter au catalogue" unitaire ou en masse
 - Filtre domaine / device / mot-clé
 - Option "Meilleur capteur par device" automatique — **ajout d'analyse0.md**
 
-**Source de données :** `POST /api/hse/scan` (scan déclenché explicitement, résultats paginés > 50)
+**Source de données :** `GET /api/hse/scan` (scan déclenché via GET, résultats paginés > 50)
 
 ---
 
@@ -305,16 +298,16 @@ container.querySelector('.power-value').textContent = `${data.power} W`;
 **Rooms & Types :** assignation capteur → pièce/type, diff pending, création/renommage pièces et types — **enrichi d'analyse0.md**  
 **Tarifs :** formulaire contrat (fixe/HP-HC, prix HT/TTC, abonnement), prévisualisation coût mensuel
 
-**Source de données :** `GET/POST/PATCH /api/hse/catalogue/*` + `GET/PUT /api/hse/settings/pricing` + `GET/POST /api/hse/meta`
+**Source de données :** `GET/POST/PATCH /api/hse/catalogue` + `GET/PUT /api/hse/settings` + `GET/POST /api/hse/meta`
 
 ---
 
-### Onglet 5 — `custom` (Customisation)
+### Onglet 5 — `custom` (Personnalisation)
 
 **Affiche :**
 - Sélecteur de thème avec prévisualisation couleurs
 - Toggles : fond dynamique, glassmorphism
-- Prévisualisation live via `data-theme`
+- Prévisualisation live via `data-hse-theme`
 - Bouton "Réinitialiser"
 
 **Persistance :** `PATCH /api/hse/user_prefs` (règle R4)
@@ -341,7 +334,7 @@ container.querySelector('.power-value').textContent = `${data.power} W`;
 - Rapport post-migration + bouton "Nettoyer anciens capteurs"
 
 **Données persistées dans le store** pendant la navigation entre onglets  
-**Source de données :** `GET /api/hse/migration/export` + `POST /api/hse/migration/apply`
+**Source de données :** `GET /api/hse/migration` + `POST /api/hse/migration`
 
 ---
 
@@ -350,12 +343,12 @@ container.querySelector('.power-value').textContent = `${data.power} W`;
 **Affiche :**
 - Tableau coûts par appareil : puissance live, énergie jour/semaine/mois/année, coût HT/TTC
 - Graphique répartition (camembert top 10)
-- Historique 12 derniers mois (via `history_analytics.py` V1 réintégré)
+- Historique 12 derniers mois (via `engine/analytics.py` V1 réintégré)
 - Filtre période + export CSV
 - Comparaison mois/mois ou semaine/semaine
 
 **Règle critique (bug V2 corrigé) :** tableau construit une fois dans `mount()`, données UNIQUEMENT depuis backend, flag `_is_rendering`, signature JSON avant update  
-**Source de données :** `GET /api/hse/costs` (polling 60s) + `GET /api/hse/history`
+**Source de données :** `GET /api/hse/costs?period=` (polling 60s) + `GET /api/hse/history`
 
 ---
 
@@ -364,28 +357,28 @@ container.querySelector('.power-value').textContent = `${data.power} W`;
 | Fichier V3 | Source | Notes |
 |---|---|---|
 | `__init__.py` | V2 | < 200 lignes |
-| `catalogue/*` | V2 intact | `scan_engine`, `manager`, `store`, `schema` |
-| `meta/*` | V2 intact | `sync`, `store` + `assignments` nouveau |
+| `catalogue/*` | V2 intact | `scan_engine`, `manager`, `defaults`, `schema` |
+| `meta/*` | V2 intact | `sync`, `store`, `schema` + `assignments` nouveau |
 | `engine/cost.py` | V2 (`shared_cost_engine.py`) | INTACT — le plus fiable |
 | `engine/calculation.py` | V1 | `calculation_engine.py` |
 | `engine/group_totals.py` | V1 | Totaux pièces/types — absent de V2 |
 | `engine/analytics.py` | V1 | `history_analytics.py` — absent de V2 |
+| `engine/period_stats.py` | NOUVEAU V3 | Énergie par période via recorder HA |
 | `sensors/quality_scorer.py` | V1 | Scoring capteurs |
 | `sensors/sync_manager.py` | V1 | Épuré |
 | `sensors/name_fixer.py` | V1 | Correction noms longs |
 | `storage/manager.py` | V1 | StorageManager épuré |
 | `repairs.py` | V2 | HA Repairs natif |
 | `options_flow.py` | V1 | Capteur référence + tarif |
-| `services.yaml` | V1 | 9 services HA extraits de `__init__.py` |
+| `services.yaml` | V1 | 8 services HA |
 | `translations/` | V2 | fr.json + en.json |
 | `api/base.py` | NOUVEAU | `HseBaseView` avec `requires_auth=True` |
 | `api/views/user_prefs.py` | NOUVEAU | Remplace localStorage |
-| `api/views/migration_apply.py` | NOUVEAU | Wizard migration étape 3 |
-| `api/views/export_api.py` | V1 | `export.py` + `energy_export.py` |
+| `api/views/costs.py` | NOUVEAU | `HseCostsView` + `HseHistoryView` + `HseExportView` |
 | `web_static/styles/*` | V2 | Tokens CSS (`hse_tokens`, `hse_themes`, `hse_alias`) |
 | `web_static/features/*/` | V2 | Tous les onglets + règles R1-R5 |
 | UX / thèmes visuels | V1 | Richesse thèmes à migrer en tokens V2 |
-| `hse.fetch.js` | V2 modifié | Injection token HA automatique |
+| `hse_fetch.js` | V2 modifié | Séparateur `_` (DELTA-006/019) — injection token HA auto |
 | `hse_panel.js` | V2 modifié | Fix localStorage → user_prefs API |
 
 ---
@@ -427,19 +420,19 @@ container.querySelector('.power-value').textContent = `${data.power} W`;
 11. `engine/cost.py` (V2 `shared_cost_engine.py` intact)
 12. `engine/calculation.py` + `engine/group_totals.py`
 13. `engine/analytics.py` (`history_analytics.py` V1)
-14. `sensors/quality_scorer.py` + `sensors/sync_manager.py` + `sensors/name_fixer.py`
+14. `engine/period_stats.py` (NOUVEAU V3 — recorder par période)
+15. `sensors/quality_scorer.py` + `sensors/sync_manager.py` + `sensors/name_fixer.py`
 
 ### Phase 4 — APIs REST
-15. Toutes les views `api/views/` avec `HseBaseView`
-16. `api/views/user_prefs.py` (nouveau)
-17. `api/views/migration_apply.py` (nouveau)
-18. `api/views/export_api.py` (V1)
+16. Toutes les views `api/views/` avec `HseBaseView`
+17. `api/views/user_prefs.py` (nouveau)
+18. `api/views/costs.py` : `HseCostsView` + `HseHistoryView` + `HseExportView`
 
 ### Phase 5 — Frontend
-19. `hse.fetch.js` modifié (injection token HA)
-20. Module `hse_tab_base.js` implémentant les règles R1–R5
-21. Réécriture `costs.view.js` et `overview.view.js` selon R1–R5
-22. Fix `hse_panel.js` : localStorage → user_prefs API
+19. `hse_fetch.js` — injection token HA (séparateur `_`)
+20. `hse_shell.js` — custom element `<hse-panel>` + bootstrap + routing onglets
+21. `hse_panel.js` — point d'entrée HA : `customPanelInfo` + import `hse_shell.js`
+22. Règles R1–R5 implémentées dans tous les `*_view.js`
 23. Onglets : overview, diagnostic, scan, config, custom, cards, migration, costs
 24. Migration thèmes visuels V1 vers tokens CSS V2
 25. Skeletons + états vides + états erreurs designés
@@ -455,10 +448,10 @@ container.querySelector('.power-value').textContent = `${data.power} W`;
 - [ ] `__init__.py` < 200 lignes
 - [ ] `StaticPathConfig` utilisé (pas de `shutil.copytree`)
 - [ ] Aucun fichier de dev (`audit_*.py`, `fix_*.py`, `debug_*.py`, `generate_docs.py`)
-- [ ] Aucun `.backup` committé
+- [ ] Aucun `.backup` commité
 - [ ] `translations/fr.json` et `translations/en.json` présents
 - [ ] Tous les endpoints héritent de `HseBaseView`
-- [ ] `hse.fetch.js` injecte le token automatiquement
+- [ ] `hse_fetch.js` injecte le token automatiquement (séparateur `_`)
 - [ ] Aucun `localStorage` dans le frontend
 - [ ] `engine/cost.py` est `shared_cost_engine.py` V2 non modifié
 - [ ] Aucun `sensor.py` (pas de plateforme sensor custom)
