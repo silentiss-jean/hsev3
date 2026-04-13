@@ -45,7 +45,7 @@ hsev3/
     ├── config_flow.py                           ✅
     ├── options_flow.py                          ✅
     ├── const.py                                 ✅
-    ├── time_utils.py                            ✅
+    ├── time_utils.py                            ✅  (+ window_for_period, start_of_*/week/month/year)
     ├── repairs.py                               ✅
     ├── services.yaml                            ✅
     ├── translations/fr.json + en.json           ✅
@@ -75,6 +75,8 @@ hsev3/
 | Sécurité | `requires_auth=True` + `cors_allowed=False` partout | `hse_v3_synthese.md` §4 |
 | Panel HA | `require_admin=True` | `hse_v3_synthese.md` §4 |
 | Nommage frontend | Séparateur `_` : `hse_fetch.js`, etc. | DELTA-006 |
+| `costs_by_entity` | Reçoit `energy_map` depuis recorder — jamais `get_energy_kwh(state)` | DELTA-029a |
+| Fenêtres temporelles | `window_for_period()` depuis `time_utils` — pas de calcul inline | DELTA-029c |
 
 ---
 
@@ -104,8 +106,8 @@ hsev3/
 |---|---|---|---|---|---|
 | DELTA-027 | ✅ ALIGNED | **Phase 1 — Bootstrapping HA** | Séquence d'installation et de démarrage | `manifest.json`, `config_flow.py`, `options_flow.py`, `__init__.py`, `const.py` | 🔴 CRITIQUE |
 | DELTA-028 | ✅ ALIGNED | **Phase 2 — Sécurité & Auth** | Tous les endpoints + base | `api/base.py`, `api/views/*.py` (13 fichiers) | 🔴 CRITIQUE |
-| DELTA-029 | 🔴 AUDIT_EN_COURS | **Phase 3 — Moteurs backend** | Calculs, cohérence des sorties | `engine/period_stats.py`, `engine/cost.py`, `engine/calculation.py`, `engine/group_totals.py`, `engine/analytics.py` | 🟡 IMPORTANT |
-| DELTA-030 | ⬜ EN_ATTENTE | **Phase 4 — Contrat API ↔ Frontend** | Shape JSON retourné vs shape attendu par les views JS | `api/views/*.py` ↔ `features/*_view.js` (8 paires) | 🔴 CRITIQUE |
+| DELTA-029 | ✅ ALIGNED | **Phase 3 — Moteurs backend** | Calculs, cohérence des sorties | `engine/period_stats.py`, `engine/cost.py`, `engine/calculation.py`, `engine/group_totals.py`, `engine/analytics.py` | 🟡 IMPORTANT |
+| DELTA-030 | 🔴 AUDIT_EN_COURS | **Phase 4 — Contrat API ↔ Frontend** | Shape JSON retourné vs shape attendu par les views JS | `api/views/*.py` ↔ `features/*_view.js` (8 paires) | 🔴 CRITIQUE |
 | DELTA-031 | ⬜ EN_ATTENTE | **Phase 5 — Frontend logique** | Règles R1–R5, flux de données, guard re-entrance, gestion erreurs | `hse_shell.js`, `hse_fetch.js`, `hse_store.js`, 8 `*_view.js` | 🟡 IMPORTANT |
 | DELTA-032 | ⬜ EN_ATTENTE | **Phase 6 — Catalogue & Méta** | Cohérence lecture/écriture catalogue, assignments, sync | `catalogue/*.py`, `meta/*.py`, `storage/manager.py` | 🟡 IMPORTANT |
 | DELTA-033 | ⬜ EN_ATTENTE | **Phase 7 — Cas limites & robustesse** | Valeurs manquantes, entités disparues, storage vide, premier démarrage | Tous les modules exposés à l'extérieur | 🟢 QUALITÉ |
@@ -130,22 +132,25 @@ Commits : `94f684d` (`__init__.py`) | `930b2a9` (`config_flow.py`)
 **Résultat audit (2026-04-13) :** `api/base.py` conforme. 13 views : héritage `HseBaseView` ✅, zéro `requires_auth=False` ✅, codes HTTP cohérents ✅, merge partiel `user_prefs` ✅.
 
 **Anomalies trouvées et corrigées :**
-- **DELTA-028a** (🟡 moyen) : `ping.py` — `from .. import HseBaseView` → `ImportError` au démarrage car `api/views/__init__.py` n'exporte pas `HseBaseView` — corrigé, import uniformé vers `from ..base import HseBaseView`
-- **DELTA-028b** (🟡 mineur) : `catalogue.py` — flag `_SCANNING = False` module-level orphelin (jamais lu ni écrit) — corrigé, ligne supprimée
+- **DELTA-028a** (🟡 moyen) : `ping.py` — `from .. import HseBaseView` → `ImportError` au démarrage — corrigé, import uniformé vers `from ..base import HseBaseView`
+- **DELTA-028b** (🟡 mineur) : `catalogue.py` — flag `_SCANNING = False` module-level orphelin — corrigé, ligne supprimée
 
 Commits : `da147d2` (`ping.py`) | `4112300` (`catalogue.py`)
 
 ---
 
-#### DELTA-029 — Phase 3 : Moteurs backend
+#### DELTA-029 — Phase 3 : Moteurs backend ✅
 
-**Ce qu'on vérifie :**
-- `engine/period_stats.py` : `async_energy_for_period` appelle bien le recorder HA (`get_instance(hass)`), gère les entités absentes du recorder (retour `0.0` propre), calcul delta correct (état_fin − état_début pour compteurs cumulatifs)
-- `engine/cost.py` : formule TTC correcte (`kWh × tarif_ht × (1 + tva)`), gestion HP/HC si activé, arrondi à 2 décimales
-- `engine/calculation.py` : cohérence avec les unités — W vs kWh, pas de division par zéro
-- `engine/group_totals.py` : agrégation par room et par type ne double-compte pas les capteurs multi-assignés
-- `engine/analytics.py` : `async_history_12months` retourne bien 12 points, label correct (YYYY-MM), kwh non négatif
-- `time_utils.py` : `start_of_day`, `start_of_week`, `start_of_month`, `start_of_year` retournent des `datetime` timezone-aware (tzinfo non nul)
+**Résultat audit (2026-04-13) :** `cost.py` et `calculation.py` conformes sans modification. Trois anomalies corrigées.
+
+**Anomalies trouvées et corrigées :**
+- **DELTA-029a** (🔴 bloquant) : `group_totals.costs_by_entity` lisait `get_energy_kwh(state)` (cumulatif total) au lieu de l'énergie sur la période — corrigé, signature enrichie `energy_map: dict[str, float]` fourni par la view via `async_energy_for_period`
+- **DELTA-029b** (🟡 mineur) : `analytics.py` — variable `raw` orpheline jamais lue — corrigée, ligne supprimée
+- **DELTA-029c** (🟡 moyen) : logique de fenêtres temporelles dupliquée entre `period_stats` et `analytics` — corrigé, `window_for_period` + `start_of_*` centralisés dans `time_utils.py`, `period_stats` réécrit pour importer depuis `time_utils`
+
+**Note DELTA-030 :** `costs.py` doit appeler `async_energy_for_period` ET passer `energy_map` à `costs_by_entity` — vérification en Phase 4.
+
+Commits : `907469d` (`group_totals.py`) | `af83614` (`analytics.py`) | `3f7d068` (`time_utils.py`) | `b4eda50` (`period_stats.py`)
 
 ---
 
@@ -165,6 +170,7 @@ Commits : `da147d2` (`ping.py`) | `4112300` (`catalogue.py`)
 | `GET/PATCH /api/hse/user_prefs` | `user_prefs.py` | `custom_view.js` + `costs_view.js` | `theme`, `glassmorphism`, `dynamic_bg`, `costs_period` |
 
 **Règle :** toute clé lue par le JS doit être produite par le Python. Une clé manquante = affichage silencieusement cassé.
+**Priorité Phase 4 :** vérifier que `costs.py` appelle `async_energy_for_period` et transmet `energy_map` à `costs_by_entity` (suite DELTA-029a).
 
 ---
 
@@ -223,6 +229,7 @@ Commits : `da147d2` (`ping.py`) | `4112300` (`catalogue.py`)
 
 | ID | Fermé le | Description |
 |---|---|---|
+| DELTA-029 | 2026-04-13 | Phase 3 Moteurs backend — 3 anomalies (029a/b/c) corrigées |
 | DELTA-028 | 2026-04-13 | Phase 2 Sécurité & Auth — 2 anomalies (028a/b) corrigées |
 | DELTA-027 | 2026-04-13 | Phase 1 Bootstrapping — 3 anomalies (027a/b/c) corrigées |
 | DELTA-026 | 2026-04-13 | `diagnostic.py` + `config_view.js` |
