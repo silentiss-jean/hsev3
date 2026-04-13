@@ -14,6 +14,8 @@ from ..base import HseBaseView
 from ...storage.manager import HseStorageManager
 from ...engine.calculation import compute_totals, top_n_by_power
 from ...engine.cost import cost_summary
+from ...engine.period_stats import async_energy_for_period
+from ...engine.group_totals import totals_by_type
 from ...time_utils import utc_now_iso
 
 
@@ -56,6 +58,18 @@ class HseOverviewView(HseBaseView):
             )
             top5.append({**entry, "name": name})
 
+        # Calcul énergie réelle par période via recorder
+        periods: dict[str, dict] = {}
+        for p in ("day", "week", "month", "year"):
+            kwh_map = await async_energy_for_period(
+                hass=self.hass, entity_ids=selected_ids, period=p
+            )
+            total_kwh = round(sum(kwh_map.values()), 3)
+            periods[p] = {
+                "kwh": total_kwh,
+                "eur": cost_summary(total_kwh, settings)["cost_ttc_eur"],
+            }
+
         # Groupement par pièce
         assignments = (meta.get("meta") or {}).get("assignments") or {}
         rooms_meta = (meta.get("meta") or {}).get("rooms") or []
@@ -96,26 +110,22 @@ class HseOverviewView(HseBaseView):
                     "delta_pct": round(delta_w / ref_pw * 100, 1) if ref_pw != 0 else 0.0,
                 }
 
-        # Estimation conso journalière simple (puissance * 24h)
-        energy_est_kwh = round((totals.get("power_w") or 0.0) / 1000 * 24, 3)
-        cost_est = cost_summary(energy_est_kwh, settings)
-
         return self.json_ok({
             "power_now_w": int(totals.get("power_w") or 0),
             "reference_sensor": reference_sensor,
             "consumption": {
-                "today_kwh": totals.get("energy_kwh") or 0.0,
-                "today_eur": cost_est["cost_ttc_eur"],
-                "week_kwh": 0.0,
-                "week_eur": 0.0,
-                "month_kwh": 0.0,
-                "month_eur": 0.0,
-                "year_kwh": 0.0,
-                "year_eur": 0.0,
+                "today_kwh": periods["day"]["kwh"],
+                "today_eur": periods["day"]["eur"],
+                "week_kwh": periods["week"]["kwh"],
+                "week_eur": periods["week"]["eur"],
+                "month_kwh": periods["month"]["kwh"],
+                "month_eur": periods["month"]["eur"],
+                "year_kwh": periods["year"]["kwh"],
+                "year_eur": periods["year"]["eur"],
             },
             "top5": top5,
             "by_room": by_room_list,
-            "by_type": [],
+            "by_type": totals_by_type(catalogue, meta, states),
             "status": {
                 "level": "ok" if totals["count_ok"] > 0 else "warning",
                 "message": None if totals["count_ok"] > 0 else "Aucun capteur actif",
