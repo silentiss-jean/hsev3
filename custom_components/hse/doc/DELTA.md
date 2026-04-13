@@ -17,7 +17,7 @@ Si tu lis ce fichier, tu dois :
    - **EXPLORATION** → on réfléchit, rien n'est écrit, on ajoute une ligne `EN_DISCUSSION` si la discussion dure
    - **COMMIT** → décision prise, on génère le patch doc + patch code + on ferme la ligne dans ce fichier
 5. **Vérifier la 🗂️ Carte du repo** ci-dessous pour connaître l'état réel de chaque fichier
-6. **Ordre d'exécution des DELTA actifs** : DELTA-022 → DELTA-023 → DELTA-024 → DELTA-025 → DELTA-026 (dans cet ordre, chaque DELTA débloque le suivant)
+6. **Ordre d'exécution des DELTA actifs** : DELTA-023 → DELTA-024 → DELTA-025 → DELTA-026 (dans cet ordre)
 
 ### 📚 Documents de référence IA — lire dans cet ordre avant tout
 
@@ -30,7 +30,7 @@ Si tu lis ce fichier, tu dois :
 
 ---
 
-## 🗂️ Carte du repo — état réel au 2026-04-12
+## 🗂️ Carte du repo — état réel au 2026-04-13
 
 > Mise à jour à chaque commit ajoutant ou supprimant un fichier.
 > ✅ = fichier présent et conforme | 🔴 = manquant ou stub (voir écart DELTA-0XX)
@@ -98,7 +98,7 @@ hsev3/
     │   ├── calculation.py                       ✅
     │   ├── group_totals.py                      ✅
     │   ├── analytics.py                         ✅ (entity seul — global non implémenté, documenté)
-    │   └── period_stats.py                      🔴 À CRÉER (DELTA-022) — débloque DELTA-023 et DELTA-024
+    │   └── period_stats.py                      ✅ (DELTA-022 — 2026-04-13)
     │
     ├── sensors/
     │   ├── __init__.py                          ✅
@@ -191,8 +191,8 @@ hsev3/
 | `.DS_Store` | Supprimé du repo + `.gitignore` ajouté à la racine | DELTA-018 — 2026-04-10 |
 | Nom fichier `hse_fetch.js` | Correction doc : séparateur `_` (pas `.`) confirmé dans `00_methode_front_commune.md` §5 | DELTA-019 — 2026-04-10 |
 | Stubs `week/month/year` + distinction REST vs service HA | Notes ajoutées dans `10_api_contrat.md` (§overview + §catalogue/refresh + §history) | DELTA-020 — 2026-04-10 |
-| Nature chantier API Phases 2–3 | Modules V2 portés, pas réinventés — audit complet réalisé le 2026-04-12 | DELTA-021 — 2026-04-12 fermé |
-| Calcul énergie par période | `engine/period_stats.py` à créer — delta recorder sur day/week/month/year | DELTA-022 — 2026-04-12 |
+| Nature chantier API Phases 2–3 | Modules V2 portés, pas réinventés — audit complet réalisé le 2026-04-12 | DELTA-021 — 2026-04-12 |
+| Calcul énergie par période | `engine/period_stats.py` créé — `async_energy_for_period` + `async_total_energy_for_period` | DELTA-022 — 2026-04-13 |
 | `overview.py` stubs + by_type | À brancher sur `period_stats` + `totals_by_type` | DELTA-023 — 2026-04-12 |
 | `costs.py` — énergie période + historique | À brancher sur `period_stats` + `analytics.py` | DELTA-024 — 2026-04-12 |
 | `quality_score` entier 0-100 | `scan.py` + `catalogue.py` à brancher sur `quality_scorer.score_item()` | DELTA-025 — 2026-04-12 |
@@ -214,9 +214,8 @@ hsev3/
 ## Ordre de résolution des écarts actifs
 
 ```
-DELTA-022 (créer engine/period_stats.py)
-    └─► DELTA-023 (overview.py — brancher period_stats + totals_by_type)
-    └─► DELTA-024 (costs.py — brancher period_stats + analytics.py)
+DELTA-023 (overview.py — brancher period_stats + totals_by_type)  ← DELTA-022 ✅ débloqué
+DELTA-024 (costs.py — brancher period_stats + analytics.py)        ← DELTA-022 ✅ débloqué
 DELTA-025 (scan.py + catalogue.py — quality_score entier)
 DELTA-026 (diagnostic.py + config_view.js — corrections qualité)
 ```
@@ -227,165 +226,10 @@ DELTA-026 (diagnostic.py + config_view.js — corrections qualité)
 
 ---
 
-### 🔴 DELTA-022 — `CODE_MANQUANT` — `engine/period_stats.py` à créer
-
-**Ouvert le :** 2026-04-12
-**Priorité :** CRITIQUE — débloque DELTA-023 et DELTA-024
-**Onglets bloqués :** Overview (semaine/mois/année), Costs (tableau énergie), Export CSV
-
-#### Problème
-
-Il n'existe aucun module capable de calculer l'énergie consommée sur une période (day/week/month/year).
-`engine/analytics.py` fait du mois-par-mois sur 12 mois, mais rien ne calcule le delta d'un compteur
-cumulatif sur une fenêtre arbitraire. `overview.py` et `costs.py` ont tous les deux besoin de cela.
-
-#### Ce qu'il faut créer : `custom_components/hse/engine/period_stats.py`
-
-```python
-"""
-HSE V3 — engine/period_stats.py
-Calcul de l'énergie consommée sur une période via le recorder HA natif.
-
-Principe : pour un compteur cumulatif (state_class = total_increasing),
-l'énergie sur une période = dernier état connu dans la fenêtre - premier état connu.
-
-Dépendances : homeassistant.components.recorder (synchrone → executor)
-"""
-from __future__ import annotations
-
-import logging
-from datetime import datetime, timedelta, timezone
-from typing import Any
-
-from homeassistant.core import HomeAssistant
-
-_LOGGER = logging.getLogger(__name__)
-
-# Fenêtres temporelles par période
-def _window_for_period(period: str) -> tuple[datetime, datetime]:
-    """
-    Retourne (start, end) UTC pour la période demandée.
-    end = maintenant. start = début de la fenêtre.
-    """
-    now = datetime.now(timezone.utc)
-    if period == "day":
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    elif period == "week":
-        start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
-    elif period == "month":
-        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    elif period == "year":
-        start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-    else:
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    return start, now
-
-
-def _safe_float(v: Any) -> float | None:
-    try:
-        return float(v)
-    except (TypeError, ValueError):
-        return None
-
-
-def _delta_from_states(state_list: list[Any]) -> float:
-    """
-    Énergie = dernier état valide - premier état valide de la liste.
-    Retourne 0.0 si impossible à calculer.
-    """
-    first_val = None
-    last_val = None
-    for s in state_list:
-        state_str = getattr(s, "state", None)
-        if state_str and str(state_str).lower() not in ("unavailable", "unknown", "none", ""):
-            v = _safe_float(state_str)
-            if v is not None:
-                if first_val is None:
-                    first_val = v
-                last_val = v
-    if first_val is not None and last_val is not None and last_val >= first_val:
-        return round(last_val - first_val, 3)
-    return 0.0
-
-
-async def async_energy_for_period(
-    hass: HomeAssistant,
-    entity_ids: list[str],
-    period: str = "month",
-) -> dict[str, float]:
-    """
-    Calcule l'énergie consommée (kWh) sur la période pour chaque entity_id fourni.
-
-    Paramètres
-    ----------
-    entity_ids : list[str]
-        Liste des entity_id à interroger.
-    period : "day" | "week" | "month" | "year"
-
-    Retourne
-    --------
-    dict[entity_id → kwh: float]
-    Toujours retourné, même si vide ou en cas d'erreur (0.0 par défaut).
-    """
-    if not entity_ids:
-        return {}
-
-    try:
-        from homeassistant.components.recorder import history as rec_history
-    except ImportError:
-        _LOGGER.warning("HSE period_stats: recorder non disponible")
-        return {eid: 0.0 for eid in entity_ids}
-
-    start, end = _window_for_period(period)
-    result: dict[str, float] = {eid: 0.0 for eid in entity_ids}
-
-    try:
-        def _fetch():
-            return rec_history.get_significant_states(
-                hass, start, end, entity_ids, minimal_response=True
-            )
-
-        states_map: dict[str, list[Any]] = await hass.async_add_executor_job(_fetch)
-
-        for eid in entity_ids:
-            state_list = states_map.get(eid) or []
-            result[eid] = _delta_from_states(state_list)
-
-    except Exception:
-        _LOGGER.exception("HSE period_stats: erreur recorder pour période %s", period)
-
-    return result
-
-
-async def async_total_energy_for_period(
-    hass: HomeAssistant,
-    entity_ids: list[str],
-    period: str = "month",
-) -> float:
-    """
-    Somme de l'énergie (kWh) de tous les entity_ids sur la période.
-    Raccourci pour overview.py.
-    """
-    per_entity = await async_energy_for_period(hass, entity_ids, period)
-    return round(sum(per_entity.values()), 3)
-```
-
-#### Validation
-
-- Tester avec une entité `sensor.xxx_energy` qui a `state_class: total_increasing`
-- `period="day"` doit retourner un delta cohérent avec la valeur HA "Energy" du jour
-- `period="month"` doit correspondre à la somme des deltas journaliers du mois
-
-#### Fermeture
-
-Fermer ce DELTA quand `engine/period_stats.py` est commité et ses deux fonctions importées avec succès dans `overview.py` (DELTA-023) et `costs.py` (DELTA-024).
-
----
-
 ### 🔴 DELTA-023 — `CODE_INCORRECT` — `api/views/overview.py` : week/month/year hardcodés + by_type vide
 
 **Ouvert le :** 2026-04-12
-**Dépend de :** DELTA-022 (period_stats.py doit exister)
+**Dépend de :** DELTA-022 ✅ (period_stats.py présent)
 **Priorité :** CRITIQUE — onglet Overview affiche 0 kWh permanent sur 3 colonnes sur 4
 **Fichier :** `custom_components/hse/api/views/overview.py`
 
@@ -461,7 +305,7 @@ Fermer ce DELTA quand `overview.py` retourne des valeurs réelles pour week/mont
 ### 🔴 DELTA-024 — `CODE_INCORRECT` — `api/views/costs.py` : énergie instantanée + historique stub
 
 **Ouvert le :** 2026-04-12
-**Dépend de :** DELTA-022 (period_stats.py doit exister)
+**Dépend de :** DELTA-022 ✅ (period_stats.py présent)
 **Priorité :** CRITIQUE — onglet Costs affiche des kWh incorrects + aucun historique
 **Fichier :** `custom_components/hse/api/views/costs.py`
 
@@ -704,6 +548,7 @@ Fermer ce DELTA quand :
 
 | ID | Fermé le | Description |
 |---|---|---|
+| DELTA-022 | 2026-04-13 | `engine/period_stats.py` créé — `async_energy_for_period(hass, entity_ids, period)` + `async_total_energy_for_period`. Débloque DELTA-023 et DELTA-024. |
 | DELTA-021 | 2026-04-12 | Audit exhaustif réalisé — les modules backend sont des portages complets (non des stubs). 5 défauts identifiés → DELTA-022 à 026 ouverts. |
 | DELTA-020 | 2026-04-10 | `10_api_contrat.md` : note stubs `0.0` sur `week/month/year` (§overview) + note distinction `POST /catalogue/refresh` REST vs service HA `hse.catalogue_refresh` + note stub `points: []` sur `/history` |
 | DELTA-019 | 2026-04-10 | `00_methode_front_commune.md` §5 : `hse.fetch.js` → `hse_fetch.js` (séparateur `_` conforme DELTA-006) + note explicative ajoutée |
