@@ -104,7 +104,6 @@ def totals_by_type(
     """
     meta = (meta_store.get("meta") or {}) if isinstance(meta_store, dict) else {}
     assignments: dict[str, Any] = meta.get("assignments") or {}
-    types_list: list[str] = meta.get("types") or []
 
     power_by_type: dict[str, float] = defaultdict(float)
 
@@ -130,11 +129,18 @@ def costs_by_entity(
     catalogue: dict[str, Any],
     meta_store: dict[str, Any],
     states: dict[str, Any],
+    energy_map: dict[str, float],
     settings: dict[str, Any],
     period_label: str = "month",
 ) -> list[dict[str, Any]]:
     """
     Retourne un tableau de coûts par entité pour l'endpoint GET /api/hse/costs.
+
+    Paramètres
+    ----------
+    energy_map : dict[entity_id → kwh]
+        Énergie consommée sur la période, issue de async_energy_for_period().
+        DOIT être calculée avant l'appel (pas d'accès recorder ici — module sync).
 
     Retourne
     --------
@@ -160,13 +166,16 @@ def costs_by_entity(
         eid = _entity_id_of(item)
         if not eid:
             continue
-        state = states.get(eid)
-        pw = get_power_w(state)
-        en = get_energy_kwh(state)
-        if en is None and pw is None:
+
+        # Puissance temps réel depuis hass.states (affichage colonne W)
+        pw = get_power_w(states.get(eid))
+
+        # Énergie sur la période depuis le recorder (passée via energy_map)
+        energy = energy_map.get(eid, 0.0)
+
+        if energy == 0.0 and pw is None:
             continue
 
-        energy = en or 0.0
         total_kwh_all += energy
         costs = cost_eur(energy, settings)
 
