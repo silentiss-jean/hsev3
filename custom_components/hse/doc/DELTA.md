@@ -17,7 +17,7 @@ Si tu lis ce fichier, tu dois :
    - **EXPLORATION** → on réfléchit, rien n'est écrit, on ajoute une ligne `EN_DISCUSSION` si la discussion dure
    - **COMMIT** → décision prise, on génère le patch doc + patch code + on ferme la ligne dans ce fichier
 5. **Vérifier la 🗂️ Carte du repo** ci-dessous pour connaître l'état réel de chaque fichier
-6. **Ordre d'exécution des DELTA actifs** : DELTA-024 → DELTA-025
+6. **Aucun écart actif** — doc et code alignés au 2026-04-13
 
 ### 📚 Documents de référence IA — lire dans cet ordre avant tout
 
@@ -63,14 +63,14 @@ hsev3/
     │   └── views/
     │       ├── __init__.py                      ✅
     │       ├── ping.py                          ✅
-    │       ├── catalogue.py                     🟡 quality_score incorrect (DELTA-025)
-    │       ├── costs.py                         🔴 HseCostsView partiel + HseHistoryView stub (DELTA-024)
+    │       ├── catalogue.py                     ✅ (DELTA-025 — 2026-04-13)
+    │       ├── costs.py                         ✅ (DELTA-024 — 2026-04-13)
     │       ├── diagnostic.py                    ✅ (DELTA-026 — 2026-04-13)
     │       ├── frontend_manifest.py             ✅
     │       ├── meta.py                          ✅
     │       ├── migration.py                     ✅
     │       ├── overview.py                      ✅ (DELTA-023 — 2026-04-13)
-    │       ├── scan.py                          🟡 quality_score incorrect (DELTA-025)
+    │       ├── scan.py                          ✅ (DELTA-025 — 2026-04-13)
     │       ├── settings.py                      ✅
     │       └── user_prefs.py                    ✅
     │
@@ -194,9 +194,9 @@ hsev3/
 | Nature chantier API Phases 2–3 | Modules V2 portés, pas réinventés — audit complet réalisé le 2026-04-12 | DELTA-021 — 2026-04-12 |
 | Calcul énergie par période | `engine/period_stats.py` créé — `async_energy_for_period` + `async_total_energy_for_period` | DELTA-022 — 2026-04-13 |
 | `overview.py` — périodes + by_type | Branché sur `period_stats` + `totals_by_type` — today_kwh/eur aussi corrigé | DELTA-023 — 2026-04-13 |
-| `costs.py` — énergie période + historique | À brancher sur `period_stats` + `analytics.py` | DELTA-024 — 2026-04-12 |
-| `quality_score` entier 0-100 | `scan.py` + `catalogue.py` à brancher sur `quality_scorer.score_item()` | DELTA-025 — 2026-04-12 |
-| `diagnostic.py` friendly_name + config checkbox | `diagnostic.py` : friendly_name HA + TODO repairs. `config_view.js` : cfg-check-all handler + cfg-row-check dans les `<tr>` | DELTA-026 — 2026-04-13 |
+| `costs.py` — énergie période + historique | `HseCostsView` branché `async_energy_for_period`. `HseHistoryView` branché `async_history_12months` + `cost_eur` enrichissement `eur_ttc`. | DELTA-024 — 2026-04-13 |
+| `quality_score` entier 0-100 | `scan.py` + `catalogue.py` : `score_item()` appelé dans les deux fichiers — déjà présent dans le code, DELTA.md était désynchronisé | DELTA-025 — 2026-04-13 |
+| `diagnostic.py` friendly_name + config checkbox | `diagnostic.py` : friendly_name HA live + TODO repairs. `config_view.js` : cfg-check-all handler | DELTA-026 — 2026-04-13 |
 
 ---
 
@@ -211,186 +211,9 @@ hsev3/
 
 ---
 
-## Ordre de résolution des écarts actifs
-
-```
-DELTA-024 (costs.py — brancher period_stats + analytics.py)
-DELTA-025 (scan.py + catalogue.py — quality_score entier)
-```
-
----
-
 ## Écarts actifs
 
----
-
-### 🔴 DELTA-024 — `CODE_INCORRECT` — `api/views/costs.py` : énergie instantanée + historique stub
-
-**Ouvert le :** 2026-04-12
-**Dépend de :** DELTA-022 ✅ (period_stats.py présent)
-**Priorité :** CRITIQUE — onglet Costs affiche des kWh incorrects + aucun historique
-**Fichier :** `custom_components/hse/api/views/costs.py`
-
-#### Problème 1 — HseCostsView : `energy_kwh` = valeur brute du compteur, pas la période
-
-Dans `HseCostsView.get()` :
-```python
-en = get_energy_kwh(state_obj) or 0.0   # ← valeur brute du compteur cumulatif à l'instant T
-cost = cost_summary(en, settings)        # ← coût calculé sur cette valeur fausse
-```
-La vue accepte un paramètre `period` (day/week/month/year) mais ne l'utilise jamais pour filtrer.
-L'export CSV (`HseExportView`) hérite du même défaut car il instancie `HseCostsView`.
-
-#### Correction à appliquer dans HseCostsView
-
-**Ajout import :**
-```python
-from ...engine.period_stats import async_energy_for_period
-```
-
-**Dans `HseCostsView.get()`, après le chargement de `selected`, calculer les énergies par période :**
-```python
-# Récupérer les entity_ids sélectionnés
-selected_eids = [
-    (item.get("source") or {}).get("entity_id")
-    for item in selected
-    if (item.get("source") or {}).get("entity_id")
-]
-
-# Calcul énergie sur la période demandée (recorder)
-energy_map = await async_energy_for_period(
-    hass=self.hass,
-    entity_ids=selected_eids,
-    period=period,
-)
-```
-
-**Dans la boucle sur les items, remplacer :**
-```python
-en = get_energy_kwh(state_obj) or 0.0
-```
-**par :**
-```python
-en = energy_map.get(eid, 0.0)
-```
-
-#### Problème 2 — HseHistoryView : `points: []` hardcodé, analytics.py jamais appelé
-
-```python
-# Stub actuel dans HseHistoryView.get() :
-return self.json_ok({
-    "entity_id": entity_id,
-    "granularity": granularity,
-    "points": [],   # ← analytics.py importé nulle part
-})
-```
-
-`engine/analytics.py` contient `async_history_12months(hass, entity_id, granularity)` complète.
-Il faut aussi calculer `eur_ttc` par point (analytics.py retourne `eur_ttc: 0.0`).
-
-#### Correction à appliquer dans HseHistoryView
-
-**Ajout imports :**
-```python
-from ...engine.analytics import async_history_12months
-from ...engine.cost import cost_eur
-```
-
-**Remplacer intégralement le corps de `HseHistoryView.get()` après la validation par :**
-```python
-mgr = HseStorageManager(self.hass)
-settings = await mgr.async_load_settings()
-
-# Vérification entity_id dans le catalogue si fourni
-if entity_id:
-    catalogue = await mgr.async_load_catalogue()
-    items = catalogue.get("items") or {}
-    known = any(
-        (v.get("source") or {}).get("entity_id") == entity_id
-        for v in items.values() if isinstance(v, dict)
-    )
-    if not known:
-        return self.json_error(f"{entity_id} inconnu du catalogue", HTTPStatus.NOT_FOUND)
-
-result = await async_history_12months(self.hass, entity_id, granularity=granularity)
-
-# Enrichissement eur_ttc par point
-for pt in result.get("points", []):
-    kwh = pt.get("kwh", 0.0)
-    pt["eur_ttc"] = round(cost_eur(kwh, settings)["ttc"], 2)
-
-return self.json_ok(result)
-```
-
-Note : `cost_eur(kwh, settings)` retourne `{"ht": float, "ttc": float}`.
-Vérifier la signature exacte dans `engine/cost.py` avant de commiter.
-
-#### Fermeture
-
-Fermer ce DELTA quand :
-1. `HseCostsView` retourne l'énergie sur la période réelle (pas la valeur brute)
-2. `HseHistoryView` retourne les 12 points mensuels avec `eur_ttc` calculé
-
----
-
-### 🟡 DELTA-025 — `CODE_INCORRECT` — `scan.py` + `catalogue.py` : quality_score string au lieu d'entier
-
-**Ouvert le :** 2026-04-12
-**Priorité :** IMPORTANTE — badge qualité affiché comme "ok"/"warning" au lieu de 0-100
-**Fichiers :** `custom_components/hse/api/views/scan.py` et `api/views/catalogue.py`
-
-#### Problème dans scan.py
-
-```python
-# scan.py ligne ~58 :
-"quality_score": c.get("status"),   # ← retourne "ok" / "warning" / "error" (string)
-```
-
-Le frontend `scan_view.js` utilise `data-score="${it.quality_score}"` et s'attend à un entier 0-100.
-`sensors/quality_scorer.py` contient `score_item(item, ha_state)` qui retourne un int 0-100.
-
-#### Correction dans scan.py
-
-**Ajout import :**
-```python
-from ...sensors.quality_scorer import score_item
-```
-
-**Créer un item synthétique pour scorer les candidats :**
-```python
-state_obj = self.hass.states.get(eid)
-synthetic_item = {
-    "source": {
-        "entity_id": eid,
-        "kind": c.get("kind"),
-        "unit": (getattr(state_obj, "attributes", {}) or {}).get("unit_of_measurement"),
-        "device_class": (getattr(state_obj, "attributes", {}) or {}).get("device_class"),
-        "state_class": (getattr(state_obj, "attributes", {}) or {}).get("state_class"),
-        "last_seen_state": getattr(state_obj, "state", None),
-    }
-}
-ha_state_raw = getattr(state_obj, "state", None) if state_obj else None
-quality_score_int = score_item(synthetic_item, ha_state_raw)
-```
-
-#### Problème dans catalogue.py
-
-```python
-# catalogue.py ligne ~55 :
-"quality_score": (item.get("health") or {}).get("escalation", "none"),
-```
-
-**Correction dans catalogue.py :**
-```python
-from ...sensors.quality_scorer import score_item
-state_obj = self.hass.states.get(eid)
-ha_state_raw = getattr(state_obj, "state", None) if state_obj else None
-"quality_score": score_item(item, ha_state_raw),
-```
-
-#### Fermeture
-
-Fermer ce DELTA quand `scan.py` et `catalogue.py` retournent tous les deux un entier 0-100 pour `quality_score`.
+> **Aucun écart actif.** Doc et code parfaitement alignés au 2026-04-13.
 
 ---
 
@@ -398,33 +221,35 @@ Fermer ce DELTA quand `scan.py` et `catalogue.py` retournent tous les deux un en
 
 | ID | Fermé le | Description |
 |---|---|---|
-| DELTA-026 | 2026-04-13 | `diagnostic.py` : friendly_name HA live + TODO repairs. `config_view.js` : cfg-check-all handler + cfg-row-check `<td>` dans chaque `<tr>` du catalogue. |
-| DELTA-023 | 2026-04-13 | `overview.py` branché sur `period_stats` (day/week/month/year) + `totals_by_type`. `today_kwh/eur` aussi corrigé (plus d'estimation). |
-| DELTA-022 | 2026-04-13 | `engine/period_stats.py` créé — `async_energy_for_period` + `async_total_energy_for_period`. Débloque DELTA-023 et DELTA-024. |
-| DELTA-021 | 2026-04-12 | Audit exhaustif réalisé — modules backend ports complets. 5 défauts identifiés → DELTA-022 à 026 ouverts. |
-| DELTA-020 | 2026-04-10 | `10_api_contrat.md` : notes stubs `week/month/year` + distinction REST vs service HA + stub `points: []` |
-| DELTA-019 | 2026-04-10 | `hse_fetch.js` (séparateur `_`) confirmé dans `00_methode_front_commune.md` §5 |
-| DELTA-018 | 2026-04-10 | `.DS_Store` supprimé + `.gitignore` ajouté |
-| DELTA-017 | 2026-04-10 | 8 `*_view.js` — tous présents |
-| DELTA-016 | 2026-04-10 | Shared frontend — `shared/ui/dom.js` + `table.js` + 4 CSS |
-| DELTA-015 | 2026-04-10 | `HseHistoryView` + `HseExportView` dans `costs.py` |
-| DELTA-014 | 2026-04-10 | `services.yaml` — 8 services |
-| DELTA-013 | 2026-04-10 | `repairs.py` adapté V2→V3 |
-| DELTA-012 | 2026-04-10 | `translations/fr.json` + `en.json` |
-| DELTA-011 | 2026-04-10 | `hse_panel.html` + `hse_panel.js` (réécriture V3) + panel registration |
-| DELTA-003 | 2026-04-09 | 8 dossiers views JS créés |
-| DELTA-002 | 2026-04-09 | Shell JS — `hse_fetch.js` + `hse_store.js` + `hse_shell.js` |
-| DELTA-004 Bloc 4 | 2026-04-09 | Toutes les views `api/views/` |
-| DELTA-004 Bloc 3 | 2026-04-09 | `engine/` (5 modules) |
-| DELTA-004 Bloc 2 | 2026-04-09 | `storage/`, `catalogue/`, `meta/`, `options_flow.py` |
-| DELTA-004 Bloc 1 | 2026-04-09 | `manifest.json` + `__init__.py` + `api/base.py` + ping |
-| DELTA-010 | 2026-04-08 | `frontend_manifest.py` conservé |
-| DELTA-009 | 2026-04-08 | Capteur référence → `storage/manager.py` |
-| DELTA-008 | 2026-04-08 | Migration : Hypothèse A |
-| DELTA-007 | 2026-04-08 | Source repo V2 |
-| DELTA-006 | 2026-04-08 | Nommage frontend : séparateur `_` |
-| DELTA-005 | 2026-04-08 | `10_api_contrat.md` rédigé |
-| DELTA-001 | 2026-04-08 | Payload `user_prefs` défini |
+| DELTA-026 | 2026-04-13 | `diagnostic.py` : friendly_name HA live + TODO repairs. `config_view.js` : cfg-check-all handler. |
+| DELTA-025 | 2026-04-13 | `scan.py` + `catalogue.py` : `score_item()` déjà présent dans le code — DELTA.md était désynchronisé. |
+| DELTA-024 | 2026-04-13 | `costs.py` : `HseCostsView` branché `async_energy_for_period` (period réelle). `HseHistoryView` branché `async_history_12months` + enrichissement `eur_ttc` via `cost_eur`. |
+| DELTA-023 | 2026-04-13 | `overview.py` branché sur `period_stats` (day/week/month/year) + `totals_by_type`. `today_kwh/eur` aussi corrigé. |
+| DELTA-022 | 2026-04-13 | `engine/period_stats.py` créé — `async_energy_for_period` + `async_total_energy_for_period`. |
+| DELTA-021 | 2026-04-12 | Audit exhaustif réalisé — 5 défauts identifiés → DELTA-022 à 026 ouverts. |
+| DELTA-020 | 2026-04-10 | `10_api_contrat.md` : notes stubs + distinction REST vs service HA. |
+| DELTA-019 | 2026-04-10 | `hse_fetch.js` (séparateur `_`) confirmé. |
+| DELTA-018 | 2026-04-10 | `.DS_Store` supprimé + `.gitignore` ajouté. |
+| DELTA-017 | 2026-04-10 | 8 `*_view.js` — tous présents. |
+| DELTA-016 | 2026-04-10 | Shared frontend — `dom.js` + `table.js` + 4 CSS. |
+| DELTA-015 | 2026-04-10 | `HseHistoryView` + `HseExportView` dans `costs.py`. |
+| DELTA-014 | 2026-04-10 | `services.yaml` — 8 services. |
+| DELTA-013 | 2026-04-10 | `repairs.py` adapté V2→V3. |
+| DELTA-012 | 2026-04-10 | `translations/fr.json` + `en.json`. |
+| DELTA-011 | 2026-04-10 | `hse_panel.html` + `hse_panel.js` (réécriture V3). |
+| DELTA-003 | 2026-04-09 | 8 dossiers views JS créés. |
+| DELTA-002 | 2026-04-09 | Shell JS — `hse_fetch.js` + `hse_store.js` + `hse_shell.js`. |
+| DELTA-004 Bloc 4 | 2026-04-09 | Toutes les views `api/views/`. |
+| DELTA-004 Bloc 3 | 2026-04-09 | `engine/` (5 modules). |
+| DELTA-004 Bloc 2 | 2026-04-09 | `storage/`, `catalogue/`, `meta/`, `options_flow.py`. |
+| DELTA-004 Bloc 1 | 2026-04-09 | `manifest.json` + `__init__.py` + `api/base.py` + ping. |
+| DELTA-010 | 2026-04-08 | `frontend_manifest.py` conservé. |
+| DELTA-009 | 2026-04-08 | Capteur référence → `storage/manager.py`. |
+| DELTA-008 | 2026-04-08 | Migration : Hypothèse A. |
+| DELTA-007 | 2026-04-08 | Source repo V2. |
+| DELTA-006 | 2026-04-08 | Nommage frontend : séparateur `_`. |
+| DELTA-005 | 2026-04-08 | `10_api_contrat.md` rédigé. |
+| DELTA-001 | 2026-04-08 | Payload `user_prefs` défini. |
 
 ---
 
