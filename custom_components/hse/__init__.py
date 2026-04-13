@@ -18,6 +18,7 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 
+from .const import DOMAIN, VERSION  # DELTA-027a : source unique — plus de redéfinition locale
 from .api.views.ping import HsePingView
 from .api.views.catalogue import HseCatalogueView
 from .api.views.costs import HseCostsView, HseHistoryView, HseExportView
@@ -32,9 +33,6 @@ from .api.views.user_prefs import HseUserPrefsView
 from .repairs import async_sync_repairs
 
 _LOGGER = logging.getLogger(__name__)
-
-DOMAIN = "hse"
-VERSION = "3.0.0"
 
 # Chemin absolu vers les fichiers statiques du panel
 _STATIC_DIR = Path(__file__).parent / "web_static" / "panel"
@@ -63,9 +61,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = {}
 
     # ── Fichiers statiques ─────────────────────────────────────────────────────────
-    await hass.http.async_register_static_paths([
-        StaticPathConfig(_STATIC_URL, str(_STATIC_DIR), cache_headers=False),
-    ])
+    # DELTA-027c : guard — si le path n'existe pas au premier boot, on logue et on
+    # continue plutôt que de laisser remonter une exception qui bloquerait le reload
+    # et rendrait les vues API non-enregistrables (ValueError: Handler already registered).
+    if not _STATIC_DIR.exists():
+        _LOGGER.error(
+            "HSE V3 : répertoire statique introuvable : %s — panel HA désactivé", _STATIC_DIR
+        )
+    else:
+        try:
+            await hass.http.async_register_static_paths([
+                StaticPathConfig(_STATIC_URL, str(_STATIC_DIR), cache_headers=False),
+            ])
+        except ValueError:
+            # Déjà enregistré (reload sans redémarrage HA complet) — ignoré volontairement.
+            _LOGGER.debug("HSE V3 : static path déjà enregistré, ignoré.")
 
     # ── Panel HA ─────────────────────────────────────────────────────────────────
     # require_admin=True : panel visible uniquement pour les admins HA
