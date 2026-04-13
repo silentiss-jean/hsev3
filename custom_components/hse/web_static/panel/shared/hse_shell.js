@@ -56,7 +56,7 @@ class HsePanel extends HTMLElement {
     this._ready = false;
   }
 
-  // ─── Cycle de vie HA ────────────────────────────────────────────────────────
+  // ─── Cycle de vie HA ─────────────────────────────────────────────────────────────────────────
 
   /**
    * HA injecte hass à chaque changement d'état.
@@ -89,12 +89,16 @@ class HsePanel extends HTMLElement {
     if (this._unsubTab) { this._unsubTab(); this._unsubTab = null; }
   }
 
-  // ─── Bootstrap ──────────────────────────────────────────────────────────────
+  // ─── Bootstrap ─────────────────────────────────────────────────────────────────────────────
 
   /**
-   * Initialisation unique : token → manifest → prefs → rendu.
-   * ready=true et _activateTab ne sont appelés que si les fetches réussissent
-   * ou après le fallback gracieux (DELTA-031c).
+   * Initialisation unique : token → manifest + prefs → rendu.
+   *
+   * Mode dégradé (DELTA-031c) : si les fetches de bootstrap échouent
+   * (ex. HA démarre lentement), on continue quand même avec ready=true.
+   * Les stores userPrefs/frontendManifest restent null — chaque view
+   * est responsable de faire son propre fetch au montage si le store est vide.
+   *
    * @param {object} hass
    */
   async _bootstrap(hass) {
@@ -118,13 +122,11 @@ class HsePanel extends HTMLElement {
         document.documentElement.setAttribute('data-hse-theme', prefs.theme);
       }
     } catch (e) {
-      // Erreur réseau au boot : on log et on continue en mode dégradé.
-      // Les views feront leurs propres fetches au montage (DELTA-031c).
+      // Mode dégradé : on log et on continue. Les views feront leur propre fetch.
       console.warn('[hse_shell] bootstrap fetch error — mode dégradé', e);
     }
 
     // 3. Marquer le shell prêt et monter l'onglet initial
-    //    (qu'il y ait eu erreur ou non — les views gèrent leur propre état)
     this._ready = true;
     hseStore.set('ready', true);
 
@@ -137,7 +139,7 @@ class HsePanel extends HTMLElement {
     });
   }
 
-  // ─── Rendu shell ────────────────────────────────────────────────────────────
+  // ─── Rendu shell ──────────────────────────────────────────────────────────────────────────
 
   _render() {
     if (this.shadowRoot) return; // déjà rendu
@@ -235,7 +237,7 @@ class HsePanel extends HTMLElement {
     });
   }
 
-  // ─── Routing onglets ────────────────────────────────────────────────────────
+  // ─── Routing onglets ────────────────────────────────────────────────────────────────────────
 
   /**
    * Appelé par le subscriber du store.
@@ -307,7 +309,6 @@ class HsePanel extends HTMLElement {
       const active = btn.dataset.tab === tabId;
       btn.setAttribute('aria-selected', String(active));
     });
-    // Mettre à jour aria-labelledby du panel
     const panel = this._viewContainer;
     if (panel) {
       panel.id = `hse-view-${tabId}`;
@@ -315,7 +316,7 @@ class HsePanel extends HTMLElement {
     }
   }
 
-  // ─── Contexte injecté dans chaque view ──────────────────────────────────────
+  // ─── Contexte injecté dans chaque view ────────────────────────────────────────────────────────────────
 
   /**
    * Construit le ctx passé à mount().
