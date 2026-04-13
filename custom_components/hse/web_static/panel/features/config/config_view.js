@@ -93,7 +93,7 @@ export class ConfigView {
       <div class="hse-config-root">
         <nav class="hse-sectionnav">
           <button class="hse-btn hse-btn-tab cfg-tab ${this._activeSection==='appareils'?'active':''}" data-section="appareils">Appareils</button>
-          <button class="hse-btn hse-btn-tab cfg-tab ${this._activeSection==='rooms'?'active':''}" data-section="rooms">Pièces & Types</button>
+          <button class="hse-btn hse-btn-tab cfg-tab ${this._activeSection==='rooms'?'active':''}" data-section="rooms">Pièces &amp; Types</button>
           <button class="hse-btn hse-btn-tab cfg-tab ${this._activeSection==='pricing'?'active':''}" data-section="pricing">Tarifs</button>
         </nav>
         <div class="cfg-section-content">${this._buildSection(data)}</div>
@@ -109,6 +109,7 @@ export class ConfigView {
   _buildCatalogueSection(cat) {
     const rows = (cat.items ?? []).map(it => `
       <tr>
+        <td><input type="checkbox" class="cfg-row-check" data-id="${this._esc(it.entity_id)}"></td>
         <td>${this._esc(it.name)}<br><small class="hse-muted">${this._esc(it.entity_id)}</small></td>
         <td>${this._esc(it.room ?? '—')}</td>
         <td>${this._esc(it.type ?? '—')}</td>
@@ -179,6 +180,10 @@ export class ConfigView {
   }
 
   _bindSectionEvents(data) {
+    // Check-all → coche/décoche toutes les lignes (DELTA-026)
+    this._root.querySelector('.cfg-check-all')?.addEventListener('change', (e) => {
+      this._root.querySelectorAll('.cfg-row-check').forEach(cb => cb.checked = e.target.checked);
+    });
     // Pricing form
     this._root.querySelector('.cfg-pricing-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
