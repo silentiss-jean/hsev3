@@ -10,31 +10,13 @@ Dépendances : homeassistant.components.recorder (synchrone → executor)
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from homeassistant.core import HomeAssistant
 
+from ..time_utils import window_for_period
+
 _LOGGER = logging.getLogger(__name__)
-
-
-def _window_for_period(period: str) -> tuple[datetime, datetime]:
-    """
-    Retourne (start, end) UTC pour la période demandée.
-    end = maintenant. start = début de la fenêtre.
-    """
-    now = datetime.now(timezone.utc)
-    if period == "day":
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    elif period == "week":
-        start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
-    elif period == "month":
-        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    elif period == "year":
-        start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-    else:
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    return start, now
 
 
 def _safe_float(v: Any) -> float | None:
@@ -92,7 +74,7 @@ async def async_energy_for_period(
         _LOGGER.warning("HSE period_stats: recorder non disponible")
         return {eid: 0.0 for eid in entity_ids}
 
-    start, end = _window_for_period(period)
+    start, end = window_for_period(period)
     result: dict[str, float] = {eid: 0.0 for eid in entity_ids}
 
     try:
