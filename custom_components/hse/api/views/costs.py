@@ -16,8 +16,10 @@ from homeassistant.core import HomeAssistant
 
 from ..base import HseBaseView
 from ...storage.manager import HseStorageManager
-from ...engine.calculation import get_energy_kwh, get_power_w
-from ...engine.cost import cost_summary
+from ...engine.calculation import get_power_w
+from ...engine.cost import cost_summary, cost_eur
+from ...engine.period_stats import async_energy_for_period
+from ...engine.analytics import async_history_12months
 from ...time_utils import utc_now_iso
 
 _VALID_PERIODS = ("day", "week", "month", "year")
@@ -55,6 +57,18 @@ class HseCostsView(HseBaseView):
             and (item.get("triage") or {}).get("policy") == "selected"
         ]
 
+        # Calcul énergie sur la période demandée via recorder
+        selected_eids = [
+            (item.get("source") or {}).get("entity_id")
+            for item in selected
+            if (item.get("source") or {}).get("entity_id")
+        ]
+        energy_map = await async_energy_for_period(
+            hass=self.hass,
+            entity_ids=selected_eids,
+            period=period,
+        )
+
         result_items = []
         total_kwh = 0.0
         total_ttc = 0.0
@@ -66,7 +80,7 @@ class HseCostsView(HseBaseView):
                 continue
             state_obj = self.hass.states.get(eid)
             pw = get_power_w(state_obj) or 0.0
-            en = get_energy_kwh(state_obj) or 0.0
+            en = energy_map.get(eid, 0.0)
             cost = cost_summary(en, settings)
             asn = assignments.get(eid) or {}
             room_id = asn.get("room_id")
@@ -113,8 +127,10 @@ class HseHistoryView(HseBaseView):
         if granularity not in ("month", "week"):
             return self.json_error("granularity doit être month ou week", HTTPStatus.UNPROCESSABLE_ENTITY)
 
+        mgr = HseStorageManager(self.hass)
+        settings = await mgr.async_load_settings()
+
         if entity_id:
-            mgr = HseStorageManager(self.hass)
             catalogue = await mgr.async_load_catalogue()
             items = catalogue.get("items") or {}
             known = any(
@@ -124,12 +140,14 @@ class HseHistoryView(HseBaseView):
             if not known:
                 return self.json_error(f"{entity_id} inconnu du catalogue", HTTPStatus.NOT_FOUND)
 
-        # Historique vide pour l'instant — sera implémenté avec recorder HA
-        return self.json_ok({
-            "entity_id": entity_id,
-            "granularity": granularity,
-            "points": [],
-        })
+        result = await async_history_12months(self.hass, entity_id, granularity=granularity)
+
+        # Enrichissement eur_ttc par point (analytics retourne eur_ttc=0.0)
+        for pt in result.get("points", []):
+            kwh = pt.get("kwh", 0.0)
+            pt["eur_ttc"] = round(cost_eur(kwh, settings)["ttc"], 2)
+
+        return self.json_ok(result)
 
 
 class HseExportView(HseBaseView):
