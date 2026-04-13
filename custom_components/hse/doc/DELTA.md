@@ -103,8 +103,8 @@ hsev3/
 | ID | Statut | Phase | Périmètre | Fichiers concernés | Priorité |
 |---|---|---|---|---|---|
 | DELTA-027 | ✅ ALIGNED | **Phase 1 — Bootstrapping HA** | Séquence d'installation et de démarrage | `manifest.json`, `config_flow.py`, `options_flow.py`, `__init__.py`, `const.py` | 🔴 CRITIQUE |
-| DELTA-028 | 🔴 AUDIT_EN_COURS | **Phase 2 — Sécurité & Auth** | Tous les endpoints + base | `api/base.py`, `api/views/*.py` (13 fichiers) | 🔴 CRITIQUE |
-| DELTA-029 | ⬜ EN_ATTENTE | **Phase 3 — Moteurs backend** | Calculs, cohérence des sorties | `engine/period_stats.py`, `engine/cost.py`, `engine/calculation.py`, `engine/group_totals.py`, `engine/analytics.py` | 🟡 IMPORTANT |
+| DELTA-028 | ✅ ALIGNED | **Phase 2 — Sécurité & Auth** | Tous les endpoints + base | `api/base.py`, `api/views/*.py` (13 fichiers) | 🔴 CRITIQUE |
+| DELTA-029 | 🔴 AUDIT_EN_COURS | **Phase 3 — Moteurs backend** | Calculs, cohérence des sorties | `engine/period_stats.py`, `engine/cost.py`, `engine/calculation.py`, `engine/group_totals.py`, `engine/analytics.py` | 🟡 IMPORTANT |
 | DELTA-030 | ⬜ EN_ATTENTE | **Phase 4 — Contrat API ↔ Frontend** | Shape JSON retourné vs shape attendu par les views JS | `api/views/*.py` ↔ `features/*_view.js` (8 paires) | 🔴 CRITIQUE |
 | DELTA-031 | ⬜ EN_ATTENTE | **Phase 5 — Frontend logique** | Règles R1–R5, flux de données, guard re-entrance, gestion erreurs | `hse_shell.js`, `hse_fetch.js`, `hse_store.js`, 8 `*_view.js` | 🟡 IMPORTANT |
 | DELTA-032 | ⬜ EN_ATTENTE | **Phase 6 — Catalogue & Méta** | Cohérence lecture/écriture catalogue, assignments, sync | `catalogue/*.py`, `meta/*.py`, `storage/manager.py` | 🟡 IMPORTANT |
@@ -125,15 +125,15 @@ Commits : `94f684d` (`__init__.py`) | `930b2a9` (`config_flow.py`)
 
 ---
 
-#### DELTA-028 — Phase 2 : Sécurité & Auth
+#### DELTA-028 — Phase 2 : Sécurité & Auth ✅
 
-**Ce qu'on vérifie :**
-- `api/base.py` : `HseBaseView` hérite bien de `HomeAssistantView`, `requires_auth = True`, `cors_allowed = False`
-- Chaque view dans `api/views/` hérite de `HseBaseView` (pas de `HomeAssistantView` directe)
-- Aucune view n'a `requires_auth = False` redéfini
-- Les méthodes HTTP déclarées (`get`, `post`, `patch`, `delete`) correspondent aux besoins réels
-- Gestion cohérente des erreurs HTTP : 400 pour payload invalide, 404 pour entité manquante, 500 pour erreur interne — pas de 200 avec `{"error": ...}` dans le body
-- `user_prefs.py` : `PATCH` fait bien un merge partiel (pas un remplacement complet)
+**Résultat audit (2026-04-13) :** `api/base.py` conforme. 13 views : héritage `HseBaseView` ✅, zéro `requires_auth=False` ✅, codes HTTP cohérents ✅, merge partiel `user_prefs` ✅.
+
+**Anomalies trouvées et corrigées :**
+- **DELTA-028a** (🟡 moyen) : `ping.py` — `from .. import HseBaseView` → `ImportError` au démarrage car `api/views/__init__.py` n'exporte pas `HseBaseView` — corrigé, import uniformé vers `from ..base import HseBaseView`
+- **DELTA-028b** (🟡 mineur) : `catalogue.py` — flag `_SCANNING = False` module-level orphelin (jamais lu ni écrit) — corrigé, ligne supprimée
+
+Commits : `da147d2` (`ping.py`) | `4112300` (`catalogue.py`)
 
 ---
 
@@ -223,6 +223,7 @@ Commits : `94f684d` (`__init__.py`) | `930b2a9` (`config_flow.py`)
 
 | ID | Fermé le | Description |
 |---|---|---|
+| DELTA-028 | 2026-04-13 | Phase 2 Sécurité & Auth — 2 anomalies (028a/b) corrigées |
 | DELTA-027 | 2026-04-13 | Phase 1 Bootstrapping — 3 anomalies (027a/b/c) corrigées |
 | DELTA-026 | 2026-04-13 | `diagnostic.py` + `config_view.js` |
 | DELTA-025 | 2026-04-13 | `quality_score` entier — déjà présent |
