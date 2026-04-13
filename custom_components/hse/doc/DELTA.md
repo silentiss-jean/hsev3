@@ -17,7 +17,7 @@ Si tu lis ce fichier, tu dois :
    - **EXPLORATION** → on réfléchit, rien n'est écrit, on ajoute une ligne `EN_DISCUSSION` si la discussion dure
    - **COMMIT** → décision prise, on génère le patch doc + patch code + on ferme la ligne dans ce fichier
 5. **Vérifier la 🗂️ Carte du repo** ci-dessous pour connaître l'état réel de chaque fichier
-6. **Ordre d'exécution des DELTA actifs** : DELTA-024 → DELTA-025 → DELTA-026
+6. **Ordre d'exécution des DELTA actifs** : DELTA-024 → DELTA-025
 
 ### 📚 Documents de référence IA — lire dans cet ordre avant tout
 
@@ -65,7 +65,7 @@ hsev3/
     │       ├── ping.py                          ✅
     │       ├── catalogue.py                     🟡 quality_score incorrect (DELTA-025)
     │       ├── costs.py                         🔴 HseCostsView partiel + HseHistoryView stub (DELTA-024)
-    │       ├── diagnostic.py                    🟡 friendly_name manquant (DELTA-026)
+    │       ├── diagnostic.py                    ✅ (DELTA-026 — 2026-04-13)
     │       ├── frontend_manifest.py             ✅
     │       ├── meta.py                          ✅
     │       ├── migration.py                     ✅
@@ -126,7 +126,7 @@ hsev3/
     │       ├── overview/overview_view.js        ✅
     │       ├── diagnostic/diagnostic_view.js    ✅
     │       ├── scan/scan_view.js                ✅
-    │       ├── config/config_view.js            🟡 checkbox check-all sans handler (DELTA-026)
+    │       ├── config/config_view.js            ✅ (DELTA-026 — 2026-04-13)
     │       ├── custom/custom_view.js            ✅
     │       ├── cards/cards_view.js              ✅
     │       ├── migration/migration_view.js      ✅
@@ -196,7 +196,7 @@ hsev3/
 | `overview.py` — périodes + by_type | Branché sur `period_stats` + `totals_by_type` — today_kwh/eur aussi corrigé | DELTA-023 — 2026-04-13 |
 | `costs.py` — énergie période + historique | À brancher sur `period_stats` + `analytics.py` | DELTA-024 — 2026-04-12 |
 | `quality_score` entier 0-100 | `scan.py` + `catalogue.py` à brancher sur `quality_scorer.score_item()` | DELTA-025 — 2026-04-12 |
-| `diagnostic.py` friendly_name + config checkbox | Corrections qualité | DELTA-026 — 2026-04-12 |
+| `diagnostic.py` friendly_name + config checkbox | `diagnostic.py` : friendly_name HA + TODO repairs. `config_view.js` : cfg-check-all handler + cfg-row-check dans les `<tr>` | DELTA-026 — 2026-04-13 |
 
 ---
 
@@ -216,7 +216,6 @@ hsev3/
 ```
 DELTA-024 (costs.py — brancher period_stats + analytics.py)
 DELTA-025 (scan.py + catalogue.py — quality_score entier)
-DELTA-026 (diagnostic.py + config_view.js — corrections qualité)
 ```
 
 ---
@@ -395,48 +394,11 @@ Fermer ce DELTA quand `scan.py` et `catalogue.py` retournent tous les deux un en
 
 ---
 
-### 🟡 DELTA-026 — `CODE_INCORRECT` — `diagnostic.py` + `config_view.js` : corrections qualité
-
-**Ouvert le :** 2026-04-12
-**Priorité :** SECONDAIRE — n'empêche pas le fonctionnement de base
-**Fichiers :** `api/views/diagnostic.py` et `web_static/panel/features/config/config_view.js`
-
-#### Problème 1 — diagnostic.py : `name` = entity_id brut
-
-```python
-"name": eid,  # ← friendly_name non utilisé
-```
-
-**Correction :**
-```python
-state_obj = self.hass.states.get(eid)
-friendly = (getattr(state_obj, "attributes", {}) or {}).get("friendly_name") or eid
-"name": friendly,
-```
-
-#### Problème 2 — diagnostic.py : `repairs: []` hardcodé
-
-Ajouter `# TODO DELTA-026` sur la ligne concernée en attendant l'implémentation HA Repairs.
-
-#### Problème 3 — config_view.js : checkbox "check-all" sans handler
-
-```javascript
-// Ajouter dans _bindSectionEvents(data) :
-this._root.querySelector('.cfg-check-all')?.addEventListener('change', (e) => {
-  this._root.querySelectorAll('.cfg-row-check').forEach(cb => cb.checked = e.target.checked);
-});
-```
-
-#### Fermeture
-
-Fermer ce DELTA quand les 3 corrections sont appliquées et commitées.
-
----
-
 ## Historique
 
 | ID | Fermé le | Description |
 |---|---|---|
+| DELTA-026 | 2026-04-13 | `diagnostic.py` : friendly_name HA live + TODO repairs. `config_view.js` : cfg-check-all handler + cfg-row-check `<td>` dans chaque `<tr>` du catalogue. |
 | DELTA-023 | 2026-04-13 | `overview.py` branché sur `period_stats` (day/week/month/year) + `totals_by_type`. `today_kwh/eur` aussi corrigé (plus d'estimation). |
 | DELTA-022 | 2026-04-13 | `engine/period_stats.py` créé — `async_energy_for_period` + `async_total_energy_for_period`. Débloque DELTA-023 et DELTA-024. |
 | DELTA-021 | 2026-04-12 | Audit exhaustif réalisé — modules backend ports complets. 5 défauts identifiés → DELTA-022 à 026 ouverts. |
