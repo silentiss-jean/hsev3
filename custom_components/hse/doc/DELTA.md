@@ -102,8 +102,8 @@ hsev3/
 
 | ID | Statut | Phase | Périmètre | Fichiers concernés | Priorité |
 |---|---|---|---|---|---|
-| DELTA-027 | 🔴 AUDIT_EN_COURS | **Phase 1 — Bootstrapping HA** | Séquence d'installation et de démarrage | `manifest.json`, `config_flow.py`, `options_flow.py`, `__init__.py`, `const.py` | 🔴 CRITIQUE |
-| DELTA-028 | ⬜ EN_ATTENTE | **Phase 2 — Sécurité & Auth** | Tous les endpoints + base | `api/base.py`, `api/views/*.py` (13 fichiers) | 🔴 CRITIQUE |
+| DELTA-027 | ✅ ALIGNED | **Phase 1 — Bootstrapping HA** | Séquence d'installation et de démarrage | `manifest.json`, `config_flow.py`, `options_flow.py`, `__init__.py`, `const.py` | 🔴 CRITIQUE |
+| DELTA-028 | 🔴 AUDIT_EN_COURS | **Phase 2 — Sécurité & Auth** | Tous les endpoints + base | `api/base.py`, `api/views/*.py` (13 fichiers) | 🔴 CRITIQUE |
 | DELTA-029 | ⬜ EN_ATTENTE | **Phase 3 — Moteurs backend** | Calculs, cohérence des sorties | `engine/period_stats.py`, `engine/cost.py`, `engine/calculation.py`, `engine/group_totals.py`, `engine/analytics.py` | 🟡 IMPORTANT |
 | DELTA-030 | ⬜ EN_ATTENTE | **Phase 4 — Contrat API ↔ Frontend** | Shape JSON retourné vs shape attendu par les views JS | `api/views/*.py` ↔ `features/*_view.js` (8 paires) | 🔴 CRITIQUE |
 | DELTA-031 | ⬜ EN_ATTENTE | **Phase 5 — Frontend logique** | Règles R1–R5, flux de données, guard re-entrance, gestion erreurs | `hse_shell.js`, `hse_fetch.js`, `hse_store.js`, 8 `*_view.js` | 🟡 IMPORTANT |
@@ -114,16 +114,14 @@ hsev3/
 
 ### Détail de chaque phase
 
-#### DELTA-027 — Phase 1 : Bootstrapping HA
+#### DELTA-027 — Phase 1 : Bootstrapping HA ✅
 
-**Ce qu'on vérifie :**
-- `manifest.json` : `domain`, `version`, `config_flow: true`, `requirements` vide (pas de dépendance externe cassante), `iot_class` cohérent
-- `config_flow.py` : flux minimal valide pour HA — step `user`, retour `FlowResultType.CREATE_ENTRY` correct, pas de champ obligatoire manquant
-- `options_flow.py` : capteur référence + tarif correctement lu/écrit dans `entry.options`
-- `__init__.py` : séquence `async_setup_entry` — ordre des enregistrements (static → panel → views → repairs), gestion d'erreur si un enregistrement échoue, `async_unload_entry` propre
-- `const.py` : toutes les constantes utilisées dans les autres modules sont bien définies ici
+**Anomalies trouvées et corrigées (2026-04-13) :**
+- **DELTA-027a** (🟡 mineur) : `DOMAIN`/`VERSION` redéfinis dans `__init__.py` — corrigé, import depuis `const.py`
+- **DELTA-027b** (🔴 bloquant) : `async_get_options_flow` absent de `HseConfigFlow` — options flow mort-né — corrigé, méthode statique ajoutée
+- **DELTA-027c** (🟡 moyen) : pas de guard sur `async_register_static_paths` — risque `ValueError` au reload — corrigé, try/except + check `_STATIC_DIR.exists()`
 
-**Signal de fin :** DELTA-027 fermé quand aucune anomalie n'est trouvée, ou quand chaque anomalie a son propre DELTA-0XX.
+Commits : `94f684d` (`__init__.py`) | `930b2a9` (`config_flow.py`)
 
 ---
 
@@ -225,6 +223,7 @@ hsev3/
 
 | ID | Fermé le | Description |
 |---|---|---|
+| DELTA-027 | 2026-04-13 | Phase 1 Bootstrapping — 3 anomalies (027a/b/c) corrigées |
 | DELTA-026 | 2026-04-13 | `diagnostic.py` + `config_view.js` |
 | DELTA-025 | 2026-04-13 | `quality_score` entier — déjà présent |
 | DELTA-024 | 2026-04-13 | `costs.py` — énergie période + historique |
