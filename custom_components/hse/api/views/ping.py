@@ -14,8 +14,8 @@ from __future__ import annotations
 from aiohttp import web
 from homeassistant.core import HomeAssistant
 
-from .. import HseBaseView
-from ... import DOMAIN, VERSION
+from ..base import HseBaseView
+from ...const import DOMAIN, VERSION
 
 
 class HsePingView(HseBaseView):
