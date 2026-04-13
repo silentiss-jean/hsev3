@@ -95,7 +95,6 @@ async def async_history_12months(
             state_list = states_map.get(entity_id) or []
 
             if state_list:
-                # Énergie = dernier état - premier état du mois (compteur cumulatif)
                 def _to_float(v: Any) -> float | None:
                     try:
                         return float(v)
@@ -105,8 +104,6 @@ async def async_history_12months(
                 first_val = None
                 last_val = None
                 for s in state_list:
-                    raw = getattr(s, "state", None) or getattr(s, "last_changed", None)
-                    # MinimalState V2023+ expose .state directement
                     state_str = getattr(s, "state", None)
                     if state_str and str(state_str).lower() not in ("unavailable", "unknown"):
                         v = _to_float(state_str)
