@@ -107,7 +107,7 @@ hsev3/
 | DELTA-027 | ✅ ALIGNED | **Phase 1 — Bootstrapping HA** | Séquence d'installation et de démarrage | `manifest.json`, `config_flow.py`, `options_flow.py`, `__init__.py`, `const.py` | 🔴 CRITIQUE |
 | DELTA-028 | ✅ ALIGNED | **Phase 2 — Sécurité & Auth** | Tous les endpoints + base | `api/base.py`, `api/views/*.py` (13 fichiers) | 🔴 CRITIQUE |
 | DELTA-029 | ✅ ALIGNED | **Phase 3 — Moteurs backend** | Calculs, cohérence des sorties | `engine/period_stats.py`, `engine/cost.py`, `engine/calculation.py`, `engine/group_totals.py`, `engine/analytics.py` | 🟡 IMPORTANT |
-| DELTA-030 | 🔴 AUDIT_EN_COURS | **Phase 4 — Contrat API ↔ Frontend** | Shape JSON retourné vs shape attendu par les views JS | `api/views/*.py` ↔ `features/*_view.js` (8 paires) | 🔴 CRITIQUE |
+| DELTA-030 | ✅ ALIGNED | **Phase 4 — Contrat API ↔ Frontend** | Shape JSON retourné vs shape attendu par les views JS | `api/views/*.py` ↔ `features/*_view.js` (8 paires) | 🔴 CRITIQUE |
 | DELTA-031 | ⬜ EN_ATTENTE | **Phase 5 — Frontend logique** | Règles R1–R5, flux de données, guard re-entrance, gestion erreurs | `hse_shell.js`, `hse_fetch.js`, `hse_store.js`, 8 `*_view.js` | 🟡 IMPORTANT |
 | DELTA-032 | ⬜ EN_ATTENTE | **Phase 6 — Catalogue & Méta** | Cohérence lecture/écriture catalogue, assignments, sync | `catalogue/*.py`, `meta/*.py`, `storage/manager.py` | 🟡 IMPORTANT |
 | DELTA-033 | ⬜ EN_ATTENTE | **Phase 7 — Cas limites & robustesse** | Valeurs manquantes, entités disparues, storage vide, premier démarrage | Tous les modules exposés à l'extérieur | 🟢 QUALITÉ |
@@ -148,29 +148,46 @@ Commits : `da147d2` (`ping.py`) | `4112300` (`catalogue.py`)
 - **DELTA-029b** (🟡 mineur) : `analytics.py` — variable `raw` orpheline jamais lue — corrigée, ligne supprimée
 - **DELTA-029c** (🟡 moyen) : logique de fenêtres temporelles dupliquée entre `period_stats` et `analytics` — corrigé, `window_for_period` + `start_of_*` centralisés dans `time_utils.py`, `period_stats` réécrit pour importer depuis `time_utils`
 
-**Note DELTA-030 :** `costs.py` doit appeler `async_energy_for_period` ET passer `energy_map` à `costs_by_entity` — vérification en Phase 4.
-
 Commits : `907469d` (`group_totals.py`) | `af83614` (`analytics.py`) | `3f7d068` (`time_utils.py`) | `b4eda50` (`period_stats.py`)
 
 ---
 
-#### DELTA-030 — Phase 4 : Contrat API ↔ Frontend
+#### DELTA-030 — Phase 4 : Contrat API ↔ Frontend ✅
 
-**Ce qu'on vérifie (paire par paire) :**
+**Résultat audit (2026-04-13) :** 8 paires auditées. Aucune anomalie de code. 4 corrections de doc uniquement.
 
-| Endpoint | View backend | View frontend | Clés JSON à valider |
+**Résultats paire par paire :**
+
+| Endpoint | Backend | Frontend | Verdict |
 |---|---|---|---|
-| `GET /api/hse/overview` | `overview.py` | `overview_view.js` | `power_now_w`, `consumption.{today,week,month,year}_{kwh,eur}`, `top5[].{name,power_w,pct}`, `status.{level,message}`, `by_type[]` |
+| `GET /api/hse/overview` | `overview.py` | `overview_view.js` | ✅ ALIGNÉ — `by_room`/`by_type` produits mais non consommés (feature future, non bloquant) |
+| `GET /api/hse/costs` + `/history` | `costs.py` | `costs_view.js` | ✅ ALIGNÉ — validation DELTA-029a confirmée : `async_energy_for_period` bien appelé |
+| `GET /api/hse/diagnostic` | `diagnostic.py` | `diagnostic_view.js` | ✅ ALIGNÉ |
+| `GET /api/hse/scan` | `scan.py` | `scan_view.js` | ✅ ALIGNÉ |
+| `GET/PATCH /api/hse/catalogue` | `catalogue.py` | `config_view.js` | ✅ ALIGNÉ |
+| `GET/PUT /api/hse/settings/pricing` | `settings.py` | `config_view.js` | ✅ ALIGNÉ |
+| `GET/PATCH /api/hse/user_prefs` | `user_prefs.py` | `custom_view.js` | ✅ ALIGNÉ |
+
+**Corrections doc appliquées dans ce commit :**
+- **DELTA-030c** : doc écrivait `score` → corrigé en `score_pct` (valeur réelle produite par `diagnostic.py` et lue par `diagnostic_view.js`)
+- **DELTA-030d** : doc écrivait `entities[]` → corrigé en `items[]` (valeur réelle produite par `scan.py` et lue par `scan_view.js`)
+- **DELTA-030e** : doc écrivait `tariff.{ht_kwh,tva,abo_eur}` → corrigé en `{price_ttc_kwh, tax_rate_pct, subscription_eur_month}` (noms réels des clés dans `settings.py`)
+- **DELTA-030f** : doc écrivait `GET/PUT /api/hse/settings` → corrigé en `GET/PUT /api/hse/settings/pricing` (URL réelle dans `settings.py`)
+
+**Tableau de contrat corrigé (source de vérité pour DELTA-031+) :**
+
+| Endpoint | View backend | View frontend | Clés JSON validées |
+|---|---|---|---|
+| `GET /api/hse/overview` | `overview.py` | `overview_view.js` | `power_now_w`, `consumption.{today,week,month,year}_{kwh,eur}`, `top5[].{name,power_w,pct}`, `status.{level,message}`, `reference_sensor.{delta_w,delta_pct}` |
 | `GET /api/hse/costs` | `costs.py` | `costs_view.js` | `total_kwh`, `total_ttc_eur`, `items[].{name,entity_id,room,power_w,energy_kwh,cost_ttc_eur,pct_total}` |
 | `GET /api/hse/history` | `costs.py (HseHistoryView)` | `costs_view.js` | `points[].{label,kwh,eur_ttc}` |
-| `GET /api/hse/diagnostic` | `diagnostic.py` | `diagnostic_view.js` | `score`, `sensors[].{entity_id,name,status,issue}`, `stats.{catalogued,selected,ignored}` |
-| `GET /api/hse/scan` | `scan.py` | `scan_view.js` | `entities[].{entity_id,name,quality_score,device,domain}` |
-| `GET/PATCH /api/hse/catalogue` | `catalogue.py` | `config_view.js` | `items[].{entity_id,name,room,type,enabled,power_w}` |
-| `GET/PUT /api/hse/settings` | `settings.py` | `config_view.js` | `tariff.{ht_kwh,tva,abo_eur}`, `reference_sensor` |
-| `GET/PATCH /api/hse/user_prefs` | `user_prefs.py` | `custom_view.js` + `costs_view.js` | `theme`, `glassmorphism`, `dynamic_bg`, `costs_period` |
+| `GET /api/hse/diagnostic` | `diagnostic.py` | `diagnostic_view.js` | `score_pct`, `sensors[].{entity_id,name,status,issues[]}`, `repairs[].{severity,description}`, `storage_stats.{total,selected,ignored,pending}`, `last_run_at` |
+| `GET /api/hse/scan` | `scan.py` | `scan_view.js` | `total`, `page`, `per_page`, `items[].{entity_id,name,domain,device,quality_score,suggested_action}` |
+| `GET/PATCH /api/hse/catalogue` | `catalogue.py` | `config_view.js` | `total`, `items[].{entity_id,name,room,type,status}` |
+| `GET/PUT /api/hse/settings/pricing` | `settings.py` | `config_view.js` | `mode`, `price_ttc_kwh`, `subscription_eur_month`, `tax_rate_pct`, `price_hp_ttc_kwh`, `price_hc_ttc_kwh`, `price_ht_kwh` |
+| `GET/PATCH /api/hse/user_prefs` | `user_prefs.py` | `custom_view.js` | `theme`, `glassmorphism`, `dynamic_bg`, `active_tab`, `overview_period`, `costs_period` |
 
-**Règle :** toute clé lue par le JS doit être produite par le Python. Une clé manquante = affichage silencieusement cassé.
-**Priorité Phase 4 :** vérifier que `costs.py` appelle `async_energy_for_period` et transmet `energy_map` à `costs_by_entity` (suite DELTA-029a).
+**Note pour DELTA-032 :** vérifier que `catalogue.py` produit bien la clé `status` sur chaque item (lue par `config_view.js` pour le badge).
 
 ---
 
@@ -195,6 +212,7 @@ Commits : `907469d` (`group_totals.py`) | `af83614` (`analytics.py`) | `3f7d068`
 - `meta/assignments.py` : pas de doublon room/type possible
 - `storage/manager.py` : lecture asynchrone propre, écriture atomique (write temp + rename), gère le cas fichier absent (premier démarrage → dict vide)
 - `sensors/quality_scorer.py` : retourne bien un `int` (pas un `float` ni une `str`)
+- **Point DELTA-030** : vérifier que `catalogue.py` produit la clé `status` sur chaque item de la liste
 
 ---
 
@@ -229,6 +247,7 @@ Commits : `907469d` (`group_totals.py`) | `af83614` (`analytics.py`) | `3f7d068`
 
 | ID | Fermé le | Description |
 |---|---|---|
+| DELTA-030 | 2026-04-13 | Phase 4 Contrat API↔Frontend — 8 paires auditées, aucune anomalie code, 4 corrections doc (030c/d/e/f) |
 | DELTA-029 | 2026-04-13 | Phase 3 Moteurs backend — 3 anomalies (029a/b/c) corrigées |
 | DELTA-028 | 2026-04-13 | Phase 2 Sécurité & Auth — 2 anomalies (028a/b) corrigées |
 | DELTA-027 | 2026-04-13 | Phase 1 Bootstrapping — 3 anomalies (027a/b/c) corrigées |
