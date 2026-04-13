@@ -16,6 +16,7 @@ from homeassistant.core import HomeAssistant
 
 from ..base import HseBaseView
 from ...storage.manager import HseStorageManager
+from ...sensors.quality_scorer import score_item
 
 _VALID_ACTIONS = ("select", "ignore", "reset")
 _VALID_STATUS = ("all", "selected", "ignored", "pending")
@@ -57,6 +58,7 @@ class HseCatalogueView(HseBaseView):
             friendly_name = (
                 (getattr(state_obj, "attributes", {}) or {}).get("friendly_name") or eid
             )
+            ha_state_raw = getattr(state_obj, "state", None) if state_obj else None
             filtered.append({
                 "entity_id": eid,
                 "name": friendly_name,
@@ -64,7 +66,7 @@ class HseCatalogueView(HseBaseView):
                 "room": (item.get("enrichment") or {}).get("room_id"),
                 "type": (item.get("enrichment") or {}).get("type_id"),
                 "status": policy,
-                "quality_score": (item.get("health") or {}).get("escalation", "none"),
+                "quality_score": score_item(item, ha_state_raw),
             })
 
         total = len(filtered)
