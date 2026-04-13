@@ -16,12 +16,12 @@
  *        - onglets "lecture" (overview, costs, diagnostic) → suspendu si onglet inactif
  *
  * Dépendances :
- *   - hse_fetch.js  (hseFetch, HseFetchError)
+ *   - hse_fetch.js  (hseFetch)
  *   - hse_store.js  (hseStore)
  *   - features/*_view.js  (chargés dynamiquement)
  */
 
-import { hseFetch, HseFetchError } from './hse_fetch.js';
+import { hseFetch } from './hse_fetch.js';
 import { hseStore } from './hse_store.js';
 
 /** Onglets déclarés — ordre = ordre d'affichage dans la nav */
@@ -93,6 +93,8 @@ class HsePanel extends HTMLElement {
 
   /**
    * Initialisation unique : token → manifest → prefs → rendu.
+   * ready=true et _activateTab ne sont appelés que si les fetches réussissent
+   * ou après le fallback gracieux (DELTA-031c).
    * @param {object} hass
    */
   async _bootstrap(hass) {
@@ -116,14 +118,16 @@ class HsePanel extends HTMLElement {
         document.documentElement.setAttribute('data-hse-theme', prefs.theme);
       }
     } catch (e) {
-      console.error('[hse_shell] bootstrap fetch error', e);
-      // Non bloquant — on continue avec les valeurs par défaut
+      // Erreur réseau au boot : on log et on continue en mode dégradé.
+      // Les views feront leurs propres fetches au montage (DELTA-031c).
+      console.warn('[hse_shell] bootstrap fetch error — mode dégradé', e);
     }
 
+    // 3. Marquer le shell prêt et monter l'onglet initial
+    //    (qu'il y ait eu erreur ou non — les views gèrent leur propre état)
     this._ready = true;
     hseStore.set('ready', true);
 
-    // 3. Rendre le shell et monter l'onglet initial
     this._render();
     this._activateTab(this._activeTab);
 

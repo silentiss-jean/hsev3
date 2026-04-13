@@ -44,12 +44,13 @@ export async function hseFetch(path, options = {}) {
   });
 
   if (!response.ok) {
+    // Lecture directe — le body n'a pas encore été consommé à ce stade (DELTA-031a)
     let detail = '';
     try {
-      const body = await response.clone().json();
+      const body = await response.json();
       detail = body.message || body.error || JSON.stringify(body);
     } catch {
-      detail = await response.clone().text();
+      try { detail = await response.text(); } catch { /* body illisible */ }
     }
     throw new HseFetchError(
       `HSE API ${response.status} sur ${path}${detail ? ' — ' + detail : ''}`,

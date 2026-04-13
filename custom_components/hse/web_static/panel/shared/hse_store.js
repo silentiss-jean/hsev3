@@ -20,6 +20,9 @@
  *   // S'abonner à une clé
  *   const unsub = hseStore.subscribe('activeTab', (val) => console.log(val));
  *   unsub(); // se désabonner
+ *
+ * Note : get() retourne une shallow copy pour les objets — toute mutation
+ * doit passer par set() ou patch() pour notifier les abonnés (DELTA-031b).
  */
 
 const _state = {
@@ -45,11 +48,17 @@ const _listeners = new Map();
 export const hseStore = {
   /**
    * Lire une valeur du store.
+   * Retourne une shallow copy pour les objets afin d'éviter les mutations
+   * silencieuses qui court-circuiteraient les notifications (DELTA-031b).
    * @param {string} key
    * @returns {*}
    */
   get(key) {
-    return _state[key];
+    const val = _state[key];
+    if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+      return { ...val };
+    }
+    return val;
   },
 
   /**
