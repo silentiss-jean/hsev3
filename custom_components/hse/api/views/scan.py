@@ -13,6 +13,7 @@ from homeassistant.core import HomeAssistant
 from ..base import HseBaseView
 from ...storage.manager import HseStorageManager
 from ...catalogue.scan_engine import async_scan_hass
+from ...sensors.quality_scorer import score_item
 
 
 class HseScanView(HseBaseView):
@@ -53,14 +54,33 @@ class HseScanView(HseBaseView):
                 continue
             if q and q not in eid.lower() and q not in (c.get("friendly_name") or "").lower():
                 continue
+
             state_obj = self.hass.states.get(eid)
+            ha_state_raw = getattr(state_obj, "state", None) if state_obj else None
+
+            # Item synthétique pour quality_scorer — construit depuis les attributs HA
+            attrs = (getattr(state_obj, "attributes", {}) or {}) if state_obj else {}
+            synthetic_item = {
+                "source": {
+                    "entity_id": eid,
+                    "kind": c.get("kind"),
+                    "unit": attrs.get("unit_of_measurement"),
+                    "device_class": attrs.get("device_class"),
+                    "state_class": attrs.get("state_class"),
+                    "last_seen_state": ha_state_raw,
+                }
+            }
+            quality_score_int = score_item(synthetic_item, ha_state_raw)
+
+            # suggested_action basé sur le status string d'origine (non remplacé)
+            status_str = c.get("status") or ""
             result.append({
                 "entity_id": eid,
-                "name": (getattr(state_obj, "attributes", {}) or {}).get("friendly_name") or eid,
+                "name": attrs.get("friendly_name") or eid,
                 "domain": eid.split(".")[0] if "." in eid else "",
                 "device": c.get("device_id"),
-                "quality_score": c.get("status"),
-                "suggested_action": "select" if c.get("status") == "ok" else "review",
+                "quality_score": quality_score_int,
+                "suggested_action": "select" if status_str == "ok" else "review",
             })
 
         total = len(result)
