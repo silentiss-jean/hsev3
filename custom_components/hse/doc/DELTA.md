@@ -15,7 +15,7 @@ Si tu lis ce fichier, tu dois :
 3. **Proposer de fermer** un écart quand la solution est validée dans le thread
 4. **Distinguer** les deux modes de travail :
    - **EXPLORATION** → on réfléchit, rien n'est écrit, on ajoute une ligne `EN_DISCUSSION` si la discussion dure
-   - **COMMIT** → décision prise, on génère le patch doc + patch code + on ferme la ligne dans ce fichier
+   - **COMMIT** → décision prise, on génère le patch doc + patch code en même temps → on ferme la ligne dans ce fichier
 5. **Vérifier la 🗂️ Carte du repo** ci-dessous pour connaître l'état réel de chaque fichier
 
 ### 📚 Documents de référence IA — lire dans cet ordre avant tout
@@ -34,7 +34,7 @@ Si tu lis ce fichier, tu dois :
 > **Tout audit ou génération de code doit vérifier ces 5 paires de cohérence en plus de l'analyse intra-fichier.**
 >
 > Un fichier correct en isolation peut être cassé par ce qu'un autre fichier attend de lui.
-> DELTA-035 à 041 ont tous été trouvés via cette grille — jamais par la lecture isolée d'un fichier.
+> DELTA-035 à 044 ont tous été trouvés via cette grille — jamais par la lecture isolée d'un fichier.
 
 | # | Paire | Question à poser systématiquement |
 |---|---|---|
@@ -43,6 +43,10 @@ Si tu lis ce fichier, tu dois :
 | P3 | `__init__.py` imports ↔ modules réels | Chaque `from .X import Y` : la classe/fonction `Y` existe-t-elle **sous ce nom exact** dans `X` ? |
 | P4 | `const.py` constantes ↔ consommateurs | Chaque constante définie est-elle importée et utilisée ? Chaque string hardcodée dans le code a-t-elle une constante correspondante ? |
 | P5 | `manifest.json` ↔ imports runtime | Les dépendances HA utilisées (`recorder`, `http`, etc.) sont-elles dans `dependencies` ou `after_dependencies` ? |
+
+> **Règle complémentaire issue de DELTA-044** : toute fonction `default_*()` importée depuis `storage.manager`
+> doit exister **dans `storage/manager.py`** — pas seulement dans le sous-module source.
+> Vérifier systématiquement que les proxies sont bien définis quand `__init__.py` importe `from .storage.manager import default_X`.
 
 ---
 
@@ -67,10 +71,10 @@ hsev3/
     ├── services.yaml                            ✅  (9 services déclarés, tous enregistrés)
     ├── translations/fr.json + en.json           ✅  (DELTA-039 : clés options alignées schema)
     ├── api/base.py + views/* (13 views)         ✅
-    ├── api/views/migration.py                   ✅  (DELTA-037 : HseMigrationView alias + DELTA-040 : LEGACY_V1_PREFIX)
+    ├── api/views/migration.py                   ✅  (DELTA-037 : HseMigrationView + DELTA-040 : LEGACY_V1_PREFIX)
     ├── catalogue/* (5 fichiers)                 ✅
     ├── meta/* (5 fichiers)                      ✅
-    ├── storage/manager.py                       ✅  (DELTA-038 : default_settings() exportée)
+    ├── storage/manager.py                       ✅  (DELTA-038 : default_settings / DELTA-044 : default_catalogue + default_meta)
     ├── engine/* (6 fichiers)                    ✅
     ├── sensors/* (4 fichiers)                   ✅
     ├── web_static/panel/shared/* (5 JS + 4 CSS) ✅
@@ -107,6 +111,7 @@ hsev3/
 | `recorder` dépendance | Dans `after_dependencies` de `manifest.json` | DELTA-041 |
 | `CATALOGUE_REFRESH_INTERVAL_S` | Déclaré dans `const.py`, scan auto non planifié — feature future | DELTA-042 |
 | `config.step.user.data.name` | Clé orpheline supprimée des JSON (config_flow sans formulaire) | DELTA-043 |
+| `default_catalogue()` / `default_meta()` | Proxies publics exportés depuis `storage/manager.py` | DELTA-044 |
 
 ---
 
@@ -124,7 +129,7 @@ hsev3/
 ## Écarts actifs
 
 > **✅ Aucun écart actif.**
-> Audit inter-fichiers (DELTA-037–043) entièrement fermé.
+> Dry-run complet du graph d'imports (DELTA-044) terminé — aucune anomalie résiduelle.
 > HSE V3 est déclarée **prête pour première installation dans Home Assistant**.
 
 ---
@@ -157,6 +162,7 @@ hsev3/
 | DELTA-041 | ✅ | `recorder` absent de `manifest.json` | `manifest.json` |
 | DELTA-042 | ✅ no-action | `CATALOGUE_REFRESH_INTERVAL_S` non planifié — feature future | `const.py` |
 | DELTA-043 | ✅ | Clé `config.step.user.data.name` orpheline supprimée | `fr.json` + `en.json` |
+| DELTA-044 | ✅ | `default_catalogue()` + `default_meta()` absentes de `manager.py` | `storage/manager.py` |
 
 ---
 
@@ -164,6 +170,7 @@ hsev3/
 
 | ID | Fermé le | Description |
 |---|---|---|
+| DELTA-044 | 2026-04-14 | `default_catalogue()` + `default_meta()` manquantes dans `manager.py` — proxies ajoutés |
 | DELTA-043 | 2026-04-14 | Clé `config.step.user.data.name` orpheline — supprimée des deux JSON |
 | DELTA-042 | 2026-04-14 | `CATALOGUE_REFRESH_INTERVAL_S` non planifié — no-action, feature future |
 | DELTA-041 | 2026-04-14 | `recorder` absent de `manifest.json` — ajouté dans `after_dependencies` |
