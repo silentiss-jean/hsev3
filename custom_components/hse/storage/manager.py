@@ -11,7 +11,7 @@ Stores gérés :
   hse.settings    → tarif + capteur de référence (DELTA-009)
 
 Règle : tous les async_save_* retournent None et ne lèvent pas.
-Les erreurs sont loggées, jamais propagagées (le UI ne doit pas crasher pour un échec de sauvegarde).
+Les erreurs sont loggées, jamais propagées (le UI ne doit pas crasher pour un échec de sauvegarde).
 """
 from __future__ import annotations
 
@@ -45,6 +45,12 @@ _SETTINGS_DEFAULTS: dict[str, Any] = {
     "tax_rate_pct": 20.0,
     "reference_entity_id": None,     # capteur de référence (DELTA-009)
 }
+
+
+# DELTA-038 : fonction publique exportée — appelée par _svc_reset_settings dans __init__.py
+def default_settings() -> dict[str, Any]:
+    """Retourne une copie des settings par défaut (immuable)."""
+    return dict(_SETTINGS_DEFAULTS)
 
 
 class HseStorageManager:
@@ -108,7 +114,6 @@ class HseStorageManager:
     async def async_load_user_prefs(self) -> dict[str, Any]:
         store = self._prefs_store()
         data = await store.async_load()
-        # Merge avec les defaults : retourne TOUJOURS tous les champs
         result = dict(USER_PREFS_DEFAULTS)
         if isinstance(data, dict):
             for k in USER_PREFS_DEFAULTS:

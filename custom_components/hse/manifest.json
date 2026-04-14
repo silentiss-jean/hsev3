@@ -7,6 +7,7 @@
   "codeowners": ["@silentiss-jean"],
   "iot_class": "local_polling",
   "config_flow": true,
+  "after_dependencies": ["recorder"],
   "dependencies": [],
   "requirements": []
 }

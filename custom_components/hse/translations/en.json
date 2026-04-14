@@ -4,10 +4,7 @@
     "step": {
       "user": {
         "title": "Set up Home Suivi Élec",
-        "description": "Add the HSE integration to track your electricity consumption.",
-        "data": {
-          "name": "Instance name"
-        }
+        "description": "Add the HSE integration to track your electricity consumption."
       }
     },
     "error": {
@@ -23,12 +20,12 @@
       "init": {
         "title": "Home Suivi Élec Options",
         "data": {
-          "reference_sensor": "Reference sensor (total consumption)",
-          "energy_price": "Energy price €/kWh"
+          "price_ttc_kwh": "Energy price €/kWh",
+          "reference_entity_id": "Reference sensor (total consumption)"
         },
         "data_description": {
-          "reference_sensor": "HA entity used as the base for cost calculations.",
-          "energy_price": "Average price per kWh in euros (e.g. 0.2516)."
+          "price_ttc_kwh": "Average price per kWh in euros (e.g. 0.2516).",
+          "reference_entity_id": "HA entity used as the base for cost calculations."
         }
       }
     }

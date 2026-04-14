@@ -17,8 +17,30 @@ from homeassistant.core import HomeAssistant
 
 from ..base import HseBaseView
 from ...storage.manager import HseStorageManager
+from ...const import LEGACY_V1_PREFIX
 
-_APPLYING = False
+
+# DELTA-037 : alias unique attendu par __init__.py
+class HseMigrationView(HseBaseView):
+    """
+    Classe façade enregistrée dans __init__.py.
+    Délègue vers les deux sous-views selon la méthode HTTP et le path.
+    HA n'autorise qu'une url par view ; on expose /api/hse/migration
+    et on route export/apply via query-param ou path suffix.
+    """
+    url = "/api/hse/migration"
+    name = "api:hse:migration"
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        super().__init__(hass)
+        self._export = HseMigrationExportView(hass)
+        self._apply = HseMigrationApplyView(hass)
+
+    async def get(self, request: web.Request) -> web.Response:
+        return await self._export.get(request)
+
+    async def post(self, request: web.Request) -> web.Response:
+        return await self._apply.post(request)
 
 
 class HseMigrationExportView(HseBaseView):
@@ -33,10 +55,8 @@ class HseMigrationExportView(HseBaseView):
         catalogue = await mgr.async_load_catalogue()
         items = catalogue.get("items") or {}
 
-        # Détection heuristique : items dont l'entity_id présente le pattern V1/V2
-        # Pattern V1 : sensor.hse_* ou sensor.*_hse
-        # Pattern V2 : sensor.hse_v2_* (domaine 'hse' V2)
-        legacy_patterns = ("sensor.hse_", "sensor.hse_v2_")
+        # DELTA-040 : utilise LEGACY_V1_PREFIX depuis const.py (plus de string dupliquée)
+        legacy_patterns = (LEGACY_V1_PREFIX, "sensor.hse_v2_")
         mappings = []
         for item_id, item in items.items():
             if not isinstance(item, dict):
@@ -46,8 +66,7 @@ class HseMigrationExportView(HseBaseView):
             is_legacy = any(eid.startswith(p) for p in legacy_patterns)
             if not is_legacy:
                 continue
-            # Proposition : remplacer le préfixe legacy par le domaine V3
-            suggested = eid.replace("sensor.hse_v2_", "sensor.").replace("sensor.hse_", "sensor.")
+            suggested = eid.replace("sensor.hse_v2_", "sensor.").replace(LEGACY_V1_PREFIX, "sensor.")
             confidence = "high" if suggested != eid else "low"
             mappings.append({
                 "legacy_entity_id": eid,
@@ -94,7 +113,6 @@ class HseMigrationApplyView(HseBaseView):
             catalogue = await mgr.async_load_catalogue()
             items = catalogue.get("items") or {}
 
-            # Index entity_id -> catalogue_key
             eid_index: dict[str, str] = {}
             for k, v in items.items():
                 if isinstance(v, dict):
@@ -109,17 +127,15 @@ class HseMigrationApplyView(HseBaseView):
                 legacy_eid = mapping.get("legacy_entity_id")
                 target_eid = mapping.get("target_entity_id")
                 if not legacy_eid or not target_eid:
-                    errors.append(f"legacy_entity_id et target_entity_id requis")
+                    errors.append("legacy_entity_id et target_entity_id requis")
                     continue
                 key = eid_index.get(legacy_eid)
                 if key is None:
                     errors.append(f"{legacy_eid}: non trouvé")
                     continue
-                # Hypothèse A : on met à jour l'entity_id dans source
                 items[key].setdefault("source", {})["entity_id"] = target_eid
                 applied += 1
                 if cleanup_legacy:
-                    # Retire uniquement de l'index HSE, pas l'entité HA
                     items.pop(key, None)
                     cleaned += 1
 

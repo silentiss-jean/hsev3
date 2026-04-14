@@ -4,10 +4,7 @@
     "step": {
       "user": {
         "title": "Configurer Home Suivi Élec",
-        "description": "Ajoutez l'intégration HSE pour suivre votre consommation électrique.",
-        "data": {
-          "name": "Nom de l'instance"
-        }
+        "description": "Ajoutez l'intégration HSE pour suivre votre consommation électrique."
       }
     },
     "error": {
@@ -23,12 +20,12 @@
       "init": {
         "title": "Options Home Suivi Élec",
         "data": {
-          "reference_sensor": "Capteur de référence (consommation totale)",
-          "energy_price": "Tarif €/kWh"
+          "price_ttc_kwh": "Tarif €/kWh",
+          "reference_entity_id": "Capteur de référence (consommation totale)"
         },
         "data_description": {
-          "reference_sensor": "Entité HA utilisée comme base de calcul des coûts.",
-          "energy_price": "Prix moyen du kWh en euros (ex : 0.2516)."
+          "price_ttc_kwh": "Prix moyen du kWh en euros (ex : 0.2516).",
+          "reference_entity_id": "Entité HA utilisée comme base de calcul des coûts."
         }
       }
     }
