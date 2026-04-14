@@ -53,6 +53,20 @@ def default_settings() -> dict[str, Any]:
     return dict(_SETTINGS_DEFAULTS)
 
 
+# DELTA-044 : fonctions publiques exportées — appelées par _svc_reset_catalogue
+# et _svc_reset_meta dans __init__.py (même pattern que default_settings)
+def default_catalogue() -> dict[str, Any]:
+    """Proxy vers catalogue.schema.default_catalogue() — exporté depuis manager pour usage uniforme."""
+    from ..catalogue.schema import default_catalogue as _default_catalogue
+    return _default_catalogue()
+
+
+def default_meta() -> dict[str, Any]:
+    """Proxy vers meta.schema.default_meta() — exporté depuis manager pour usage uniforme."""
+    from ..meta.schema import default_meta as _default_meta
+    return _default_meta()
+
+
 class HseStorageManager:
     """
     Wrapper autour des 4 stores HA natifs HSE.
@@ -70,7 +84,6 @@ class HseStorageManager:
         return Store(self._hass, _STORE_VERSION, STORAGE_KEY_CATALOGUE)
 
     async def async_load_catalogue(self) -> dict[str, Any]:
-        from ..catalogue.schema import default_catalogue
         store = self._catalogue_store()
         data = await store.async_load()
         if isinstance(data, dict) and data.get("schema_version") == 1 and "items" in data:
@@ -91,7 +104,6 @@ class HseStorageManager:
         return Store(self._hass, _STORE_VERSION, STORAGE_KEY_META)
 
     async def async_load_meta(self) -> dict[str, Any]:
-        from ..meta.schema import default_meta
         store = self._meta_store()
         data = await store.async_load()
         if isinstance(data, dict) and data.get("schema_version") == 1 and "meta" in data and "sync" in data:
