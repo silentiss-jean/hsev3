@@ -28,7 +28,7 @@ from .api.views.meta import HseMetaView
 from .api.views.migration import HseMigrationView
 from .api.views.overview import HseOverviewView
 from .api.views.scan import HseScanView
-from .api.views.settings import HseSettingsView
+from .api.views.settings import HseSettingsPricingView  # DELTA-045 : était HseSettingsView
 from .api.views.user_prefs import HseUserPrefsView
 from .repairs import async_sync_repairs
 
@@ -98,7 +98,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         HseMigrationView(hass),
         HseOverviewView(hass),
         HseScanView(hass),
-        HseSettingsView(hass),
+        HseSettingsPricingView(hass),  # DELTA-045 : nom corrigé
         HseUserPrefsView(hass),
     ]:
         hass.http.register_view(view)
@@ -145,7 +145,6 @@ def _register_services(hass: HomeAssistant) -> None:
         period = call.data.get("period", "month")
         fmt = call.data.get("format", "csv")
         data = await _build_costs_data(hass, period)
-        # Export via persistent_notification HA (texte court) ou log
         _LOGGER.info(
             "HSE service export_data : period=%s format=%s total_kwh=%s",
             period, fmt, data.get("total_kwh"),
@@ -207,7 +206,6 @@ def _register_services(hass: HomeAssistant) -> None:
         mgr = HseStorageManager(hass)
         catalogue = await mgr.async_load_catalogue()
         items = catalogue.get("items") or {}
-        # Chercher l'item par entity_id
         matched_key = None
         for k, v in items.items():
             if isinstance(v, dict) and (v.get("source") or {}).get("entity_id") == entity_id:
@@ -238,7 +236,6 @@ def _register_services(hass: HomeAssistant) -> None:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async_remove_panel(hass, DOMAIN)
-    # Désenregistrer les services au unload
     for svc in (
         "catalogue_refresh", "meta_sync", "export_data", "migrate_cleanup",
         "reset_catalogue", "reset_settings", "reset_meta",
