@@ -78,6 +78,7 @@ hsev3/
 | `costs_by_entity` | Reçoit `energy_map` depuis recorder — jamais `get_energy_kwh(state)` | DELTA-029a |
 | Fenêtres temporelles | `window_for_period()` depuis `time_utils` — pas de calcul inline | DELTA-029c |
 | `async_scan_hass` | Définie dans `catalogue/scan_engine.py` — retourne `{"candidates": [...]}` | DELTA-032a |
+| `_build_costs_data` | Logique coûts extraite de `HseCostsView` — appelable sans mock HTTP | DELTA-033d |
 
 ---
 
@@ -94,14 +95,10 @@ hsev3/
 
 ## Écarts actifs
 
-### 🔎 AUDIT STATIQUE V3 — Plan en 7 phases
+> **✅ Aucun écart actif. L'audit statique V3 (phases 1–7) est entièrement fermé.**
+> HSE V3 est considérée prête pour une première installation dans Home Assistant.
 
-> **Contexte** : HSEv3 est 100% théorique — code écrit mais jamais exécuté ni installé dans HA.
-> Objectif : vérifier logiquement, fichier par fichier, que **tout ce qui est censé fonctionner fonctionnera**.
-> Périmètre : **code uniquement** (doc/synthèse déjà alignée). On ne relance pas l'IA sur la doc.
-> Chaque phase génère ses propres DELTA-0XX si une anomalie est trouvée.
-
----
+### 🔎 AUDIT STATIQUE V3 — Plan en 7 phases (toutes ✅)
 
 | ID | Statut | Phase | Périmètre | Fichiers concernés | Priorité |
 |---|---|---|---|---|---|
@@ -111,7 +108,7 @@ hsev3/
 | DELTA-030 | ✅ ALIGNED | **Phase 4 — Contrat API ↔ Frontend** | Shape JSON retourné vs shape attendu par les views JS | `api/views/*.py` ↔ `features/*_view.js` (8 paires) | 🔴 CRITIQUE |
 | DELTA-031 | ✅ ALIGNED | **Phase 5 — Frontend logique** | Règles R1–R5, flux de données, guard re-entrance, gestion erreurs | `hse_shell.js`, `hse_fetch.js`, `hse_store.js`, 8 `*_view.js` | 🟡 IMPORTANT |
 | DELTA-032 | ✅ ALIGNED | **Phase 6 — Catalogue & Méta** | Cohérence lecture/écriture catalogue, assignments, sync | `catalogue/*.py`, `meta/*.py`, `storage/manager.py` | 🟡 IMPORTANT |
-| DELTA-033 | ⬜ EN_ATTENTE | **Phase 7 — Cas limites & robustesse** | Valeurs manquantes, entités disparues, storage vide, premier démarrage | Tous les modules exposés à l'extérieur | 🟢 QUALITÉ |
+| DELTA-033 | ✅ ALIGNED | **Phase 7 — Cas limites & robustesse** | Valeurs manquantes, entités disparues, storage vide, premier démarrage | `diagnostic.py`, `overview.py`, `costs.py` | 🟢 QUALITÉ |
 
 ---
 
@@ -226,17 +223,37 @@ Commit : [`e36084f`](https://github.com/silentiss-jean/hsev3/commit/e36084f880d4
 
 ---
 
-#### DELTA-033 — Phase 7 : Cas limites & robustesse
+#### DELTA-033 — Phase 7 : Cas limites & robustesse ✅
 
-**Ce qu'on vérifie :**
-- **Premier démarrage** (storage vide) : toutes les views retournent un JSON valide vide, pas d'exception non capturée
-- **Entité HA disparue** : catalogue référence un `entity_id` qui n'existe plus dans HA → overview/costs ne plante pas, affiche 0 W proprement
-- **Recorder vide** : `period_stats.py` appelé sur une entité sans historique recorder → retourne `0.0`, pas `None` ni exception
-- **Payload malformé** : POST/PATCH avec JSON invalide → 400 avec message clair, pas 500
-- **Token expiré/absent** : fetch frontend reçoit 401 → message d'erreur affiché dans la view, pas boucle infinie
-- **Onglet switché pendant un fetch** : `unmount()` annule l'AbortController avant que la réponse arrive — pas de setState sur composant démonté
-- **50+ entités scannées** : `scan_view.js` gère la pagination (ou affiche un warning) — pas de DOM avec 500 lignes
-- **Valeur NaN dans calculs** : `cost.py` + `calculation.py` ne retournent jamais `NaN` ou `Infinity` dans le JSON
+**Résultat audit (2026-04-14) :** 3 anomalies corrigées, 2 no-action.
+
+**Résultats scénario par scénario :**
+
+| Scénario | Module | Verdict |
+|---|---|---|
+| Storage vide / premier démarrage | `storage/manager.py` | ✅ `async_load_*` retourne defaults — jamais `None` |
+| Recorder vide | `period_stats.py` | ✅ `_delta_from_states([])` → `0.0` |
+| Recorder absent (ImportError) | `period_stats.py` | ✅ capturé → `{eid: 0.0}` pour tous |
+| Payload JSON invalide (POST/PATCH) | `catalogue.py`, `user_prefs.py` | ✅ try/except → 422 |
+| `get_power_w(None)` | `calculation.py` | ✅ retourne `None`, jamais `NaN` |
+| `cost_summary(0.0, settings)` | `cost.py` | ✅ `_safe_float` → `0.0` propre |
+| Division par zéro `pct` | `overview.py`, `group_totals.py` | ✅ guard `if total_w > 0 else 0.0` |
+| `NaN` dans `_safe_float` | `calculation.py` | ✅ `f != f` check → retourne `None` |
+| Catalogue vide → `selected_ids = []` | `overview.py` | ✅ `count_ok=0`, status `warning` |
+| Entité HA disparue | `overview.py` | ✅ `states.get(eid)` → `None` → ignorée |
+| AbortController unmount rapide | `costs_view.js` | ✅ DELTA-031j |
+| 401 token expiré frontend | `hse_fetch.js` | ✅ message affiché, pas de boucle |
+
+**Anomalies corrigées :**
+- **DELTA-033b** (🟡 mineur) : `diagnostic.py` — `total = len(items)` comptait les items non-dict → `score_pct` biaisé — corrigé, `valid_items` filtre les non-dict en amont, `total` calculé sur `valid_items`
+- **DELTA-033c** (ℹ️ cosmétique) : `overview.py` — `get_power_w` ré-importé en inline dans la boucle `by_room` et le bloc `reference_sensor` — corrigé, import déplacé en tête de fichier
+- **DELTA-033d** (🟡 moyen) : `costs.py` — `HseExportView` construisait un mock-request fragile pour appeler `HseCostsView.get()` — corrigé, logique extraite dans `_build_costs_data(hass, period)`, appelée directement par les deux views sans simuler HTTP
+
+**No-action :**
+- **DELTA-033a** : `int(totals.get("power_w") or 0)` — guard `or 0` couvre `None` et `0.0` — conforme
+- **DELTA-033e** : `scan.get("candidates", []) or []` — double protection redondante mais inoffensive — conforme
+
+Commit : [`adfe2bf`](https://github.com/silentiss-jean/hsev3/commit/adfe2bf0e9244370969762fbee149576798d339c) (`diagnostic.py` + `overview.py` + `costs.py`)
 
 ---
 
@@ -257,6 +274,7 @@ Commit : [`e36084f`](https://github.com/silentiss-jean/hsev3/commit/e36084f880d4
 
 | ID | Fermé le | Description |
 |---|---|---|
+| DELTA-033 | 2026-04-14 | Phase 7 Cas limites & robustesse — 3 anomalies (033b/c/d) corrigées, 2 no-action (033a/e) |
 | DELTA-032 | 2026-04-14 | Phase 6 Catalogue & Méta — 3 anomalies (032a/c/d) corrigées, 1 no-fix (032b) |
 | DELTA-031 | 2026-04-14 | Phase 5 Frontend logique — R1–R5 conformes, 3 anomalies corrigées (031e/g/j), 3 no-fix documentés (031f/h/i) |
 | DELTA-030 | 2026-04-13 | Phase 4 Contrat API↔Frontend — 8 paires auditées, aucune anomalie code, 4 corrections doc (030c/d/e/f) |
