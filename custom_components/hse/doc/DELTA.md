@@ -32,49 +32,45 @@ Si tu lis ce fichier, tu dois :
 ## 🔒 Règle permanente — Cohérence inter-fichiers (ajoutée 2026-04-14)
 
 > **Tout audit ou génération de code doit vérifier ces 5 paires de cohérence en plus de l'analyse intra-fichier.**
->
-> Un fichier correct en isolation peut être cassé par ce qu'un autre fichier attend de lui.
-> DELTA-035 à 044 ont tous été trouvés via cette grille — jamais par la lecture isolée d'un fichier.
 
 | # | Paire | Question à poser systématiquement |
 |---|---|---|
 | P1 | `services.yaml` ↔ `__init__.py` | Chaque service déclaré a-t-il un `async_register` ET un `async_remove` au unload ? |
-| P2 | `translations/*.json` ↔ `*_flow.py` | Les clés `options.step.init.data.*` matchent-elles **exactement** les noms de champs du `vol.Schema` ? Les clés `config.step.*.data.*` sont-elles utilisées (form affiché) ? |
+| P2 | `translations/*.json` ↔ `*_flow.py` | Les clés `options.step.init.data.*` matchent-elles **exactement** les noms de champs du `vol.Schema` ? |
 | P3 | `__init__.py` imports ↔ modules réels | Chaque `from .X import Y` : la classe/fonction `Y` existe-t-elle **sous ce nom exact** dans `X` ? |
-| P4 | `const.py` constantes ↔ consommateurs | Chaque constante définie est-elle importée et utilisée ? Chaque string hardcodée dans le code a-t-elle une constante correspondante ? |
-| P5 | `manifest.json` ↔ imports runtime | Les dépendances HA utilisées (`recorder`, `http`, etc.) sont-elles dans `dependencies` ou `after_dependencies` ? |
+| P4 | `const.py` constantes ↔ consommateurs | Chaque constante définie est-elle importée et utilisée ? |
+| P5 | `manifest.json` ↔ imports runtime | Les dépendances HA utilisées sont-elles dans `after_dependencies` ? |
 
-> **Règle complémentaire issue de DELTA-044** : toute fonction `default_*()` importée depuis `storage.manager`
-> doit exister **dans `storage/manager.py`** — pas seulement dans le sous-module source.
-> Vérifier systématiquement que les proxies sont bien définis quand `__init__.py` importe `from .storage.manager import default_X`.
+> **Règle complémentaire P3 — issue de DELTA-045** : toute classe view importée dans `__init__.py`
+> doit être vérifiée par son **nom exact** dans le fichier source.
+> Le pattern `HseXxxView` dans le fichier source peut différer du nom utilisé dans `__init__.py`
+> si la classe a été renommée ou spécialisée (ex: `HseSettingsView` → `HseSettingsPricingView`).
+> Vérifier systématiquement la concordance nom import ↔ nom class défini.
 
 ---
 
 ## 🗂️ Carte du repo — état réel au 2026-04-14
 
-> ✅ = fichier présent et conforme | 🔴 = manquant ou stub (voir écart DELTA-0XX)
-
 ```
 hsev3/
 ├── README.md                                    ✅
-├── .gitignore                                   ✅
 ├── hse_v3_synthese.md                           ✅
-│
 └── custom_components/hse/
-    ├── __init__.py                              ✅  (DELTA-034/035 : panel guard + 9 service handlers)
-    ├── manifest.json                            ✅  (DELTA-041 : after_dependencies recorder)
+    ├── __init__.py                              ✅  (DELTA-034/035/045 : panel guard + 9 services + nom view settings)
+    ├── manifest.json                            ✅  (DELTA-041)
     ├── config_flow.py                           ✅
     ├── options_flow.py                          ✅
     ├── const.py                                 ✅
     ├── time_utils.py                            ✅
     ├── repairs.py                               ✅
-    ├── services.yaml                            ✅  (9 services déclarés, tous enregistrés)
-    ├── translations/fr.json + en.json           ✅  (DELTA-039 : clés options alignées schema)
+    ├── services.yaml                            ✅
+    ├── translations/fr.json + en.json           ✅  (DELTA-039/043)
     ├── api/base.py + views/* (13 views)         ✅
-    ├── api/views/migration.py                   ✅  (DELTA-037 : HseMigrationView + DELTA-040 : LEGACY_V1_PREFIX)
+    ├── api/views/settings.py                    ✅  classe = HseSettingsPricingView
+    ├── api/views/migration.py                   ✅  (DELTA-037/040)
     ├── catalogue/* (5 fichiers)                 ✅
     ├── meta/* (5 fichiers)                      ✅
-    ├── storage/manager.py                       ✅  (DELTA-038 : default_settings / DELTA-044 : default_catalogue + default_meta)
+    ├── storage/manager.py                       ✅  (DELTA-038/044)
     ├── engine/* (6 fichiers)                    ✅
     ├── sensors/* (4 fichiers)                   ✅
     ├── web_static/panel/shared/* (5 JS + 4 CSS) ✅
@@ -87,31 +83,30 @@ hsev3/
 
 | Sujet | Décision | Source |
 |---|---|---|
-| Domaine HA | `hse` — V3 remplace V2 | `hse_v3_synthese.md` §1 |
+| Domaine HA | `hse` | `hse_v3_synthese.md` §1 |
 | Préfixe API | `/api/hse/` | `hse_v3_synthese.md` §3.1 |
 | Auth token | `hse_fetch.js` injecte `Bearer` auto | Règle R4 |
 | Persistance préfs UI | `PATCH /api/hse/user_prefs` — jamais localStorage | Règle R4 |
 | Structure backend | Sous-dossiers `catalogue/`, `meta/`, `engine/`, `storage/`, `api/` | `hse_v3_synthese.md` §3.2 |
 | `engine/cost.py` | `shared_cost_engine.py` V2 — INTACT | `hse_v3_synthese.md` §7 |
-| Pas de `sensor.py` | Interdit — event `hse_sensors_ready` | `hse_v3_synthese.md` §2 |
 | Sécurité | `requires_auth=True` + `cors_allowed=False` partout | `hse_v3_synthese.md` §4 |
 | Panel HA | `require_admin=True` | `hse_v3_synthese.md` §4 |
-| Nommage frontend | Séparateur `_` : `hse_fetch.js`, etc. | DELTA-006 |
-| `costs_by_entity` | Reçoit `energy_map` depuis recorder — jamais `get_energy_kwh(state)` | DELTA-029a |
-| Fenêtres temporelles | `window_for_period()` depuis `time_utils` — pas de calcul inline | DELTA-029c |
-| `async_scan_hass` | Définie dans `catalogue/scan_engine.py` — retourne `{"candidates": [...]}` | DELTA-032a |
-| `_build_costs_data` | Logique coûts extraite de `HseCostsView` — appelable sans mock HTTP | DELTA-033d |
-| Migration V2→V3 | V2 jamais en prod — `async_migrate_entry` inutile — no-action | DELTA-036 |
-| Panel reload | `async_remove_panel` avant register + `try/except` — reload safe | DELTA-034 |
-| Services HA | 9 handlers dans `_register_services()` + désenregistrés au unload | DELTA-035 |
-| `HseMigrationView` | Classe façade dans `migration.py` — délègue GET→Export, POST→Apply | DELTA-037 |
-| `default_settings()` | Fonction publique exportée depuis `storage/manager.py` | DELTA-038 |
-| Clés options traduction | Noms **identiques** aux champs `vol.Schema` : `price_ttc_kwh`, `reference_entity_id` | DELTA-039 |
-| `LEGACY_V1_PREFIX` | Utilisé dans `migration.py` — plus de string dupliquée | DELTA-040 |
-| `recorder` dépendance | Dans `after_dependencies` de `manifest.json` | DELTA-041 |
-| `CATALOGUE_REFRESH_INTERVAL_S` | Déclaré dans `const.py`, scan auto non planifié — feature future | DELTA-042 |
-| `config.step.user.data.name` | Clé orpheline supprimée des JSON (config_flow sans formulaire) | DELTA-043 |
-| `default_catalogue()` / `default_meta()` | Proxies publics exportés depuis `storage/manager.py` | DELTA-044 |
+| Nommage frontend | Séparateur `_` | DELTA-006 |
+| `costs_by_entity` | Lit `energy_map` depuis recorder | DELTA-029a |
+| `async_scan_hass` | Dans `catalogue/scan_engine.py` | DELTA-032a |
+| `_build_costs_data` | Extraite de `HseCostsView` | DELTA-033d |
+| Migration V2→V3 | No-action | DELTA-036 |
+| Panel reload | `async_remove_panel` + `try/except` | DELTA-034 |
+| Services HA | 9 handlers dans `_register_services()` | DELTA-035 |
+| `HseMigrationView` | Façade dans `migration.py` | DELTA-037 |
+| `default_settings()` | Exportée depuis `storage/manager.py` | DELTA-038 |
+| Clés options traduction | Noms identiques aux champs `vol.Schema` | DELTA-039 |
+| `LEGACY_V1_PREFIX` | Utilisé dans `migration.py` | DELTA-040 |
+| `recorder` dépendance | Dans `after_dependencies` | DELTA-041 |
+| `CATALOGUE_REFRESH_INTERVAL_S` | Non planifié — feature future | DELTA-042 |
+| `config.step.user.data.name` | Clé orpheline supprimée | DELTA-043 |
+| `default_catalogue()` / `default_meta()` | Proxies dans `storage/manager.py` | DELTA-044 |
+| Classe settings view | `HseSettingsPricingView` (pas `HseSettingsView`) | DELTA-045 |
 
 ---
 
@@ -120,8 +115,8 @@ hsev3/
 | Symbole | Statut | Signification |
 |---|---|---|
 | 🟠 | `EN_DISCUSSION` | En cours de discussion |
-| 🔴 | `AUDIT_EN_COURS` | Phase d'audit démarrée — résultats à venir |
-| 🟡 | `ANOMALIE` | Anomalie trouvée pendant l'audit — correctif requis |
+| 🔴 | `AUDIT_EN_COURS` | Phase d'audit démarrée |
+| 🟡 | `ANOMALIE` | Anomalie trouvée, correctif requis |
 | ✅ | `ALIGNED` | Résolu et commité |
 
 ---
@@ -129,22 +124,22 @@ hsev3/
 ## Écarts actifs
 
 > **✅ Aucun écart actif.**
-> Dry-run complet du graph d'imports (DELTA-044) terminé — aucune anomalie résiduelle.
-> HSE V3 est déclarée **prête pour première installation dans Home Assistant**.
+> DELTA-045 fermé en prod suite au premier boot HA (ImportError sur `HseSettingsView`).
+> HSE V3 est déclarée **prête pour redémarrage HA**.
 
 ---
 
 ## Phases de l'audit statique V3 (toutes ✅)
 
-| ID | Statut | Phase | Priorité |
-|---|---|---|---|
-| DELTA-027 | ✅ | Phase 1 — Bootstrapping HA | 🔴 CRITIQUE |
-| DELTA-028 | ✅ | Phase 2 — Sécurité & Auth | 🔴 CRITIQUE |
-| DELTA-029 | ✅ | Phase 3 — Moteurs backend | 🟡 IMPORTANT |
-| DELTA-030 | ✅ | Phase 4 — Contrat API ↔ Frontend | 🔴 CRITIQUE |
-| DELTA-031 | ✅ | Phase 5 — Frontend logique | 🟡 IMPORTANT |
-| DELTA-032 | ✅ | Phase 6 — Catalogue & Méta | 🟡 IMPORTANT |
-| DELTA-033 | ✅ | Phase 7 — Cas limites & robustesse | 🟢 QUALITÉ |
+| ID | Statut | Phase |
+|---|---|---|
+| DELTA-027 | ✅ | Phase 1 — Bootstrapping HA |
+| DELTA-028 | ✅ | Phase 2 — Sécurité & Auth |
+| DELTA-029 | ✅ | Phase 3 — Moteurs backend |
+| DELTA-030 | ✅ | Phase 4 — Contrat API ↔ Frontend |
+| DELTA-031 | ✅ | Phase 5 — Frontend logique |
+| DELTA-032 | ✅ | Phase 6 — Catalogue & Méta |
+| DELTA-033 | ✅ | Phase 7 — Cas limites & robustesse |
 
 ---
 
@@ -153,16 +148,17 @@ hsev3/
 | ID | Statut | Titre | Fichier(s) |
 |---|---|---|---|
 | DELTA-034 | ✅ | Panel HA doublon sur reload | `__init__.py` |
-| DELTA-035 | ✅ | 9 services sans handler enregistré | `__init__.py` |
-| DELTA-036 | ✅ no-action | Migration V2→V3 : `async_migrate_entry` absent | `config_flow.py` |
-| DELTA-037 | ✅ | `HseMigrationView` inexistante → `ImportError` au boot | `migration.py` |
-| DELTA-038 | ✅ | `default_settings()` absente → service `reset_settings` crashait | `storage/manager.py` |
-| DELTA-039 | ✅ | Clés traduction options ne matchaient pas le `vol.Schema` | `fr.json` + `en.json` |
-| DELTA-040 | ✅ | `LEGACY_V1_PREFIX` non utilisé dans `migration.py` | `migration.py` + `const.py` |
+| DELTA-035 | ✅ | 9 services sans handler | `__init__.py` |
+| DELTA-036 | ✅ no-action | Migration V2→V3 | `config_flow.py` |
+| DELTA-037 | ✅ | `HseMigrationView` inexistante | `migration.py` |
+| DELTA-038 | ✅ | `default_settings()` absente | `storage/manager.py` |
+| DELTA-039 | ✅ | Clés traduction options erronées | `fr.json` + `en.json` |
+| DELTA-040 | ✅ | `LEGACY_V1_PREFIX` non utilisé | `migration.py` + `const.py` |
 | DELTA-041 | ✅ | `recorder` absent de `manifest.json` | `manifest.json` |
-| DELTA-042 | ✅ no-action | `CATALOGUE_REFRESH_INTERVAL_S` non planifié — feature future | `const.py` |
-| DELTA-043 | ✅ | Clé `config.step.user.data.name` orpheline supprimée | `fr.json` + `en.json` |
-| DELTA-044 | ✅ | `default_catalogue()` + `default_meta()` absentes de `manager.py` | `storage/manager.py` |
+| DELTA-042 | ✅ no-action | `CATALOGUE_REFRESH_INTERVAL_S` non planifié | `const.py` |
+| DELTA-043 | ✅ | Clé `config.step.user.data.name` orpheline | `fr.json` + `en.json` |
+| DELTA-044 | ✅ | `default_catalogue()` + `default_meta()` absentes | `storage/manager.py` |
+| DELTA-045 | ✅ | `HseSettingsView` → `HseSettingsPricingView` | `__init__.py` |
 
 ---
 
@@ -170,44 +166,26 @@ hsev3/
 
 | ID | Fermé le | Description |
 |---|---|---|
-| DELTA-044 | 2026-04-14 | `default_catalogue()` + `default_meta()` manquantes dans `manager.py` — proxies ajoutés |
-| DELTA-043 | 2026-04-14 | Clé `config.step.user.data.name` orpheline — supprimée des deux JSON |
-| DELTA-042 | 2026-04-14 | `CATALOGUE_REFRESH_INTERVAL_S` non planifié — no-action, feature future |
-| DELTA-041 | 2026-04-14 | `recorder` absent de `manifest.json` — ajouté dans `after_dependencies` |
-| DELTA-040 | 2026-04-14 | `LEGACY_V1_PREFIX` non utilisé — importé et utilisé dans `migration.py` |
-| DELTA-039 | 2026-04-14 | Clés traduction options erronées — renommées `price_ttc_kwh` + `reference_entity_id` |
-| DELTA-038 | 2026-04-14 | `default_settings()` absente — exportée depuis `storage/manager.py` |
-| DELTA-037 | 2026-04-14 | `HseMigrationView` inexistante — classe façade créée dans `migration.py` |
-| DELTA-036 | 2026-04-14 | Migration V2→V3 — no-action : V2 jamais en prod |
-| DELTA-035 | 2026-04-14 | 9 services sans handler — `_register_services()` implémentée |
-| DELTA-034 | 2026-04-14 | Panel HA doublon sur reload — `async_remove_panel` + `try/except` |
-| DELTA-033 | 2026-04-14 | Phase 7 Cas limites — 033b/c/d corrigés, 033a/e no-action |
-| DELTA-032 | 2026-04-14 | Phase 6 Catalogue & Méta — 032a/c/d corrigés, 032b no-action |
-| DELTA-031 | 2026-04-14 | Phase 5 Frontend logique — 031e/g/j corrigés, 031f/h/i no-fix |
-| DELTA-030 | 2026-04-13 | Phase 4 Contrat API↔Frontend — 030c/d/e/f corrections doc |
-| DELTA-029 | 2026-04-13 | Phase 3 Moteurs backend — 029a/b/c corrigés |
-| DELTA-028 | 2026-04-13 | Phase 2 Sécurité & Auth — 028a/b corrigés |
-| DELTA-027 | 2026-04-13 | Phase 1 Bootstrapping — 027a/b/c corrigés |
-| DELTA-026 | 2026-04-13 | `diagnostic.py` + `config_view.js` |
-| DELTA-025 | 2026-04-13 | `quality_score` entier — déjà présent |
-| DELTA-024 | 2026-04-13 | `costs.py` — énergie période + historique |
-| DELTA-023 | 2026-04-13 | `overview.py` — périodes + by_type |
-| DELTA-022 | 2026-04-13 | `engine/period_stats.py` créé |
-| DELTA-021 | 2026-04-12 | Audit exhaustif — 5 défauts → DELTA-022 à 026 |
-| DELTA-020 | 2026-04-10 | `10_api_contrat.md` stubs + REST vs service |
-| DELTA-019 | 2026-04-10 | `hse_fetch.js` séparateur `_` confirmé |
-| DELTA-018 | 2026-04-10 | `.DS_Store` supprimé |
-| DELTA-017 | 2026-04-10 | 8 `*_view.js` tous présents |
-| DELTA-016 | 2026-04-10 | Shared frontend — dom.js + table.js + 4 CSS |
-| DELTA-015 | 2026-04-10 | `HseHistoryView` + `HseExportView` dans `costs.py` |
-| DELTA-014 | 2026-04-10 | `services.yaml` — 8 services |
-| DELTA-013 | 2026-04-10 | `repairs.py` adapté V2→V3 |
-| DELTA-012 | 2026-04-10 | `translations/fr.json` + `en.json` |
-| DELTA-011 | 2026-04-10 | `hse_panel.js` réécriture V3 |
-| DELTA-003 | 2026-04-09 | 8 dossiers views JS créés |
-| DELTA-002 | 2026-04-09 | Shell JS — fetch + store + shell |
-| DELTA-004 Blocs 1–4 | 2026-04-09 | Tous les modules backend créés |
-| DELTA-010 à 001 | 2026-04-08 | Décisions fondatrices V3 |
+| DELTA-045 | 2026-04-14 | `HseSettingsView` renommé en `HseSettingsPricingView` dans `__init__.py` — détecté au 1er boot HA |
+| DELTA-044 | 2026-04-14 | `default_catalogue()` + `default_meta()` manquantes dans `manager.py` |
+| DELTA-043 | 2026-04-14 | Clé `config.step.user.data.name` orpheline supprimée |
+| DELTA-042 | 2026-04-14 | `CATALOGUE_REFRESH_INTERVAL_S` non planifié — no-action |
+| DELTA-041 | 2026-04-14 | `recorder` absent de `manifest.json` |
+| DELTA-040 | 2026-04-14 | `LEGACY_V1_PREFIX` non utilisé |
+| DELTA-039 | 2026-04-14 | Clés traduction options erronées |
+| DELTA-038 | 2026-04-14 | `default_settings()` absente |
+| DELTA-037 | 2026-04-14 | `HseMigrationView` inexistante |
+| DELTA-036 | 2026-04-14 | Migration V2→V3 — no-action |
+| DELTA-035 | 2026-04-14 | 9 services sans handler |
+| DELTA-034 | 2026-04-14 | Panel HA doublon sur reload |
+| DELTA-033 | 2026-04-14 | Phase 7 Cas limites |
+| DELTA-032 | 2026-04-14 | Phase 6 Catalogue & Méta |
+| DELTA-031 | 2026-04-14 | Phase 5 Frontend logique |
+| DELTA-030 | 2026-04-13 | Phase 4 Contrat API↔Frontend |
+| DELTA-029 | 2026-04-13 | Phase 3 Moteurs backend |
+| DELTA-028 | 2026-04-13 | Phase 2 Sécurité & Auth |
+| DELTA-027 | 2026-04-13 | Phase 1 Bootstrapping |
+| DELTA-001 à 026 | 2026-04-08—13 | Décisions fondatrices V3 |
 
 ---
 
