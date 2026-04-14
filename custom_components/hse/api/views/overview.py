@@ -12,7 +12,7 @@ from homeassistant.core import HomeAssistant
 
 from ..base import HseBaseView
 from ...storage.manager import HseStorageManager
-from ...engine.calculation import compute_totals, top_n_by_power
+from ...engine.calculation import compute_totals, top_n_by_power, get_power_w
 from ...engine.cost import cost_summary
 from ...engine.period_stats import async_energy_for_period
 from ...engine.group_totals import totals_by_type
@@ -33,7 +33,6 @@ class HseOverviewView(HseBaseView):
         meta = await mgr.async_load_meta()
 
         items = catalogue.get("items") or {}
-        # Seules les entités "selected" participent aux calculs
         selected_ids = [
             item["source"]["entity_id"]
             for item in items.values()
@@ -47,7 +46,6 @@ class HseOverviewView(HseBaseView):
         totals = compute_totals(selected_ids, states)
         top5_raw = top_n_by_power(selected_ids, states, n=5)
 
-        # Enrichissement top5 avec nom lisible
         top5 = []
         for entry in top5_raw:
             eid = entry["entity_id"]
@@ -58,7 +56,6 @@ class HseOverviewView(HseBaseView):
             )
             top5.append({**entry, "name": name})
 
-        # Calcul énergie réelle par période via recorder
         periods: dict[str, dict] = {}
         for p in ("day", "week", "month", "year"):
             kwh_map = await async_energy_for_period(
@@ -70,14 +67,17 @@ class HseOverviewView(HseBaseView):
                 "eur": cost_summary(total_kwh, settings)["cost_ttc_eur"],
             }
 
-        # Groupement par pièce
         assignments = (meta.get("meta") or {}).get("assignments") or {}
         rooms_meta = (meta.get("meta") or {}).get("rooms") or []
-        room_name_by_id = {r["id"]: r.get("name", r["id"]) for r in rooms_meta if isinstance(r, dict) and r.get("id")}
+        room_name_by_id = {
+            r["id"]: r.get("name", r["id"])
+            for r in rooms_meta
+            if isinstance(r, dict) and r.get("id")
+        }
 
+        # DELTA-033c : get_power_w importé en tête de fichier — plus de import inline
         by_room: dict[str, float] = {}
         for eid in selected_ids:
-            from ...engine.calculation import get_power_w
             pw = get_power_w(states.get(eid))
             if pw is None or pw <= 0:
                 continue
@@ -94,11 +94,9 @@ class HseOverviewView(HseBaseView):
             for rid, pw in sorted(by_room.items(), key=lambda x: -x[1])
         ]
 
-        # Capteur de référence
         ref_entity_id = settings.get("reference_entity_id")
         reference_sensor = None
         if ref_entity_id:
-            from ...engine.calculation import get_power_w
             ref_state = self.hass.states.get(ref_entity_id)
             ref_pw = get_power_w(ref_state)
             if ref_pw is not None:

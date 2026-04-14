@@ -29,20 +29,29 @@ class HseDiagnosticView(HseBaseView):
         catalogue = await mgr.async_load_catalogue()
         items = catalogue.get("items") or {}
 
-        total = len(items)
-        selected = sum(1 for it in items.values() if (it.get("triage") or {}).get("policy") == "selected")
-        ignored = sum(1 for it in items.values() if (it.get("triage") or {}).get("policy") == "ignored")
+        # DELTA-033b : ne compter que les items valides (dict) pour éviter
+        # un score_pct biaisé si un item corrompu est présent dans le store.
+        valid_items = {
+            k: v for k, v in items.items() if isinstance(v, dict)
+        }
+        total = len(valid_items)
+
+        selected = sum(
+            1 for it in valid_items.values()
+            if (it.get("triage") or {}).get("policy") == "selected"
+        )
+        ignored = sum(
+            1 for it in valid_items.values()
+            if (it.get("triage") or {}).get("policy") == "ignored"
+        )
         pending = total - selected - ignored
 
         sensors_out = []
         ok_count = 0
-        for item_id, item in items.items():
-            if not isinstance(item, dict):
-                continue
+        for item_id, item in valid_items.items():
             src = item.get("source") or {}
             eid = src.get("entity_id") or item_id
 
-            # Friendly name depuis l'état HA live (DELTA-026)
             state_obj = self.hass.states.get(eid)
             friendly = (
                 (getattr(state_obj, "attributes", {}) or {}).get("friendly_name") or eid
@@ -72,7 +81,7 @@ class HseDiagnosticView(HseBaseView):
         return self.json_ok({
             "score_pct": score_pct,
             "sensors": sensors_out,
-            "repairs": [],  # TODO DELTA-026 : brancher homeassistant.components.repairs (vérifier dispo >= 2024.1)
+            "repairs": [],
             "storage_stats": {
                 "total": total,
                 "selected": selected,
