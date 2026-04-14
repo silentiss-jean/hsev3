@@ -4,6 +4,7 @@ Détecte le kind (energy/power) et le statut d'une entité depuis le registry HA
 """
 from __future__ import annotations
 
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
 
@@ -46,3 +47,69 @@ def status_from_registry(
         return ("not_provided", "entity_registry:orphaned+restored")
 
     return ("ok", None)
+
+
+async def async_scan_hass(hass: HomeAssistant) -> dict:
+    """
+    Scanne le registry HA et retourne les candidats energy/power.
+
+    Retourne
+    --------
+    {"candidates": [{
+        "entity_id", "kind", "unit", "device_class", "state_class",
+        "unique_id", "device_id", "area_id", "integration_domain",
+        "platform", "config_entry_id", "disabled_by",
+        "status", "status_reason", "ha_state", "ha_restored"
+    }]}
+    Shape attendue par merge_scan_into_catalogue().
+    """
+    ent_reg = er.async_get(hass)
+    candidates = []
+
+    for entry in ent_reg.entities.values():
+        eid = getattr(entry, "entity_id", None)
+        if not isinstance(eid, str) or not eid.startswith("sensor."):
+            continue
+
+        state_obj = hass.states.get(eid)
+        ha_state = getattr(state_obj, "state", None) if state_obj else None
+        attrs = getattr(state_obj, "attributes", {}) or {}
+
+        unit = attrs.get("unit_of_measurement") or getattr(entry, "unit_of_measurement", None)
+        device_class = attrs.get("device_class") or getattr(entry, "device_class", None)
+        state_class = attrs.get("state_class")
+
+        kind = detect_kind(device_class, unit)
+        if kind is None:
+            continue
+
+        ha_restored = attrs.get("restored", False)
+        status, status_reason = status_from_registry(
+            entry,
+            ha_state=ha_state,
+            ha_restored=bool(ha_restored),
+        )
+
+        disabled_by = getattr(entry, "disabled_by", None)
+        disabled_by_val = getattr(disabled_by, "value", str(disabled_by)) if disabled_by is not None else None
+
+        candidates.append({
+            "entity_id": eid,
+            "kind": kind,
+            "unit": unit,
+            "device_class": device_class,
+            "state_class": state_class,
+            "unique_id": getattr(entry, "unique_id", None),
+            "device_id": getattr(entry, "device_id", None),
+            "area_id": getattr(entry, "area_id", None),
+            "integration_domain": getattr(entry, "integration_domain", None),
+            "platform": getattr(entry, "platform", None),
+            "config_entry_id": getattr(entry, "config_entry_id", None),
+            "disabled_by": disabled_by_val,
+            "status": status,
+            "status_reason": status_reason,
+            "ha_state": ha_state,
+            "ha_restored": bool(ha_restored),
+        })
+
+    return {"candidates": candidates}

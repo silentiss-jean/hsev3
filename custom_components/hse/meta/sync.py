@@ -34,8 +34,9 @@ def _build_catalogue_entity_ids(catalogue: dict[str, Any] | None) -> set[str]:
     for item in items.values():
         if not isinstance(item, dict):
             continue
+        # entity_id est toujours sous item["source"]["entity_id"] — jamais à la racine
         src = item.get("source")
-        eid = src.get("entity_id") if isinstance(src, dict) else item.get("entity_id")
+        eid = src.get("entity_id") if isinstance(src, dict) else None
         if isinstance(eid, str) and eid:
             result.add(eid)
     return result

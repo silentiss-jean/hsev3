@@ -11,6 +11,8 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant
 
+from ..time_utils import utc_now_iso
+
 
 async def async_load_meta(hass: HomeAssistant) -> dict[str, Any]:
     """
@@ -66,7 +68,6 @@ async def async_patch_meta(
     Seuls les arguments fournis (non None) sont écrasés.
     Retourne le store complet après merge.
     """
-    import time
     data = await async_load_meta(hass)
     meta = data.setdefault("meta", {})
     if not isinstance(meta, dict):
@@ -80,6 +81,6 @@ async def async_patch_meta(
     if assignments is not None:
         meta["assignments"] = assignments
 
-    meta["updated_at"] = time.time()
+    meta["updated_at"] = utc_now_iso()
     await async_save_meta(hass, data)
     return data
