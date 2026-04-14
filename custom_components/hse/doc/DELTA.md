@@ -50,8 +50,8 @@ hsev3/
     ├── services.yaml                            ✅
     ├── translations/fr.json + en.json           ✅
     ├── api/base.py + views/* (13 views)         ✅
-    ├── catalogue/* (5 fichiers)                 ✅
-    ├── meta/* (5 fichiers)                      ✅
+    ├── catalogue/* (5 fichiers)                 ✅  (DELTA-032a : async_scan_hass ajoutée 2026-04-14)
+    ├── meta/* (5 fichiers)                      ✅  (DELTA-032c/d : sync + store corrigés 2026-04-14)
     ├── storage/manager.py                       ✅
     ├── engine/* (6 fichiers)                    ✅
     ├── sensors/* (4 fichiers)                   ✅
@@ -77,6 +77,7 @@ hsev3/
 | Nommage frontend | Séparateur `_` : `hse_fetch.js`, etc. | DELTA-006 |
 | `costs_by_entity` | Reçoit `energy_map` depuis recorder — jamais `get_energy_kwh(state)` | DELTA-029a |
 | Fenêtres temporelles | `window_for_period()` depuis `time_utils` — pas de calcul inline | DELTA-029c |
+| `async_scan_hass` | Définie dans `catalogue/scan_engine.py` — retourne `{"candidates": [...]}` | DELTA-032a |
 
 ---
 
@@ -109,7 +110,7 @@ hsev3/
 | DELTA-029 | ✅ ALIGNED | **Phase 3 — Moteurs backend** | Calculs, cohérence des sorties | `engine/period_stats.py`, `engine/cost.py`, `engine/calculation.py`, `engine/group_totals.py`, `engine/analytics.py` | 🟡 IMPORTANT |
 | DELTA-030 | ✅ ALIGNED | **Phase 4 — Contrat API ↔ Frontend** | Shape JSON retourné vs shape attendu par les views JS | `api/views/*.py` ↔ `features/*_view.js` (8 paires) | 🔴 CRITIQUE |
 | DELTA-031 | ✅ ALIGNED | **Phase 5 — Frontend logique** | Règles R1–R5, flux de données, guard re-entrance, gestion erreurs | `hse_shell.js`, `hse_fetch.js`, `hse_store.js`, 8 `*_view.js` | 🟡 IMPORTANT |
-| DELTA-032 | 🔴 AUDIT_EN_COURS | **Phase 6 — Catalogue & Méta** | Cohérence lecture/écriture catalogue, assignments, sync | `catalogue/*.py`, `meta/*.py`, `storage/manager.py` | 🟡 IMPORTANT |
+| DELTA-032 | ✅ ALIGNED | **Phase 6 — Catalogue & Méta** | Cohérence lecture/écriture catalogue, assignments, sync | `catalogue/*.py`, `meta/*.py`, `storage/manager.py` | 🟡 IMPORTANT |
 | DELTA-033 | ⬜ EN_ATTENTE | **Phase 7 — Cas limites & robustesse** | Valeurs manquantes, entités disparues, storage vide, premier démarrage | Tous les modules exposés à l'extérieur | 🟢 QUALITÉ |
 
 ---
@@ -187,8 +188,6 @@ Commits : `907469d` (`group_totals.py`) | `af83614` (`analytics.py`) | `3f7d068`
 | `GET/PUT /api/hse/settings/pricing` | `settings.py` | `config_view.js` | `mode`, `price_ttc_kwh`, `subscription_eur_month`, `tax_rate_pct`, `price_hp_ttc_kwh`, `price_hc_ttc_kwh`, `price_ht_kwh` |
 | `GET/PATCH /api/hse/user_prefs` | `user_prefs.py` | `custom_view.js` | `theme`, `glassmorphism`, `dynamic_bg`, `active_tab`, `overview_period`, `costs_period` |
 
-**Note pour DELTA-032 :** vérifier que `catalogue.py` produit bien la clé `status` sur chaque item (lue par `config_view.js` pour le badge).
-
 ---
 
 #### DELTA-031 — Phase 5 : Frontend logique ✅
@@ -209,17 +208,21 @@ Commits : [`febaa4f`](https://github.com/silentiss-jean/hsev3/commit/febaa4fb423
 
 ---
 
-#### DELTA-032 — Phase 6 : Catalogue & Méta 🔴 AUDIT_EN_COURS
+#### DELTA-032 — Phase 6 : Catalogue & Méta ✅
 
-**Ce qu'on vérifie :**
-- `catalogue/manager.py` : lecture/écriture dans `storage/manager.py` — pas d'accès direct au fichier JSON
-- `catalogue/scan_engine.py` : filtre correctement les domaines non-energy, retourne `quality_score` entier 0–100
-- `catalogue/schema.py` : schéma volontaire (tous champs optionnels sauf `entity_id`) — pas de validation trop stricte qui bloquerait des ajouts partiels
-- `meta/sync.py` : sync ne perd pas les assignments existants lors d'un refresh catalogue
-- `meta/assignments.py` : pas de doublon room/type possible
-- `storage/manager.py` : lecture asynchrone propre, écriture atomique (write temp + rename), gère le cas fichier absent (premier démarrage → dict vide)
-- `sensors/quality_scorer.py` : retourne bien un `int` (pas un `float` ni une `str`)
-- **Point DELTA-030** : vérifier que `catalogue.py` produit la clé `status` sur chaque item de la liste
+**Résultat audit (2026-04-14) :** 3 anomalies corrigées, 1 no-action.
+
+**Anomalies corrigées :**
+- **DELTA-032a** (🔴 bloquant) : `catalogue/scan_engine.py` — `async_scan_hass()` appelée par `HseCatalogueRefreshView` mais inexistante → `ImportError` silencieux, flag `_scanning` bloqué à `True` — corrigée, fonction implémentée : itère le registry HA sur les `sensor.*`, filtre par `detect_kind()`, appelle `status_from_registry()`, retourne `{"candidates": [...]}`
+- **DELTA-032c** (🟡 mineur) : `meta/sync.py` — `_build_catalogue_entity_ids()` utilisait `item.get("entity_id")` comme fallback (champ inexistant à la racine d'un item) — corrigé, fallback supprimé, seul `item["source"]["entity_id"]` est lu
+- **DELTA-032d** (ℹ️ cosmétique) : `meta/store.py` — `async_patch_meta()` utilisait `time.time()` (float Unix) pour `updated_at` — corrigé, remplacé par `utc_now_iso()` depuis `time_utils` (cohérence ISO 8601 partout)
+
+**No-action :**
+- **DELTA-032b** : `HseCatalogueRefreshView._scanning` — posé sur l'instance dans `__init__` — conforme (fausse piste analogue à DELTA-028b déjà résolu)
+
+**Point DELTA-030 validé :** `catalogue.py` (view) produit bien la clé `status` (= `policy`) sur chaque item ✅
+
+Commit : [`e36084f`](https://github.com/silentiss-jean/hsev3/commit/e36084f880d4839ce9d16171aa664194a62a44a0) (`scan_engine.py` + `meta/sync.py` + `meta/store.py`)
 
 ---
 
@@ -254,6 +257,7 @@ Commits : [`febaa4f`](https://github.com/silentiss-jean/hsev3/commit/febaa4fb423
 
 | ID | Fermé le | Description |
 |---|---|---|
+| DELTA-032 | 2026-04-14 | Phase 6 Catalogue & Méta — 3 anomalies (032a/c/d) corrigées, 1 no-fix (032b) |
 | DELTA-031 | 2026-04-14 | Phase 5 Frontend logique — R1–R5 conformes, 3 anomalies corrigées (031e/g/j), 3 no-fix documentés (031f/h/i) |
 | DELTA-030 | 2026-04-13 | Phase 4 Contrat API↔Frontend — 8 paires auditées, aucune anomalie code, 4 corrections doc (030c/d/e/f) |
 | DELTA-029 | 2026-04-13 | Phase 3 Moteurs backend — 3 anomalies (029a/b/c) corrigées |
