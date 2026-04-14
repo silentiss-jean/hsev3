@@ -20,6 +20,8 @@ export class ConfigView {
     this._root     = null;
     this._activeSection = 'appareils'; // 'appareils' | 'rooms' | 'pricing'
     this._pendingAssignments = [];
+    // Référence stable vers le handler pricing submit pour cleanup (DELTA-031g)
+    this._pricingSubmitHandler = null;
   }
 
   mount(container, ctx) {
@@ -36,6 +38,7 @@ export class ConfigView {
   unmount() {
     this._mounted = false;
     if (this._abortCtl) { this._abortCtl.abort(); this._abortCtl = null; }
+    this._pricingSubmitHandler = null;
   }
 
   async _fetchData() {
@@ -45,16 +48,15 @@ export class ConfigView {
     try {
       const sig = this._abortCtl.signal;
       const [catResp, metaResp, pricingResp] = await Promise.all([
-        this._ctx.hseFetch('/api/hse/catalogue?status=selected&per_page=200', { signal: sig }),
+        this._ctx.hseFetch('/api/hse/catalogue?per_page=200', { signal: sig }),
         this._ctx.hseFetch('/api/hse/meta', { signal: sig }),
         this._ctx.hseFetch('/api/hse/settings/pricing', { signal: sig }),
       ]);
       if (!this._mounted) return;
-      const data = {
-        catalogue: await catResp.json(),
-        meta:      await metaResp.json(),
-        pricing:   await pricingResp.json(),
-      };
+      const [cat, meta, pricing] = await Promise.all([
+        catResp.json(), metaResp.json(), pricingResp.json(),
+      ]);
+      const data = { cat, meta, pricing };
       this._applyData(data);
     } catch (e) {
       if (e.name !== 'AbortError') this._renderError(e);
@@ -71,173 +73,208 @@ export class ConfigView {
   }
 
   _buildSkeleton() {
-    this._root.innerHTML = `
-      <div class="hse-config">
-        <div class="hse-skeleton" style="height:44px;border-radius:8px;margin-bottom:12px"></div>
-        <div class="hse-skeleton" style="height:400px;border-radius:8px"></div>
-      </div>`;
+    this._root.innerHTML = `<div class="hse-skeleton" style="height:300px;border-radius:8px"></div>`;
   }
 
   _render(data) {
     if (!this._root.querySelector('.hse-config-root')) {
       this._root.innerHTML = this._buildHTML(data);
-      this._bindEvents(data);
-      return;
+      this._bindSectionNav(data);
     }
-    // Rafraîchir le contenu de la section active uniquement
     this._refreshSection(data);
   }
 
   _buildHTML(data) {
     return `
       <div class="hse-config-root">
-        <nav class="hse-sectionnav">
-          <button class="hse-btn hse-btn-tab cfg-tab ${this._activeSection==='appareils'?'active':''}" data-section="appareils">Appareils</button>
-          <button class="hse-btn hse-btn-tab cfg-tab ${this._activeSection==='rooms'?'active':''}" data-section="rooms">Pièces &amp; Types</button>
-          <button class="hse-btn hse-btn-tab cfg-tab ${this._activeSection==='pricing'?'active':''}" data-section="pricing">Tarifs</button>
+        <nav class="hse-tab-nav">
+          <button class="hse-tab ${this._activeSection==='appareils'?'active':''}" data-section="appareils">Appareils</button>
+          <button class="hse-tab ${this._activeSection==='rooms'?'active':''}" data-section="rooms">Pièces / Types</button>
+          <button class="hse-tab ${this._activeSection==='pricing'?'active':''}" data-section="pricing">Tarifs</button>
         </nav>
-        <div class="cfg-section-content">${this._buildSection(data)}</div>
+        <div class="hse-config-section-content"></div>
       </div>`;
   }
 
-  _buildSection(data) {
-    if (this._activeSection === 'appareils') return this._buildCatalogueSection(data.catalogue);
-    if (this._activeSection === 'rooms')     return this._buildMetaSection(data.meta);
-    return this._buildPricingSection(data.pricing);
+  _bindSectionNav(data) {
+    this._root.querySelectorAll('.hse-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this._activeSection = btn.dataset.section;
+        this._root.querySelectorAll('.hse-tab').forEach(b => b.classList.toggle('active', b === btn));
+        this._refreshSection(data);
+      });
+    });
   }
 
-  _buildCatalogueSection(cat) {
-    const rows = (cat.items ?? []).map(it => `
-      <tr>
-        <td><input type="checkbox" class="cfg-row-check" data-id="${this._esc(it.entity_id)}"></td>
-        <td>${this._esc(it.name)}<br><small class="hse-muted">${this._esc(it.entity_id)}</small></td>
-        <td>${this._esc(it.room ?? '—')}</td>
-        <td>${this._esc(it.type ?? '—')}</td>
-        <td><span class="hse-badge" data-level="${it.status}">${it.status}</span></td>
-        <td>
-          <button class="hse-btn hse-btn-sm hse-btn-ghost cfg-ignore-btn" data-id="${this._esc(it.entity_id)}">Ignorer</button>
-        </td>
-      </tr>`).join('');
+  _refreshSection(data) {
+    const el = this._root.querySelector('.hse-config-section-content');
+    if (!el) return;
+    if (this._activeSection === 'appareils') {
+      el.innerHTML = this._buildAppareils(data.cat);
+      this._bindAppareils(data);
+    } else if (this._activeSection === 'rooms') {
+      el.innerHTML = this._buildRooms(data.meta);
+      this._bindRooms(data);
+    } else {
+      el.innerHTML = this._buildPricing(data.pricing);
+      this._bindPricing(data);  // cleanup garanti ici (DELTA-031g)
+    }
+  }
+
+  // ─── Section Appareils ───────────────────────────────────────────────────
+
+  _buildAppareils(cat) {
+    const items = cat.items ?? [];
     return `
-      <div class="cfg-appareils">
-        <div class="hse-toolbar">
-          <span class="hse-label">${cat.total} appareils sélectionnés</span>
-          <button class="hse-btn hse-btn-secondary cfg-bulk-ignore">Ignorer sélection</button>
+      <div class="hse-card">
+        <span class="hse-label">Appareils (${items.length})</span>
+        <table class="hse-table">
+          <thead><tr><th>Nom</th><th>Entité</th><th>Statut</th><th>Actions</th></tr></thead>
+          <tbody class="cfg-items-tbody">
+            ${items.map(it => `
+              <tr data-id="${this._esc(it.entity_id)}">
+                <td>${this._esc(it.name)}</td>
+                <td class="hse-muted">${this._esc(it.entity_id)}</td>
+                <td><span class="hse-badge" data-level="${it.status ?? 'pending'}">${it.status ?? 'pending'}</span></td>
+                <td>
+                  <button class="hse-btn hse-btn-ghost cfg-select-btn" data-id="${this._esc(it.entity_id)}" data-status="selected">Sélectionner</button>
+                  <button class="hse-btn hse-btn-ghost cfg-ignore-btn"  data-id="${this._esc(it.entity_id)}" data-status="ignored">Ignorer</button>
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+        <div class="hse-toolbar" style="margin-top:10px">
+          <button class="hse-btn cfg-apply-batch-btn" disabled>Appliquer la sélection</button>
+          <span class="hse-muted cfg-batch-count">0 en attente</span>
         </div>
-        <table class="hse-table"><thead><tr>
-          <th><input type="checkbox" class="cfg-check-all"></th><th>Appareil</th><th>Pièce</th><th>Type</th><th>Statut</th><th>Action</th>
-        </tr></thead><tbody>${rows}</tbody></table>
       </div>`;
   }
 
-  _buildMetaSection(meta) {
-    const assignRows = (meta.assignments ?? []).map(a => `
-      <tr class="${a.pending ? 'pending' : ''}">
-        <td>${this._esc(a.entity_id)}</td>
-        <td><select class="hse-select cfg-room-sel" data-id="${this._esc(a.entity_id)}">
-          ${meta.rooms.map(r => `<option ${r===a.room?'selected':''}>${this._esc(r)}</option>`).join('')}
-        </select></td>
-        <td><select class="hse-select cfg-type-sel" data-id="${this._esc(a.entity_id)}">
-          ${meta.types.map(t => `<option ${t===a.type?'selected':''}>${this._esc(t)}</option>`).join('')}
-        </select></td>
-        <td>${a.pending ? '<span class="hse-badge" data-level="warning">Pending</span>' : '—'}</td>
-      </tr>`).join('');
+  _bindAppareils(data) {
+    this._pendingAssignments = [];
+    this._root.querySelectorAll('.cfg-select-btn, .cfg-ignore-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const { id, status } = btn.dataset;
+        const existing = this._pendingAssignments.findIndex(a => a.entity_id === id);
+        if (existing >= 0) this._pendingAssignments[existing].status = status;
+        else this._pendingAssignments.push({ entity_id: id, status });
+        const countEl = this._root.querySelector('.cfg-batch-count');
+        const applyEl = this._root.querySelector('.cfg-apply-batch-btn');
+        if (countEl) countEl.textContent = `${this._pendingAssignments.length} en attente`;
+        if (applyEl) applyEl.disabled = this._pendingAssignments.length === 0;
+      });
+    });
+    this._root.querySelector('.cfg-apply-batch-btn')?.addEventListener('click', () => this._applyBatch(data));
+  }
+
+  async _applyBatch(data) {
+    if (!this._pendingAssignments.length) return;
+    try {
+      await this._ctx.hseFetch('/api/hse/catalogue/batch', {
+        method: 'PATCH',
+        body: JSON.stringify({ items: this._pendingAssignments }),
+      });
+      this._pendingAssignments = [];
+      this._lastSig = null;
+      this._domBuilt = false;
+      this._buildSkeleton();
+      this._fetchData();
+    } catch (e) { this._renderError(e); }
+  }
+
+  // ─── Section Rooms / Types ───────────────────────────────────────────────
+
+  _buildRooms(meta) {
+    const rooms = meta.rooms ?? [];
+    const types = meta.device_types ?? [];
     return `
-      <div class="cfg-meta">
-        <table class="hse-table"><thead><tr><th>Entité</th><th>Pièce</th><th>Type</th><th>État</th></tr></thead>
-          <tbody>${assignRows}</tbody></table>
-        <div class="hse-toolbar" style="margin-top:12px">
-          <button class="hse-btn hse-btn-secondary cfg-meta-preview">Prévisualiser diff</button>
-          <button class="hse-btn cfg-meta-apply" disabled>Appliquer</button>
-        </div>
-        <div class="cfg-meta-diff"></div>
+      <div class="hse-card">
+        <span class="hse-label">Pièces (${rooms.length})</span>
+        <ul class="hse-list" style="margin-bottom:12px">
+          ${rooms.map(r => `<li class="hse-list-item">${this._esc(r.label ?? r.id)}</li>`).join('')}
+        </ul>
+        <button class="hse-btn hse-btn-ghost cfg-meta-sync-btn">Synchroniser depuis HA</button>
+      </div>
+      <div class="hse-card" style="margin-top:12px">
+        <span class="hse-label">Types d'appareils (${types.length})</span>
+        <ul class="hse-list">
+          ${types.map(t => `<li class="hse-list-item">${this._esc(t.label ?? t.id)}</li>`).join('')}
+        </ul>
       </div>`;
   }
 
-  _buildPricingSection(p) {
+  _bindRooms(data) {
+    this._root.querySelector('.cfg-meta-sync-btn')?.addEventListener('click', () => this._syncMeta(data));
+  }
+
+  async _syncMeta(data) {
+    try {
+      const preview = await (await this._ctx.hseFetch('/api/hse/meta/sync/preview')).json();
+      const msg = `Prévisualisation sync :\n${JSON.stringify(preview, null, 2)}\n\nAppliquer ?`;
+      if (!confirm(msg)) return;
+      await this._ctx.hseFetch('/api/hse/meta/sync/apply', { method: 'POST', body: '{}' });
+      this._lastSig = null;
+      this._fetchData();
+    } catch (e) { this._renderError(e); }
+  }
+
+  // ─── Section Pricing — DELTA-031g fix ────────────────────────────────────
+
+  _buildPricing(pricing) {
     return `
-      <div class="cfg-pricing">
-        <form class="hse-form cfg-pricing-form">
-          <label>Mode<select class="hse-select" name="mode"><option ${p.mode==='flat'?'selected':''}>flat</option><option ${p.mode==='hphc'?'selected':''}>hphc</option></select></label>
-          <label>Prix TTC €/kWh<input class="hse-input" type="number" step="0.001" name="price_ttc_kwh" value="${p.price_ttc_kwh}"></label>
-          <label>Abonnement €/mois<input class="hse-input" type="number" step="0.01" name="subscription_eur_month" value="${p.subscription_eur_month}"></label>
-          <label>TVA %<input class="hse-input" type="number" step="0.1" name="tax_rate_pct" value="${p.tax_rate_pct}"></label>
-          <button class="hse-btn" type="submit">Enregistrer</button>
+      <div class="hse-card">
+        <span class="hse-label">Tarification (€/kWh)</span>
+        <form class="cfg-pricing-form" novalidate>
+          <label class="hse-form-row">
+            <span>Tarif HP (heures pleines)</span>
+            <input class="hse-input" type="number" step="0.001" name="hp" value="${pricing.hp_eur_kwh ?? 0.2516}">
+          </label>
+          <label class="hse-form-row">
+            <span>Tarif HC (heures creuses)</span>
+            <input class="hse-input" type="number" step="0.001" name="hc" value="${pricing.hc_eur_kwh ?? 0.1837}">
+          </label>
+          <label class="hse-form-row">
+            <span>TVA (%)</span>
+            <input class="hse-input" type="number" step="0.1" name="tva" value="${pricing.tva_pct ?? 20}">
+          </label>
+          <label class="hse-form-row">
+            <span>Abonnement (€/mois)</span>
+            <input class="hse-input" type="number" step="0.01" name="abonnement" value="${pricing.monthly_fee_eur ?? 9.50}">
+          </label>
+          <div class="hse-toolbar" style="margin-top:12px">
+            <button class="hse-btn" type="submit">Enregistrer les tarifs</button>
+          </div>
         </form>
       </div>`;
   }
 
-  _bindEvents(data) {
-    // Tabs section
-    this._root.querySelectorAll('.cfg-tab').forEach(btn =>
-      btn.addEventListener('click', () => {
-        this._activeSection = btn.dataset.section;
-        this._root.querySelectorAll('.cfg-tab').forEach(b => b.classList.toggle('active', b===btn));
-        this._root.querySelector('.cfg-section-content').innerHTML = this._buildSection(data);
-        this._bindSectionEvents(data);
-      }));
-    this._bindSectionEvents(data);
-  }
-
-  _bindSectionEvents(data) {
-    // Check-all → coche/décoche toutes les lignes (DELTA-026)
-    this._root.querySelector('.cfg-check-all')?.addEventListener('change', (e) => {
-      this._root.querySelectorAll('.cfg-row-check').forEach(cb => cb.checked = e.target.checked);
-    });
-    // Pricing form
-    this._root.querySelector('.cfg-pricing-form')?.addEventListener('submit', async (e) => {
+  _bindPricing(data) {
+    const form = this._root.querySelector('.cfg-pricing-form');
+    if (!form) return;
+    // DELTA-031g : cleanup du handler précédent avant de rebinder
+    // Évite l'accumulation de listeners 'submit' lors des changements de section
+    if (this._pricingSubmitHandler) {
+      form.removeEventListener('submit', this._pricingSubmitHandler);
+    }
+    this._pricingSubmitHandler = async (e) => {
       e.preventDefault();
-      const fd = new FormData(e.target);
-      const payload = Object.fromEntries([...fd.entries()].map(([k,v]) =>
-        [k, ['price_ttc_kwh','subscription_eur_month','tax_rate_pct'].includes(k) ? parseFloat(v) : v]));
+      const fd = new FormData(form);
+      const payload = {
+        hp_eur_kwh:      parseFloat(fd.get('hp')),
+        hc_eur_kwh:      parseFloat(fd.get('hc')),
+        tva_pct:         parseFloat(fd.get('tva')),
+        monthly_fee_eur: parseFloat(fd.get('abonnement')),
+      };
       try {
-        await this._ctx.hseFetch('/api/hse/settings/pricing', { method: 'PUT', body: JSON.stringify(payload) });
+        await this._ctx.hseFetch('/api/hse/settings/pricing', {
+          method: 'PUT',
+          body: JSON.stringify(payload),
+        });
+        this._lastSig = null;
         this._fetchData();
-      } catch (e) { this._renderError(e); }
-    });
-    // Meta preview / apply
-    this._root.querySelector('.cfg-meta-preview')?.addEventListener('click', async () => {
-      const assignments = this._collectAssignments();
-      try {
-        const resp = await this._ctx.hseFetch('/api/hse/meta/sync/preview', { method: 'POST', body: JSON.stringify({ assignments }) });
-        const diff = await resp.json();
-        this._root.querySelector('.cfg-meta-diff').innerHTML =
-          `<pre class="hse-code">${JSON.stringify(diff, null, 2)}</pre>`;
-        this._root.querySelector('.cfg-meta-apply')?.removeAttribute('disabled');
-      } catch (e) { this._renderError(e); }
-    });
-    this._root.querySelector('.cfg-meta-apply')?.addEventListener('click', async () => {
-      const assignments = this._collectAssignments();
-      try {
-        await this._ctx.hseFetch('/api/hse/meta/sync/apply', { method: 'POST', body: JSON.stringify({ assignments }) });
-        this._fetchData();
-      } catch (e) { this._renderError(e); }
-    });
-    // Ignore buttons
-    this._root.querySelectorAll('.cfg-ignore-btn').forEach(btn =>
-      btn.addEventListener('click', async () => {
-        try {
-          await this._ctx.hseFetch('/api/hse/catalogue/triage', { method: 'POST', body: JSON.stringify({ entity_id: btn.dataset.id, action: 'ignore' }) });
-          this._fetchData();
-        } catch (e) { this._renderError(e); }
-      }));
-  }
-
-  _collectAssignments() {
-    return [...this._root.querySelectorAll('[data-id]')].reduce((acc, el) => {
-      const id = el.dataset.id;
-      if (!acc.find(a => a.entity_id === id)) acc.push({ entity_id: id, room: '', type: '' });
-      const entry = acc.find(a => a.entity_id === id);
-      if (el.classList.contains('cfg-room-sel')) entry.room = el.value;
-      if (el.classList.contains('cfg-type-sel')) entry.type = el.value;
-      return acc;
-    }, []);
-  }
-
-  _refreshSection(data) {
-    const content = this._root.querySelector('.cfg-section-content');
-    if (content) content.innerHTML = this._buildSection(data);
-    this._bindSectionEvents(data);
+      } catch (err) { this._renderError(err); }
+    };
+    form.addEventListener('submit', this._pricingSubmitHandler);
   }
 
   _renderError(err) {
