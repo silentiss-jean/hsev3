@@ -29,7 +29,7 @@ Si tu lis ce fichier, tu dois :
 
 ---
 
-## 🗂️ Carte du repo — état réel au 2026-04-13
+## 🗂️ Carte du repo — état réel au 2026-04-14
 
 > ✅ = fichier présent et conforme | 🔴 = manquant ou stub (voir écart DELTA-0XX)
 
@@ -56,7 +56,7 @@ hsev3/
     ├── engine/* (6 fichiers)                    ✅
     ├── sensors/* (4 fichiers)                   ✅
     ├── web_static/panel/shared/* (5 JS + 4 CSS) ✅
-    └── web_static/panel/features/* (8 views JS) ✅
+    └── web_static/panel/features/* (8 views JS) ✅  (patchs 031e/g/j appliqués 2026-04-14)
 ```
 
 ---
@@ -108,8 +108,8 @@ hsev3/
 | DELTA-028 | ✅ ALIGNED | **Phase 2 — Sécurité & Auth** | Tous les endpoints + base | `api/base.py`, `api/views/*.py` (13 fichiers) | 🔴 CRITIQUE |
 | DELTA-029 | ✅ ALIGNED | **Phase 3 — Moteurs backend** | Calculs, cohérence des sorties | `engine/period_stats.py`, `engine/cost.py`, `engine/calculation.py`, `engine/group_totals.py`, `engine/analytics.py` | 🟡 IMPORTANT |
 | DELTA-030 | ✅ ALIGNED | **Phase 4 — Contrat API ↔ Frontend** | Shape JSON retourné vs shape attendu par les views JS | `api/views/*.py` ↔ `features/*_view.js` (8 paires) | 🔴 CRITIQUE |
-| DELTA-031 | ⬜ EN_ATTENTE | **Phase 5 — Frontend logique** | Règles R1–R5, flux de données, guard re-entrance, gestion erreurs | `hse_shell.js`, `hse_fetch.js`, `hse_store.js`, 8 `*_view.js` | 🟡 IMPORTANT |
-| DELTA-032 | ⬜ EN_ATTENTE | **Phase 6 — Catalogue & Méta** | Cohérence lecture/écriture catalogue, assignments, sync | `catalogue/*.py`, `meta/*.py`, `storage/manager.py` | 🟡 IMPORTANT |
+| DELTA-031 | ✅ ALIGNED | **Phase 5 — Frontend logique** | Règles R1–R5, flux de données, guard re-entrance, gestion erreurs | `hse_shell.js`, `hse_fetch.js`, `hse_store.js`, 8 `*_view.js` | 🟡 IMPORTANT |
+| DELTA-032 | 🔴 AUDIT_EN_COURS | **Phase 6 — Catalogue & Méta** | Cohérence lecture/écriture catalogue, assignments, sync | `catalogue/*.py`, `meta/*.py`, `storage/manager.py` | 🟡 IMPORTANT |
 | DELTA-033 | ⬜ EN_ATTENTE | **Phase 7 — Cas limites & robustesse** | Valeurs manquantes, entités disparues, storage vide, premier démarrage | Tous les modules exposés à l'extérieur | 🟢 QUALITÉ |
 
 ---
@@ -169,10 +169,10 @@ Commits : `907469d` (`group_totals.py`) | `af83614` (`analytics.py`) | `3f7d068`
 | `GET/PATCH /api/hse/user_prefs` | `user_prefs.py` | `custom_view.js` | ✅ ALIGNÉ |
 
 **Corrections doc appliquées dans ce commit :**
-- **DELTA-030c** : doc écrivait `score` → corrigé en `score_pct` (valeur réelle produite par `diagnostic.py` et lue par `diagnostic_view.js`)
-- **DELTA-030d** : doc écrivait `entities[]` → corrigé en `items[]` (valeur réelle produite par `scan.py` et lue par `scan_view.js`)
-- **DELTA-030e** : doc écrivait `tariff.{ht_kwh,tva,abo_eur}` → corrigé en `{price_ttc_kwh, tax_rate_pct, subscription_eur_month}` (noms réels des clés dans `settings.py`)
-- **DELTA-030f** : doc écrivait `GET/PUT /api/hse/settings` → corrigé en `GET/PUT /api/hse/settings/pricing` (URL réelle dans `settings.py`)
+- **DELTA-030c** : doc écrivait `score` → corrigé en `score_pct`
+- **DELTA-030d** : doc écrivait `entities[]` → corrigé en `items[]`
+- **DELTA-030e** : doc écrivait `tariff.{ht_kwh,tva,abo_eur}` → corrigé en noms réels
+- **DELTA-030f** : doc écrivait `GET/PUT /api/hse/settings` → corrigé en `/api/hse/settings/pricing`
 
 **Tableau de contrat corrigé (source de vérité pour DELTA-031+) :**
 
@@ -191,18 +191,25 @@ Commits : `907469d` (`group_totals.py`) | `af83614` (`analytics.py`) | `3f7d068`
 
 ---
 
-#### DELTA-031 — Phase 5 : Frontend logique
+#### DELTA-031 — Phase 5 : Frontend logique ✅
 
-**Ce qu'on vérifie :**
-- `hse_panel.js` : déclare bien `customPanelInfo` + importe `hse_shell.js` — pas de `localStorage`
-- `hse_shell.js` : custom element `<hse-panel>` défini, routing onglets correct (index 0–7 → bons modules), `update_hass` propagé à la view active, `unmount` appelé au changement d'onglet
-- `hse_fetch.js` : injecte `Authorization: Bearer` depuis `window.__hseToken`, gère les réponses non-2xx (throw), compatible AbortController
-- `hse_store.js` : `get()` / `patch()` / `set()` cohérents — pas de mutation directe de l'objet retourné
-- Pour chacun des 8 `*_view.js` : R1 (DOM construit dans mount), R2 (guard `_fetching`), R3 (sig JSON), R4 (zéro localStorage), R5 (skeleton), unmount annule le timer, erreur réseau affiche message
+**Résultat audit (2026-04-14) :** R1–R5 respectées dans les 8 `*_view.js` sans exception. 3 anomalies réelles corrigées, 3 choix de conception documentés (no-fix).
+
+**Anomalies corrigées :**
+- **DELTA-031e** (ℹ️ cosmétique) : `diagnostic_view.js` — `_runDiagnostic()` ne posait pas `this._fetching = true` — double-POST possible au double-click — corrigé, flag posé en entrée et libéré dans `finally`
+- **DELTA-031g** (🟡 moyen) : `config_view.js` — `_bindPricing()` rebindait le listener `submit` à chaque changement de section sans cleanup — double-PUT pricing possible — corrigé, handler stocké dans `this._pricingSubmitHandler` + `removeEventListener` avant chaque rebind
+- **DELTA-031j** (🟡 moyen) : `costs_view.js` — `_fetchHistory()` sans AbortController — fuite réseau sur `unmount()` rapide — corrigé, `_historyAbortCtl` dédié annulé dans `unmount()`
+
+Commits : [`febaa4f`](https://github.com/silentiss-jean/hsev3/commit/febaa4fb423cb8015cde422f849255d9784d2056) (`diagnostic_view.js`) | [`acfc7f2`](https://github.com/silentiss-jean/hsev3/commit/acfc7f2fafa5c998276265a53cba7446b1a665c8) (`config_view.js`) | [`9b26be4`](https://github.com/silentiss-jean/hsev3/commit/9b26be4986d9b4bfa181298c0b154c420e3cb7c1) (`costs_view.js`)
+
+**Choix de conception documentés (no-fix) :**
+- **DELTA-031f** : `scan_view.js` — `_bindRowEvents()` appelé à chaque render du tbody — pas de fuite, flux légèrement opaque, commentaire ajouté dans le code
+- **DELTA-031h** : `cards_view.js` — guard statique `if (.hse-cards-root) return` — intentionnel (onglet ACTION, liste statique), commentaire ajouté
+- **DELTA-031i** : `migration_view.js` — wizard repart de l'étape 1 au remontage — comportement correct (wizard éphémère), commentaire ajouté
 
 ---
 
-#### DELTA-032 — Phase 6 : Catalogue & Méta
+#### DELTA-032 — Phase 6 : Catalogue & Méta 🔴 AUDIT_EN_COURS
 
 **Ce qu'on vérifie :**
 - `catalogue/manager.py` : lecture/écriture dans `storage/manager.py` — pas d'accès direct au fichier JSON
@@ -247,6 +254,7 @@ Commits : `907469d` (`group_totals.py`) | `af83614` (`analytics.py`) | `3f7d068`
 
 | ID | Fermé le | Description |
 |---|---|---|
+| DELTA-031 | 2026-04-14 | Phase 5 Frontend logique — R1–R5 conformes, 3 anomalies corrigées (031e/g/j), 3 no-fix documentés (031f/h/i) |
 | DELTA-030 | 2026-04-13 | Phase 4 Contrat API↔Frontend — 8 paires auditées, aucune anomalie code, 4 corrections doc (030c/d/e/f) |
 | DELTA-029 | 2026-04-13 | Phase 3 Moteurs backend — 3 anomalies (029a/b/c) corrigées |
 | DELTA-028 | 2026-04-13 | Phase 2 Sécurité & Auth — 2 anomalies (028a/b) corrigées |
