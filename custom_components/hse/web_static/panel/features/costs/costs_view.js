@@ -14,17 +14,18 @@
 
 export class CostsView {
   constructor() {
-    this._mounted      = false;
-    this._fetching     = false;
-    this._lastSig      = null;
-    this._timer        = null;
-    this._abortCtl     = null;
-    this._hass         = null;
-    this._ctx          = null;
-    this._root         = null;
-    this._period       = 'month';
-    this._historyData  = null;
-    this._domBuilt     = false;  // Guard re-render complet
+    this._mounted         = false;
+    this._fetching        = false;
+    this._lastSig         = null;
+    this._timer           = null;
+    this._abortCtl        = null;
+    this._historyAbortCtl = null;  // DELTA-031j : AbortController dédié à _fetchHistory
+    this._hass            = null;
+    this._ctx             = null;
+    this._root            = null;
+    this._period          = 'month';
+    this._historyData     = null;
+    this._domBuilt        = false;  // Guard re-render complet
   }
 
   mount(container, ctx) {
@@ -45,12 +46,13 @@ export class CostsView {
 
   unmount() {
     this._mounted = false;
-    if (this._timer)    { clearInterval(this._timer);   this._timer    = null; }
-    if (this._abortCtl) { this._abortCtl.abort();        this._abortCtl = null; }
+    if (this._timer)           { clearInterval(this._timer);          this._timer           = null; }
+    if (this._abortCtl)        { this._abortCtl.abort();               this._abortCtl        = null; }
+    if (this._historyAbortCtl) { this._historyAbortCtl.abort();        this._historyAbortCtl = null; }  // DELTA-031j
     this._domBuilt = false;
   }
 
-  // ─── Fetch coûts ──────────────────────────────────────────────────────────
+  // ─── Fetch coûts ────────────────────────────────────────────────────────────
 
   async _fetchData() {
     if (!this._mounted || this._fetching) return;  // R2
@@ -75,7 +77,7 @@ export class CostsView {
     this._render(data);
   }
 
-  // ─── Rendu ─────────────────────────────────────────────────────────────────
+  // ─── Rendu ───────────────────────────────────────────────────────────────
 
   _buildSkeleton() {  // R5
     this._root.innerHTML = `
@@ -181,25 +183,34 @@ export class CostsView {
         await this._ctx.hseFetch('/api/hse/user_prefs', { method: 'PATCH', body: JSON.stringify({ costs_period: this._period }) });
         this._ctx.store.patch('userPrefs', { costs_period: this._period });
       } catch {}
-      this._lastSig = null;  // Forcer le re-render
+      this._lastSig  = null;  // Forcer le re-render
       this._domBuilt = false;
       this._buildSkeleton();
       this._fetchData();
     });
-    this._root.querySelector('.costs-export-csv')?.addEventListener('click', () => this._export('csv'));
+    this._root.querySelector('.costs-export-csv')?.addEventListener('click',  () => this._export('csv'));
     this._root.querySelector('.costs-export-json')?.addEventListener('click', () => this._export('json'));
   }
 
-  // ─── Historique ───────────────────────────────────────────────────────────
+  // ─── Historique (DELTA-031j) ─────────────────────────────────────────────────
 
   async _fetchHistory() {
     if (!this._mounted) return;
+    // DELTA-031j : AbortController dédié pour annuler le fetch sur unmount()
+    this._historyAbortCtl = new AbortController();
     try {
-      const resp = await this._ctx.hseFetch(`/api/hse/history?granularity=month`);
+      const resp = await this._ctx.hseFetch(
+        `/api/hse/history?granularity=month`,
+        { signal: this._historyAbortCtl.signal }
+      );
       if (!this._mounted) return;
       const data = await resp.json();
       this._renderHistory(data);
-    } catch {}
+    } catch (e) {
+      if (e.name !== 'AbortError') console.warn('[costs] history fetch failed', e);
+    } finally {
+      this._historyAbortCtl = null;
+    }
   }
 
   _renderHistory(data) {
