@@ -14,6 +14,9 @@
  *   5. Polling :
  *        - onglets "action" (scan, migration, config) → ZÉRO polling auto
  *        - onglets "lecture" (overview, costs, diagnostic) → suspendu si onglet inactif
+ *   6. CSS Shadow DOM :
+ *        - hse_tokens.shadow.css + hse_themes.shadow.css injectés dans le shadowRoot
+ *        - Chemin statique : /hse-static/shared/styles/
  *
  * Dépendances :
  *   - hse_fetch.js  (hseFetch)
@@ -39,6 +42,15 @@ const TABS = [
 /** Chemin de base des views — relatif à ce fichier */
 const VIEWS_BASE = '../features';
 
+/** Chemin de base des CSS statiques servis par HA (StaticPathConfig) */
+const STYLES_BASE = '/hse-static/shared/styles';
+
+/** CSS à injecter dans le Shadow DOM — ordre important (tokens avant themes) */
+const SHADOW_CSS_FILES = [
+  `${STYLES_BASE}/hse_tokens.shadow.css`,
+  `${STYLES_BASE}/hse_themes.shadow.css`,
+];
+
 class HsePanel extends HTMLElement {
   constructor() {
     super();
@@ -54,6 +66,8 @@ class HsePanel extends HTMLElement {
     this._unsubTab = null;
     /** @type {boolean} Bootstrap terminé */
     this._ready = false;
+    /** @type {boolean} CSS shadow injectés */
+    this._stylesInjected = false;
   }
 
   // ─── Cycle de vie HA ─────────────────────────────────────────────────────────────────────────
@@ -92,7 +106,7 @@ class HsePanel extends HTMLElement {
   // ─── Bootstrap ─────────────────────────────────────────────────────────────────────────────
 
   /**
-   * Initialisation unique : token → manifest + prefs → rendu.
+   * Initialisation unique : token → CSS shadow → manifest + prefs → rendu.
    *
    * Mode dégradé (DELTA-031c) : si les fetches de bootstrap échouent
    * (ex. HA démarre lentement), on continue quand même avec ready=true.
@@ -105,7 +119,10 @@ class HsePanel extends HTMLElement {
     // 1. Poser le token global (R4 sécurité — jamais logué)
     window.__hseToken = hass.auth.data.access_token;
 
-    // 2. Charger manifest frontend + prefs en parallèle
+    // 2. Injecter les CSS dans le Shadow DOM (DELTA-046)
+    await this._injectShadowStyles();
+
+    // 3. Charger manifest frontend + prefs en parallèle
     try {
       const [manifestResp, prefsResp] = await Promise.all([
         hseFetch('/api/hse/frontend_manifest'),
@@ -120,23 +137,68 @@ class HsePanel extends HTMLElement {
       // Appliquer le thème depuis les prefs
       if (prefs?.theme) {
         document.documentElement.setAttribute('data-hse-theme', prefs.theme);
+        if (this.shadowRoot) {
+          this.shadowRoot.host.setAttribute('data-hse-theme', prefs.theme);
+        }
       }
     } catch (e) {
       // Mode dégradé : on log et on continue. Les views feront leur propre fetch.
       console.warn('[hse_shell] bootstrap fetch error — mode dégradé', e);
     }
 
-    // 3. Marquer le shell prêt et monter l'onglet initial
+    // 4. Marquer le shell prêt et monter l'onglet initial
     this._ready = true;
     hseStore.set('ready', true);
 
     this._render();
     this._activateTab(this._activeTab);
 
-    // 4. S'abonner aux changements d'onglet depuis le store
+    // 5. S'abonner aux changements d'onglet depuis le store
     this._unsubTab = hseStore.subscribe('activeTab', (tabId) => {
       this._switchTab(tabId);
     });
+  }
+
+  // ─── Injection CSS Shadow DOM (DELTA-046) ──────────────────────────────────────────────────
+
+  /**
+   * Charge hse_tokens.shadow.css + hse_themes.shadow.css depuis le serveur statique HA
+   * et les injecte dans le shadowRoot via des éléments <style>.
+   *
+   * Mode dégradé : si un fichier est introuvable (404 ou réseau), on log et on continue —
+   * le panel s'affiche sans thème plutôt que de bloquer le démarrage.
+   */
+  async _injectShadowStyles() {
+    if (this._stylesInjected) return;
+    if (!this.shadowRoot) {
+      // Le shadowRoot n'est pas encore attaché — _render() sera appelé avant _activateTab()
+      // donc on injecte après _render(). Cas normal : _render() est appelé dans connectedCallback
+      // avant le premier set hass, ou dans _bootstrap() si connectedCallback précède.
+      this._render(); // s'assure que shadowRoot existe
+    }
+    if (!this.shadowRoot) {
+      console.warn('[hse_shell] shadowRoot non disponible — styles non injectés');
+      return;
+    }
+
+    for (const url of SHADOW_CSS_FILES) {
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) {
+          console.warn(`[hse_shell] CSS shadow introuvable (${resp.status}) : ${url}`);
+          continue;
+        }
+        const css = await resp.text();
+        const styleEl = document.createElement('style');
+        styleEl.dataset.hseSource = url.split('/').pop();
+        styleEl.textContent = css;
+        this.shadowRoot.appendChild(styleEl);
+      } catch (e) {
+        console.warn(`[hse_shell] Impossible de charger le CSS shadow : ${url}`, e);
+      }
+    }
+
+    this._stylesInjected = true;
   }
 
   // ─── Rendu shell ──────────────────────────────────────────────────────────────────────────
