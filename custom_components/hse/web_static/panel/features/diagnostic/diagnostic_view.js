@@ -52,7 +52,9 @@ export class DiagnosticView {
   }
 
   async _runDiagnostic() {
+    // R2 — couvre aussi le POST (DELTA-031e)
     if (this._fetching) return;
+    this._fetching = true;
     this._root.querySelector('.diag-run-btn')?.setAttribute('disabled', 'true');
     try {
       await this._ctx.hseFetch('/api/hse/diagnostic', { method: 'POST', body: '{}' });
@@ -60,6 +62,7 @@ export class DiagnosticView {
     } catch (e) {
       this._renderError(e);
     } finally {
+      this._fetching = false;
       this._root.querySelector('.diag-run-btn')?.removeAttribute('disabled');
     }
   }
@@ -89,7 +92,7 @@ export class DiagnosticView {
     this._root.querySelector('.diag-score').textContent    = `${data.score_pct} %`;
     this._root.querySelector('.diag-last-run').textContent = data.last_run_at
       ? new Date(data.last_run_at).toLocaleString('fr-FR') : '—';
-    this._root.querySelector('.diag-storage-total').textContent   = data.storage_stats.total;
+    this._root.querySelector('.diag-storage-total').textContent    = data.storage_stats.total;
     this._root.querySelector('.diag-storage-selected').textContent = data.storage_stats.selected;
     this._root.querySelector('.diag-storage-ignored').textContent  = data.storage_stats.ignored;
     this._root.querySelector('.diag-storage-pending').textContent  = data.storage_stats.pending;
