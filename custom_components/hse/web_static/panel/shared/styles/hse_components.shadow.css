@@ -1,28 +1,45 @@
-/**
- * hse_components.shadow.css — Classes utilitaires HSE V3 (Shadow DOM)
+/*
+ * HSE V3 — hse_components.shadow.css
+ * Classes utilitaires Shadow DOM — composants visuels.
  *
- * Injecté dans le shadowRoot par hse_shell.js via _injectShadowStyles().
- * Ordre de chargement : hse_tokens → hse_themes → hse_components (ce fichier)
+ * Chargé en 3e position dans SHADOW_CSS_FILES (après hse_tokens + hse_themes).
+ * Utilise uniquement des variables --hse-* définies dans hse_tokens.shadow.css.
  *
- * Résout DELTA-047 : toutes les views utilisaient ces classes mais elles
- * n'étaient définies nulle part — d'où le fond noir et l'absence totale de style.
- *
- * Règles :
- *   - Toutes les valeurs référencent des variables --hse-* de hse_tokens.shadow.css
- *   - Aucune valeur couleur codée en dur (hex, rgb, oklch)
- *   - Ce fichier est CSS pur : zéro JS, zéro endpoint, zéro règle R1–R5 impliquée
+ * DELTA-047 — 2026-04-15
  */
 
-/* ─── Layout ─────────────────────────────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════════════════════
+   .hse-card
+   Conteneur de base : fond surface, border-radius, padding, ombre.
+   Usage : <div class="hse-card">
+   ════════════════════════════════════════════════════════════════════════════ */
 
-/**
- * .hse-grid-4 : grille 4 colonnes responsive
- * Passe à 2 col sous 900px, 1 col sous 500px
- */
+.hse-card {
+  background: var(--hse-surface);
+  border: var(--hse-panel-border);
+  border-radius: var(--hse-panel-radius);
+  padding: var(--hse-panel-padding);
+  box-shadow: var(--hse-panel-shadow);
+  box-sizing: border-box;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   .hse-grid-4 / .hse-grid-2
+   Grilles CSS responsive.
+   .hse-grid-4 : 4 colonnes → 2 → 1  (appareils, KPIs)
+   .hse-grid-2 : 2 colonnes → 1      (sections larges)
+   ════════════════════════════════════════════════════════════════════════════ */
+
 .hse-grid-4 {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: var(--hse-space-4, 1rem);
+  gap: var(--hse-spacing-md);
+}
+
+.hse-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--hse-spacing-md);
 }
 
 @media (max-width: 900px) {
@@ -31,234 +48,205 @@
   }
 }
 
-@media (max-width: 500px) {
-  .hse-grid-4 {
-    grid-template-columns: 1fr;
-  }
-}
-
-/**
- * .hse-grid-2 : grille 2 colonnes responsive
- * Passe à 1 col sous 600px
- */
-.hse-grid-2 {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--hse-space-4, 1rem);
-}
-
-@media (max-width: 600px) {
+@media (max-width: 560px) {
+  .hse-grid-4,
   .hse-grid-2 {
     grid-template-columns: 1fr;
   }
 }
 
-/* ─── Carte ──────────────────────────────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════════════════════
+   .hse-label
+   Étiquette de section : uppercase, petite taille, couleur muette.
+   Usage : <span class="hse-label">Consommation du jour</span>
+   ════════════════════════════════════════════════════════════════════════════ */
 
-/**
- * .hse-card : conteneur de base pour toutes les sections
- * Fond + border-radius + padding + ombre légère
- */
-.hse-card {
-  background: var(--hse-surface, var(--card-background-color, #fff));
-  border-radius: var(--hse-radius-md, 8px);
-  padding: var(--hse-space-4, 1rem);
-  box-shadow: var(--hse-shadow-sm,
-    0 1px 3px rgba(0, 0, 0, 0.08),
-    0 1px 2px rgba(0, 0, 0, 0.04)
-  );
-  box-sizing: border-box;
-}
-
-/* ─── Typographie utilitaire ─────────────────────────────────────────────────────── */
-
-/**
- * .hse-label : étiquette de section
- * Uppercase, petite taille, couleur muted
- */
 .hse-label {
   display: block;
-  font-size: var(--hse-text-xs, 0.75rem);
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-size: var(--hse-font-size-muted);
+  font-weight: var(--hse-font-weight-strong);
+  color: var(--hse-text-muted);
   text-transform: uppercase;
-  color: var(--hse-text-muted, var(--secondary-text-color, #757575));
-  margin-bottom: var(--hse-space-1, 0.25rem);
+  letter-spacing: 0.06em;
+  margin-bottom: var(--hse-spacing-xs);
 }
 
-/**
- * .hse-value-large : grande valeur numérique (puissance, coût, kWh…)
- * Bold, 2rem, couleur primaire
- */
+/* ════════════════════════════════════════════════════════════════════════════
+   .hse-value-large
+   Grande valeur numérique : mono, bold, couleur principale.
+   Usage : <span class="hse-value-large">1 234 W</span>
+   ════════════════════════════════════════════════════════════════════════════ */
+
 .hse-value-large {
   display: block;
-  font-size: var(--hse-text-2xl, 2rem);
-  font-weight: 700;
-  line-height: 1.15;
-  color: var(--hse-text, var(--primary-text-color, #212121));
-  font-variant-numeric: tabular-nums;
+  font-family: var(--hse-number-font-family);
+  font-size: 2rem;
+  font-weight: var(--hse-font-weight-strong);
+  color: var(--hse-value-accent-color);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
 }
 
-/**
- * .hse-muted : texte secondaire discret
- */
-.hse-muted {
-  color: var(--hse-text-muted, var(--secondary-text-color, #757575));
-  font-size: var(--hse-text-sm, 0.875rem);
-}
+/* ════════════════════════════════════════════════════════════════════════════
+   .hse-badge[data-level]
+   Badge coloré selon le niveau ok / warning / error.
+   Usage : <span class="hse-badge" data-level="ok">OK</span>
+            <span class="hse-badge" data-level="warning">Attention</span>
+            <span class="hse-badge" data-level="error">Erreur</span>
+   ════════════════════════════════════════════════════════════════════════════ */
 
-/* ─── Badge ──────────────────────────────────────────────────────────────────────── */
-
-/**
- * .hse-badge : pastille de statut colorée selon data-level
- *
- * Usage :
- *   <span class="hse-badge" data-level="ok">OK</span>
- *   <span class="hse-badge" data-level="warning">Attention</span>
- *   <span class="hse-badge" data-level="error">Erreur</span>
- *   <span class="hse-badge" data-level="info">Info</span>
- */
 .hse-badge {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
-  border-radius: var(--hse-radius-full, 9999px);
-  font-size: var(--hse-text-xs, 0.75rem);
-  font-weight: 600;
-  letter-spacing: 0.03em;
+  gap: var(--hse-spacing-xs);
+  padding: var(--hse-badge-padding);
+  border-radius: var(--hse-badge-radius);
+  border: 1px solid var(--hse-badge-border);
+  background: var(--hse-badge-bg);
+  color: var(--hse-badge-fg);
+  font-size: var(--hse-font-size-muted);
+  font-weight: var(--hse-font-weight-strong);
   white-space: nowrap;
 }
 
 .hse-badge[data-level="ok"] {
-  background: var(--hse-success-highlight, rgba(67, 122, 34, 0.15));
-  color: var(--hse-success, var(--success-color, #437a22));
+  background: var(--hse-success-soft);
+  border-color: var(--hse-success);
+  color: var(--hse-success-dark);
 }
 
 .hse-badge[data-level="warning"] {
-  background: var(--hse-warning-highlight, rgba(150, 66, 25, 0.15));
-  color: var(--hse-warning, var(--warning-color, #964219));
+  background: var(--hse-warning-soft);
+  border-color: var(--hse-warning);
+  color: var(--hse-warning-dark);
 }
 
 .hse-badge[data-level="error"] {
-  background: var(--hse-error-highlight, rgba(176, 0, 32, 0.15));
-  color: var(--hse-error-color, var(--error-color, #b00020));
+  background: var(--hse-error-soft);
+  border-color: var(--hse-error);
+  color: var(--hse-error-dark);
 }
 
-.hse-badge[data-level="info"] {
-  background: var(--hse-primary-highlight, rgba(1, 105, 111, 0.12));
-  color: var(--hse-primary, var(--primary-color, #01696f));
+/* ════════════════════════════════════════════════════════════════════════════
+   .hse-muted
+   Texte secondaire : couleur muette, taille légèrement réduite.
+   Usage : <p class="hse-muted">Dernière mise à jour il y a 30 s</p>
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.hse-muted {
+  color: var(--hse-text-muted);
+  font-size: var(--hse-font-size-muted);
 }
 
-/* ─── Tableau ────────────────────────────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════════════════════
+   .hse-table
+   Tableau lignes alternées, header gradient.
+   Usage : <table class="hse-table"><thead>…</thead><tbody>…</tbody></table>
+   ════════════════════════════════════════════════════════════════════════════ */
 
-/**
- * .hse-table : tableau lignes alternées
- * Appliqué sur <table>
- */
 .hse-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: var(--hse-text-sm, 0.875rem);
-  font-variant-numeric: tabular-nums;
+  font-size: var(--hse-font-size-body);
+  font-family: var(--hse-font-family);
+}
+
+.hse-table thead tr {
+  background: var(--hse-table-header-bg);
+  color: var(--hse-table-header-color);
 }
 
 .hse-table thead th {
+  padding: 10px var(--hse-spacing-md);
+  font-weight: var(--hse-table-header-weight);
   text-align: left;
-  padding: var(--hse-space-2, 0.5rem) var(--hse-space-3, 0.75rem);
-  font-size: var(--hse-text-xs, 0.75rem);
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--hse-text-muted, var(--secondary-text-color, #757575));
-  border-bottom: 1px solid var(--hse-border, var(--divider-color, #e0e0e0));
+  white-space: nowrap;
+}
+
+.hse-table tbody tr {
+  border-bottom: 1px solid var(--hse-border-soft);
+  transition: background var(--hse-transition-fast);
 }
 
 .hse-table tbody tr:nth-child(even) {
-  background: var(--hse-surface-offset, var(--secondary-background-color, #f5f5f5));
+  background: var(--hse-surface-muted);
+}
+
+.hse-table tbody tr:hover {
+  background: var(--hse-hover);
 }
 
 .hse-table tbody td {
-  padding: var(--hse-space-2, 0.5rem) var(--hse-space-3, 0.75rem);
-  border-bottom: 1px solid var(--hse-divider, var(--divider-color, #e0e0e0));
-  color: var(--hse-text, var(--primary-text-color, #212121));
+  padding: 9px var(--hse-spacing-md);
+  color: var(--hse-text);
+  vertical-align: middle;
 }
 
-.hse-table tbody tr:last-child td {
-  border-bottom: none;
+/* Colonne numérique : mono + alignée à droite */
+.hse-table td.num,
+.hse-table th.num {
+  font-family: var(--hse-number-font-family);
+  text-align: right;
 }
 
-/* ─── États UX (contrat 00_methode_front_commune.md §7) ──────────────────────────── */
+/* ════════════════════════════════════════════════════════════════════════════
+   .hse-error
+   Bloc message d'erreur : fond rouge doux, texte lisible.
+   Usage : <p class="hse-error">Erreur : connexion refusée</p>
+   ════════════════════════════════════════════════════════════════════════════ */
 
-/**
- * .hse-error : message d'erreur rouge
- * Déclenché par _renderError() dans chaque view
- */
 .hse-error {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--hse-space-2, 0.5rem);
-  padding: var(--hse-space-3, 0.75rem) var(--hse-space-4, 1rem);
-  border-radius: var(--hse-radius-md, 8px);
-  background: var(--hse-error-highlight, rgba(176, 0, 32, 0.08));
-  color: var(--hse-error-color, var(--error-color, #b00020));
-  font-size: var(--hse-text-sm, 0.875rem);
+  display: block;
+  padding: var(--hse-spacing-md);
+  border-radius: var(--hse-radius-md);
+  background: var(--hse-error-soft);
+  border: 1px solid var(--hse-error);
+  color: var(--hse-error-dark);
+  font-size: var(--hse-font-size-body);
   line-height: 1.5;
 }
 
-/**
- * .hse-empty : état vide — aucune donnée disponible
- */
-.hse-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: var(--hse-space-16, 4rem) var(--hse-space-8, 2rem);
-  color: var(--hse-text-muted, var(--secondary-text-color, #757575));
-  gap: var(--hse-space-3, 0.75rem);
-  min-height: 200px;
-}
+/* ════════════════════════════════════════════════════════════════════════════
+   .hse-skeleton
+   Shimmer loader générique — centralisé ici (remplace la définition
+   inline dans hse_shell.js qui reste en fallback).
+   Usage : <div class="hse-skeleton"></div>
+          <div class="hse-skeleton" style="height:24px;width:60%"></div>
+   ════════════════════════════════════════════════════════════════════════════ */
 
-.hse-empty p {
-  max-width: 36ch;
-  font-size: var(--hse-text-sm, 0.875rem);
-}
-
-/**
- * .hse-skeleton : shimmer de chargement
- *
- * Centralisé ici (DELTA-047) — retiré du <style> inline de hse_shell.js.
- * La déclaration @keyframes hse-shimmer reste dans hse_shell.js
- * (inline style) comme fallback au cas où ce fichier charge après
- * le premier mount ; les deux déclarations sont idempotentes.
- *
- * Variantes :
- *   .hse-skeleton                → bloc générique (min-height 120px)
- *   .hse-skeleton.skeleton-list  → liste d'items (min-height 240px)
- *   .hse-skeleton.skeleton-kpi   → tuile KPI carrée
- */
 .hse-skeleton {
   background: linear-gradient(
     90deg,
-    var(--hse-surface-offset, var(--secondary-background-color, #f5f5f5)) 25%,
-    var(--hse-surface-dynamic, var(--divider-color, #e0e0e0)) 50%,
-    var(--hse-surface-offset, var(--secondary-background-color, #f5f5f5)) 75%
+    var(--hse-surface-muted)  25%,
+    var(--hse-border)         50%,
+    var(--hse-surface-muted)  75%
   );
   background-size: 200% 100%;
   animation: hse-shimmer 1.5s ease-in-out infinite;
-  border-radius: var(--hse-radius-md, 8px);
+  border-radius: var(--hse-radius-sm);
   min-height: 120px;
-  width: 100%;
+}
+
+/* Variantes de taille courantes */
+.hse-skeleton.skeleton-line {
+  min-height: 1em;
+  height: 1em;
+  margin-bottom: var(--hse-spacing-xs);
+}
+
+.hse-skeleton.skeleton-line:last-child {
+  width: 60%;
+}
+
+.hse-skeleton.skeleton-title {
+  min-height: 1.4em;
+  height: 1.4em;
+  width: 40%;
+  margin-bottom: var(--hse-spacing-sm);
 }
 
 .hse-skeleton.skeleton-list {
-  min-height: 240px;
-}
-
-.hse-skeleton.skeleton-kpi {
-  min-height: 80px;
-  border-radius: var(--hse-radius-sm, 4px);
+  min-height: 200px;
 }
 
 @keyframes hse-shimmer {
@@ -269,6 +257,6 @@
 @media (prefers-reduced-motion: reduce) {
   .hse-skeleton {
     animation: none;
-    background: var(--hse-surface-offset, var(--secondary-background-color, #f5f5f5));
+    background: var(--hse-surface-muted);
   }
 }

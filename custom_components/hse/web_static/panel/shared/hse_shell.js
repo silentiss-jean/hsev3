@@ -15,7 +15,8 @@
  *        - onglets "action" (scan, migration, config) → ZÉRO polling auto
  *        - onglets "lecture" (overview, costs, diagnostic) → suspendu si onglet inactif
  *   6. CSS Shadow DOM :
- *        - hse_tokens.shadow.css + hse_themes.shadow.css injectés dans le shadowRoot
+ *        - hse_tokens.shadow.css + hse_themes.shadow.css + hse_components.shadow.css
+ *          injectés dans le shadowRoot
  *        - Chemin statique : /hse-static/shared/styles/
  *
  * Dépendances :
@@ -45,10 +46,15 @@ const VIEWS_BASE = '../features';
 /** Chemin de base des CSS statiques servis par HA (StaticPathConfig) */
 const STYLES_BASE = '/hse-static/shared/styles';
 
-/** CSS à injecter dans le Shadow DOM — ordre important (tokens avant themes) */
+/**
+ * CSS à injecter dans le Shadow DOM.
+ * Ordre obligatoire : tokens → themes → components
+ * (DELTA-046 : tokens + themes ; DELTA-047 : + components)
+ */
 const SHADOW_CSS_FILES = [
   `${STYLES_BASE}/hse_tokens.shadow.css`,
   `${STYLES_BASE}/hse_themes.shadow.css`,
+  `${STYLES_BASE}/hse_components.shadow.css`,
 ];
 
 class HsePanel extends HTMLElement {
@@ -119,7 +125,7 @@ class HsePanel extends HTMLElement {
     // 1. Poser le token global (R4 sécurité — jamais logué)
     window.__hseToken = hass.auth.data.access_token;
 
-    // 2. Injecter les CSS dans le Shadow DOM (DELTA-046)
+    // 2. Injecter les CSS dans le Shadow DOM (DELTA-046 + DELTA-047)
     await this._injectShadowStyles();
 
     // 3. Charger manifest frontend + prefs en parallèle
@@ -159,10 +165,10 @@ class HsePanel extends HTMLElement {
     });
   }
 
-  // ─── Injection CSS Shadow DOM (DELTA-046) ──────────────────────────────────────────────────
+  // ─── Injection CSS Shadow DOM (DELTA-046 + DELTA-047) ─────────────────────────────────────
 
   /**
-   * Charge hse_tokens.shadow.css + hse_themes.shadow.css depuis le serveur statique HA
+   * Charge hse_tokens + hse_themes + hse_components depuis le serveur statique HA
    * et les injecte dans le shadowRoot via des éléments <style>.
    *
    * Mode dégradé : si un fichier est introuvable (404 ou réseau), on log et on continue —
@@ -246,7 +252,11 @@ class HsePanel extends HTMLElement {
           padding: 16px;
           box-sizing: border-box;
         }
-        /* Skeleton générique */
+        /*
+         * Fallback skeleton inline — actif uniquement si hse_components.shadow.css
+         * n'est pas encore chargé (ex. 404 réseau au démarrage).
+         * La définition dans hse_components.shadow.css prend le dessus une fois injectée.
+         */
         .hse-skeleton {
           background: linear-gradient(
             90deg,
