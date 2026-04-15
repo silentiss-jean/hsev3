@@ -42,7 +42,7 @@ Si tu lis ce fichier, tu dois :
 
 ---
 
-## 🗂️ Carte du repo — état réel au 2026-04-14
+## 🗂️ Carte du repo — état réel au 2026-04-15
 
 ```
 hsev3/
@@ -66,8 +66,8 @@ hsev3/
     ├── storage/manager.py                       ✅  (DELTA-038/044)
     ├── engine/* (6 fichiers)                    ✅
     ├── sensors/* (4 fichiers)                   ✅
-    ├── web_static/panel/shared/hse_shell.js     🟡  (DELTA-046 correctif déployé, validation en attente)
-    ├── web_static/panel/shared/styles/          🔴  (DELTA-047 — hse_components.shadow.css MANQUANT)
+    ├── web_static/panel/shared/hse_shell.js     🟡  (DELTA-046/048/049 correctifs déployés, validation en attente)
+    ├── web_static/panel/shared/styles/          🟡  (DELTA-047 correctif déployé, validation en attente)
     └── web_static/panel/features/* (8 views JS) ✅
 ```
 
@@ -95,8 +95,10 @@ hsev3/
 | `recorder` dépendance | Dans `after_dependencies` | DELTA-041 |
 | `default_catalogue()` / `default_meta()` | Proxies dans `storage/manager.py` | DELTA-044 |
 | Classe settings view | `HseSettingsPricingView` (correctif déployé, validation en attente) | DELTA-045 |
-| CSS Shadow DOM | Injection `hse_tokens` + `hse_themes` via `_injectShadowStyles()` dans `hse_shell.js` | DELTA-046 |
-| Classes utilitaires CSS | `hse_components.shadow.css` à créer — `.hse-card`, `.hse-grid-4`, `.hse-badge`, etc. | DELTA-047 |
+| CSS Shadow DOM | Injection `hse_tokens` + `hse_themes` + `hse_components` via `_injectShadowStyles()` | DELTA-046/047 |
+| Background shell | `background: var(--hse-bg)` sur `:host` + `.hse-view-container` | DELTA-048 |
+| Guard navigation rapide | `if (!this.shadowRoot \|\| !this._viewContainer) return;` dans `_updateTabIndicator` | DELTA-049 |
+| `nav.hse-tabs` | `flex-shrink: 0` pour empêcher la nav de disparaître | DELTA-049 |
 
 ---
 
@@ -116,35 +118,10 @@ hsev3/
 | ID | Statut | Titre | Fichier(s) | Prochaine action |
 |---|---|---|---|---|
 | DELTA-045 | 🟡 `CORRECTIF_DEPLOYÉ` | `HseSettingsView` → `HseSettingsPricingView` | `__init__.py` | Valider au prochain reload HA |
-| DELTA-046 | 🟡 `CORRECTIF_DEPLOYÉ` | CSS Shadow DOM non injecté dans `hse_shell.js` | `hse_shell.js` | Valider visuellement — dépend de DELTA-047 |
-| DELTA-047 | 🔴 `AUDIT_EN_COURS` | `hse_components.shadow.css` manquant — classes `.hse-card`, `.hse-grid-4`, `.hse-badge`, `.hse-label`, `.hse-value-large`, `.hse-muted`, `.hse-table`, `.hse-error`, `.hse-skeleton` non définies nulle part | `web_static/panel/shared/styles/` + `hse_shell.js` | **Créer `hse_components.shadow.css` + l'ajouter dans `SHADOW_CSS_FILES`** |
-
-### 🔎 Détail DELTA-047 — classes CSS manquantes
-
-**Symptôme observé (screenshot 2026-04-14 17h20) :**
-Le panel charge et les 8 onglets s'affichent, mais aucun style n'est appliqué :
-- Fond noir uni, pas de cartes, pas de grille, pas de badges colorés
-- Toutes les views utilisent `.hse-card`, `.hse-grid-4`, `.hse-badge`, etc.
-- Ces classes ne sont définies dans **aucun** fichier CSS du repo
-
-**Cause :**
-`hse_tokens.shadow.css` et `hse_themes.shadow.css` ne contiennent que des variables CSS (`--hse-*`).
-Le fichier des **composants** (`hse_components.shadow.css`) est référencé dans la synthèse §3.2 mais n'a jamais été créé.
-
-**Solution décidée (EXPLORATION → à COMMIT) :**
-1. Créer `web_static/panel/shared/styles/hse_components.shadow.css` avec :
-   - `.hse-card` → fond + border-radius + padding + shadow
-   - `.hse-grid-4` / `.hse-grid-2` → CSS Grid responsive
-   - `.hse-label` → étiquette section (uppercase, small, muted)
-   - `.hse-value-large` → grande valeur numérique (bold, 2rem)
-   - `.hse-badge[data-level]` → coloré selon ok/warning/error
-   - `.hse-muted` → texte secondaire
-   - `.hse-table` → tableau lignes alternées
-   - `.hse-error` → message erreur rouge
-   - `.hse-skeleton` → shimmer (centraliser ici depuis hse_shell.js)
-2. Ajouter ce fichier dans `SHADOW_CSS_FILES` de `hse_shell.js`
-
-**Impact :** CSS pur dans le Shadow DOM — zéro backend, zéro règle R1–R5, zéro endpoint touché.
+| DELTA-046 | 🟡 `CORRECTIF_DEPLOYÉ` | CSS Shadow DOM non injecté dans `hse_shell.js` | `hse_shell.js` | Valider visuellement |
+| DELTA-047 | 🟡 `CORRECTIF_DEPLOYÉ` | `hse_components.shadow.css` créé — 9 classes utilitaires | `styles/hse_components.shadow.css` + `hse_shell.js` | Valider visuellement |
+| DELTA-048 | 🟡 `CORRECTIF_DEPLOYÉ` | Fond noir résiduel sous les views (background HA perçait) | `hse_shell.js` | Valider visuellement après reload |
+| DELTA-049 | 🟡 `CORRECTIF_DEPLOYÉ` | Menu onglets disparu sur navigation rapide — guard manquant dans `_updateTabIndicator` + `flex-shrink:0` sur nav | `hse_shell.js` | Valider en naviguant rapidement entre onglets |
 
 ---
 

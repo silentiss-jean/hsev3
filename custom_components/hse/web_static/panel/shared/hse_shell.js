@@ -165,7 +165,7 @@ class HsePanel extends HTMLElement {
     });
   }
 
-  // ─── Injection CSS Shadow DOM (DELTA-046 + DELTA-047) ─────────────────────────────────────
+  // ─── Injection CSS Shadow DOM (DELTA-046 + DELTA-047) ────────────────────────────────────────
 
   /**
    * Charge hse_tokens + hse_themes + hse_components depuis le serveur statique HA
@@ -177,9 +177,6 @@ class HsePanel extends HTMLElement {
   async _injectShadowStyles() {
     if (this._stylesInjected) return;
     if (!this.shadowRoot) {
-      // Le shadowRoot n'est pas encore attaché — _render() sera appelé avant _activateTab()
-      // donc on injecte après _render(). Cas normal : _render() est appelé dans connectedCallback
-      // avant le premier set hass, ou dans _bootstrap() si connectedCallback précède.
       this._render(); // s'assure que shadowRoot existe
     }
     if (!this.shadowRoot) {
@@ -219,6 +216,8 @@ class HsePanel extends HTMLElement {
           flex-direction: column;
           height: 100%;
           font-family: var(--paper-font-body1_-_font-family, sans-serif);
+          /* DELTA-048 : fond de base du host pour éviter le noir HA */
+          background: var(--hse-bg, #f7f9ff);
         }
         nav.hse-tabs {
           display: flex;
@@ -226,6 +225,8 @@ class HsePanel extends HTMLElement {
           border-bottom: 1px solid var(--divider-color, #e0e0e0);
           background: var(--card-background-color, #fff);
           overflow-x: auto;
+          /* Empêche la nav de disparaître sous le contenu */
+          flex-shrink: 0;
         }
         button.hse-tab {
           flex: 0 0 auto;
@@ -251,6 +252,8 @@ class HsePanel extends HTMLElement {
           overflow-y: auto;
           padding: 16px;
           box-sizing: border-box;
+          /* DELTA-048 : fond explicite pour éviter le noir HA sous le contenu */
+          background: var(--hse-bg, #f7f9ff);
         }
         /*
          * Fallback skeleton inline — actif uniquement si hse_components.shadow.css
@@ -373,19 +376,21 @@ class HsePanel extends HTMLElement {
 
   /**
    * Met à jour l'indicateur visuel de l'onglet actif.
+   * DELTA-049 : garde sur shadowRoot + _viewContainer pour éviter le crash
+   * en cas de navigation rapide avant que _render() ait terminé.
    * @param {string} tabId
    */
   _updateTabIndicator(tabId) {
-    if (!this.shadowRoot) return;
+    // DELTA-049 — guard : shadowRoot ou _viewContainer pas encore prêts
+    if (!this.shadowRoot || !this._viewContainer) return;
+
     this.shadowRoot.querySelectorAll('[data-tab]').forEach((btn) => {
       const active = btn.dataset.tab === tabId;
       btn.setAttribute('aria-selected', String(active));
     });
     const panel = this._viewContainer;
-    if (panel) {
-      panel.id = `hse-view-${tabId}`;
-      panel.setAttribute('aria-labelledby', `hse-tab-${tabId}`);
-    }
+    panel.id = `hse-view-${tabId}`;
+    panel.setAttribute('aria-labelledby', `hse-tab-${tabId}`);
   }
 
   // ─── Contexte injecté dans chaque view ────────────────────────────────────────────────────────────────
