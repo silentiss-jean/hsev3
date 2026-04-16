@@ -16,7 +16,7 @@ Si tu lis ce fichier, tu dois :
 4. **Distinguer** les deux modes de travail :
    - **EXPLORATION** → on réfléchit, rien n'est écrit, on ajoute une ligne `EN_DISCUSSION` si la discussion dure
    - **COMMIT** → décision prise, on pousse le patch code + doc → statut passe à `CORRECTIF_DEPLOYÉ` (pas encore `ALIGNED`)
-5. **Ne jamais passer à `✅ ALIGNED`** sans que l'humain ait explicitément confirmé que le correctif fonctionne
+5. **Ne jamais passer à `✅ ALIGNED`** sans que l'humain ait explicitement confirmé que le correctif fonctionne
 6. **Vérifier la 🗂️ Carte du repo** ci-dessous pour connaître l'état réel de chaque fichier
 
 ### 📚 Documents de référence IA — lire dans cet ordre avant tout
@@ -36,38 +36,38 @@ Si tu lis ce fichier, tu dois :
 |---|---|---|
 | P1 | `services.yaml` ↔ `__init__.py` | Chaque service déclaré a-t-il un `async_register` ET un `async_remove` au unload ? |
 | P2 | `translations/*.json` ↔ `*_flow.py` | Les clés `options.step.init.data.*` matchent-elles **exactement** les noms de champs du `vol.Schema` ? |
-| P3 | `__init__.py` imports ↔ modules réels | Chaque `from .X import Y` : la classe/fonction `Y` existe-t-elle **sous ce nom exact** dans `X` ? (cf. DELTA-045 : `HseSettingsView` ≠ `HseSettingsPricingView`) |
+| P3 | `__init__.py` imports ↔ modules réels | Chaque `from .X import Y` : la classe/fonction `Y` existe-t-elle **sous ce nom exact** dans `X` ? |
 | P4 | `const.py` constantes ↔ consommateurs | Chaque constante définie est-elle importée et utilisée ? |
 | P5 | `manifest.json` ↔ imports runtime | Les dépendances HA utilisées sont-elles dans `after_dependencies` ? |
 
 ---
 
-## 🗂️ Carte du repo — état réel au 2026-04-15
+## 🗂️ Carte du repo — état réel au 2026-04-16
 
 ```
 hsev3/
 ├── README.md                                    ✅
 ├── hse_v3_synthese.md                           ✅
 └── custom_components/hse/
-    ├── __init__.py                              🟡  (DELTA-045 correctif déployé, validation en attente)
-    ├── manifest.json                            ✅  (DELTA-041)
+    ├── __init__.py                              🟡  (DELTA-045/051 correctifs déployés, validation en attente)
+    ├── manifest.json                            ✅
     ├── config_flow.py                           ✅
     ├── options_flow.py                          ✅
     ├── const.py                                 ✅
     ├── time_utils.py                            ✅
     ├── repairs.py                               ✅
     ├── services.yaml                            ✅
-    ├── translations/fr.json + en.json           ✅  (DELTA-039/043)
+    ├── translations/fr.json + en.json           ✅
     ├── api/base.py + views/* (13 views)         ✅
-    ├── api/views/settings.py                    ✅  classe = HseSettingsPricingView
-    ├── api/views/migration.py                   ✅  (DELTA-037/040)
+    ├── api/views/settings.py                    ✅
+    ├── api/views/migration.py                   ✅
     ├── catalogue/* (5 fichiers)                 ✅
     ├── meta/* (5 fichiers)                      ✅
-    ├── storage/manager.py                       ✅  (DELTA-038/044)
+    ├── storage/manager.py                       ✅
     ├── engine/* (6 fichiers)                    ✅
     ├── sensors/* (4 fichiers)                   ✅
-    ├── web_static/panel/shared/hse_shell.js     🟡  (DELTA-046/048/049 correctifs déployés, validation en attente)
-    ├── web_static/panel/shared/styles/          🟡  (DELTA-047 correctif déployé, validation en attente)
+    ├── web_static/panel/shared/hse_shell.js     🟡  (DELTA-050 — CSS inliné, validation en attente)
+    ├── web_static/panel/shared/styles/          ✅  (fichiers conservés comme doc, non chargés au runtime)
     └── web_static/panel/features/* (8 views JS) ✅
 ```
 
@@ -85,20 +85,8 @@ hsev3/
 | `engine/cost.py` | `shared_cost_engine.py` V2 — INTACT | `hse_v3_synthese.md` §7 |
 | Sécurité | `requires_auth=True` + `cors_allowed=False` partout | `hse_v3_synthese.md` §4 |
 | Panel HA | `require_admin=True` | `hse_v3_synthese.md` §4 |
-| Nommage frontend | Séparateur `_` | DELTA-006 |
-| `async_scan_hass` | Dans `catalogue/scan_engine.py` | DELTA-032a |
-| `_build_costs_data` | Extraite de `HseCostsView` | DELTA-033d |
-| Migration V2→V3 | No-action | DELTA-036 |
-| Panel reload | `async_remove_panel` + `try/except` | DELTA-034 |
-| Services HA | 9 handlers dans `_register_services()` | DELTA-035 |
-| `default_settings()` | Exportée depuis `storage/manager.py` | DELTA-038 |
-| `recorder` dépendance | Dans `after_dependencies` | DELTA-041 |
-| `default_catalogue()` / `default_meta()` | Proxies dans `storage/manager.py` | DELTA-044 |
-| Classe settings view | `HseSettingsPricingView` (correctif déployé, validation en attente) | DELTA-045 |
-| CSS Shadow DOM | Injection `hse_tokens` + `hse_themes` + `hse_components` via `_injectShadowStyles()` | DELTA-046/047 |
-| Background shell | `background: var(--hse-bg)` sur `:host` + `.hse-view-container` | DELTA-048 |
-| Guard navigation rapide | `if (!this.shadowRoot \|\| !this._viewContainer) return;` dans `_updateTabIndicator` | DELTA-049 |
-| `nav.hse-tabs` | `flex-shrink: 0` pour empêcher la nav de disparaître | DELTA-049 |
+| CSS Shadow DOM | **Inliné dans `hse_shell.js`** — zéro fetch runtime | DELTA-050 |
+| Views migration | `HseMigrationExportView` + `HseMigrationApplyView` enregistrées dans `__init__.py` | DELTA-051 |
 
 ---
 
@@ -118,10 +106,12 @@ hsev3/
 | ID | Statut | Titre | Fichier(s) | Prochaine action |
 |---|---|---|---|---|
 | DELTA-045 | 🟡 `CORRECTIF_DEPLOYÉ` | `HseSettingsView` → `HseSettingsPricingView` | `__init__.py` | Valider au prochain reload HA |
-| DELTA-046 | 🟡 `CORRECTIF_DEPLOYÉ` | CSS Shadow DOM non injecté dans `hse_shell.js` | `hse_shell.js` | Valider visuellement |
-| DELTA-047 | 🟡 `CORRECTIF_DEPLOYÉ` | `hse_components.shadow.css` créé — 9 classes utilitaires | `styles/hse_components.shadow.css` + `hse_shell.js` | Valider visuellement |
-| DELTA-048 | 🟡 `CORRECTIF_DEPLOYÉ` | Fond noir résiduel sous les views (background HA perçait) | `hse_shell.js` | Valider visuellement après reload |
-| DELTA-049 | 🟡 `CORRECTIF_DEPLOYÉ` | Menu onglets disparu sur navigation rapide — guard manquant dans `_updateTabIndicator` + `flex-shrink:0` sur nav | `hse_shell.js` | Valider en naviguant rapidement entre onglets |
+| DELTA-046 | 🟡 `CORRECTIF_DEPLOYÉ` | CSS Shadow DOM — résolu par DELTA-050 | `hse_shell.js` | Considérer ALIGNED avec DELTA-050 |
+| DELTA-047 | 🟡 `CORRECTIF_DEPLOYÉ` | `hse_components.shadow.css` — résolu par DELTA-050 (inliné) | `hse_shell.js` | Considérer ALIGNED avec DELTA-050 |
+| DELTA-048 | 🟡 `CORRECTIF_DEPLOYÉ` | Fond noir résiduel — résolu par DELTA-050 (`:host` background dans CSS inline) | `hse_shell.js` | Valider visuellement |
+| DELTA-049 | 🟡 `CORRECTIF_DEPLOYÉ` | Guard navigation rapide + flex-shrink:0 nav | `hse_shell.js` | Valider en naviguant rapidement |
+| DELTA-050 | 🟡 `CORRECTIF_DEPLOYÉ` | **CSS Shadow DOM inliné** — suppression des `fetch()` qui échouaient silencieusement | `hse_shell.js` | **Reload HA requis — valider visuellement** |
+| DELTA-051 | 🟡 `CORRECTIF_DEPLOYÉ` | `HseMigrationExportView` + `HseMigrationApplyView` non enregistrées → 404 | `__init__.py` | Valider onglet Migration après reload HA |
 
 ---
 
