@@ -30,7 +30,7 @@ Si tu lis ce fichier, tu dois :
 
 ---
 
-## 🔒 Règle permanente — Cohérence inter-fichiers (ajoutée 2026-04-14)
+## 🔒 Règle permanente — Cohérence inter-fichiers
 
 | # | Paire | Question à poser systématiquement |
 |---|---|---|
@@ -49,7 +49,7 @@ hsev3/
 ├── README.md                                    ✅
 ├── hse_v3_synthese.md                           ✅
 └── custom_components/hse/
-    ├── __init__.py                              🟡  (DELTA-045/051 correctifs déployés, validation en attente)
+    ├── __init__.py                              ✅  (backend stable)
     ├── manifest.json                            ✅
     ├── config_flow.py                           ✅
     ├── options_flow.py                          ✅
@@ -59,16 +59,13 @@ hsev3/
     ├── services.yaml                            ✅
     ├── translations/fr.json + en.json           ✅
     ├── api/base.py + views/* (13 views)         ✅
-    ├── api/views/settings.py                    ✅
-    ├── api/views/migration.py                   ✅
     ├── catalogue/* (5 fichiers)                 ✅
     ├── meta/* (5 fichiers)                      ✅
     ├── storage/manager.py                       ✅
     ├── engine/* (6 fichiers)                    ✅
     ├── sensors/* (4 fichiers)                   ✅
-    ├── web_static/panel/shared/hse_shell.js     🟡  (DELTA-050 — CSS inliné, validation en attente)
-    ├── web_static/panel/shared/styles/          ✅  (fichiers conservés comme doc, non chargés au runtime)
-    └── web_static/panel/features/* (8 views JS) ✅
+    ├── web_static/panel/                        🔴  ABANDON — DELTA-052 : tout le front est à recoder
+    └── doc/                                     ✅
 ```
 
 ---
@@ -82,11 +79,11 @@ hsev3/
 | Auth token | `hse_fetch.js` injecte `Bearer` auto | Règle R4 |
 | Persistance préfs UI | `PATCH /api/hse/user_prefs` — jamais localStorage | Règle R4 |
 | Structure backend | Sous-dossiers `catalogue/`, `meta/`, `engine/`, `storage/`, `api/` | `hse_v3_synthese.md` §3.2 |
-| `engine/cost.py` | `shared_cost_engine.py` V2 — INTACT | `hse_v3_synthese.md` §7 |
+| `engine/cost.py` | `shared_cost_engine.py` V2 — INTACT, ne pas toucher | `hse_v3_synthese.md` §7 |
 | Sécurité | `requires_auth=True` + `cors_allowed=False` partout | `hse_v3_synthese.md` §4 |
 | Panel HA | `require_admin=True` | `hse_v3_synthese.md` §4 |
-| CSS Shadow DOM | **Inliné dans `hse_shell.js`** — zéro fetch runtime | DELTA-050 |
-| Views migration | `HseMigrationExportView` + `HseMigrationApplyView` enregistrées dans `__init__.py` | DELTA-051 |
+| CSS Shadow DOM | **Inliné dans `hse_shell.js`** — zéro fetch runtime (décision DELTA-050) | `hse_shell.js` |
+| **Front à refaire** | **Refonte complète page par page** — décision 2026-04-16 | DELTA-052 |
 
 ---
 
@@ -97,6 +94,7 @@ hsev3/
 | 🟠 | `EN_DISCUSSION` | Réflexion en cours, rien de commité |
 | 🔴 | `AUDIT_EN_COURS` | Phase d'audit démarrée, résultats à venir |
 | 🟡 | `CORRECTIF_DEPLOYÉ` | Patch commité — **en attente de validation humaine** |
+| ⭐ | `ABANDON` | Écart abandonné — problème noyé dans une refonte plus large |
 | ✅ | `ALIGNED` | Fermé — **uniquement après confirmation humaine** |
 
 ---
@@ -105,13 +103,77 @@ hsev3/
 
 | ID | Statut | Titre | Fichier(s) | Prochaine action |
 |---|---|---|---|---|
-| DELTA-045 | 🟡 `CORRECTIF_DEPLOYÉ` | `HseSettingsView` → `HseSettingsPricingView` | `__init__.py` | Valider au prochain reload HA |
-| DELTA-046 | 🟡 `CORRECTIF_DEPLOYÉ` | CSS Shadow DOM — résolu par DELTA-050 | `hse_shell.js` | Considérer ALIGNED avec DELTA-050 |
-| DELTA-047 | 🟡 `CORRECTIF_DEPLOYÉ` | `hse_components.shadow.css` — résolu par DELTA-050 (inliné) | `hse_shell.js` | Considérer ALIGNED avec DELTA-050 |
-| DELTA-048 | 🟡 `CORRECTIF_DEPLOYÉ` | Fond noir résiduel — résolu par DELTA-050 (`:host` background dans CSS inline) | `hse_shell.js` | Valider visuellement |
-| DELTA-049 | 🟡 `CORRECTIF_DEPLOYÉ` | Guard navigation rapide + flex-shrink:0 nav | `hse_shell.js` | Valider en naviguant rapidement |
-| DELTA-050 | 🟡 `CORRECTIF_DEPLOYÉ` | **CSS Shadow DOM inliné** — suppression des `fetch()` qui échouaient silencieusement | `hse_shell.js` | **Reload HA requis — valider visuellement** |
-| DELTA-051 | 🟡 `CORRECTIF_DEPLOYÉ` | `HseMigrationExportView` + `HseMigrationApplyView` non enregistrées → 404 | `__init__.py` | Valider onglet Migration après reload HA |
+| DELTA-052 | 🔴 `AUDIT_EN_COURS` | **REFONTE COMPLÈTE DU FRONT** — recoder toutes les pages JS une par une | `web_static/panel/` — tout | Voir section DELTA-052 ci-dessous |
+
+---
+
+## 🔴 DELTA-052 — Refonte complète du frontend (ouvert 2026-04-16)
+
+### Contexte
+
+Le front existant (`web_static/panel/`) a accumulé trop de dette :
+- Shadow DOM sans style malgré plusieurs tentatives de correctif
+- CSS inliné non appliqué (fond noir persistant)
+- Architecture de chargement fragile (imports dynamiques échouent silencieusement)
+- Impossible de debugger incrémentalement sans casser autre chose
+
+**Décision 2026-04-16 :** on efface et on repart de zéro, page par page.
+Chaque page est construite + testée contre le backend réel avant de passer à la suivante.
+
+### Contraintes non négociables (hse_v3_synthese.md + 00_methode_front_commune.md)
+
+- **R1** — `mount()` construit le DOM une fois. `update_hass()` ne touche jamais le DOM. `unmount()` nettoie tout.
+- **R2** — Flag `_fetching` sur chaque fetch (anti race condition)
+- **R3** — Signature `JSON.stringify` avant tout `_render()` (anti re-render inutile)
+- **R4** — Zéro `localStorage` — tout passe par `PATCH /api/hse/user_prefs`
+- **R5** — Skeleton `.hse-skeleton` posé dans `mount()` avant le premier fetch
+- Tous les appels HTTP via `ctx.hseFetch` (jamais `fetch` direct)
+- CSS Shadow DOM **inliné dans `hse_shell.js`** (pas de fichiers CSS chargés au runtime)
+- Vanilla JS uniquement — zéro framework
+
+### Ordre de reconstruction recommandé
+
+| Ordre | Page | Endpoint(s) testé(s) | Statut |
+|---|---|---|---|
+| 1 | `hse_shell.js` | `/api/hse/ping`, `/api/hse/frontend_manifest` | ❓ À faire |
+| 2 | `overview` | `/api/hse/overview` | ❓ À faire |
+| 3 | `diagnostic` | `/api/hse/diagnostic` | ❓ À faire |
+| 4 | `scan` | `/api/hse/scan` | ❓ À faire |
+| 5 | `config` | `/api/hse/settings` | ❓ À faire |
+| 6 | `costs` | `/api/hse/costs`, `/api/hse/history`, `/api/hse/export` | ❓ À faire |
+| 7 | `migration` | `/api/hse/migration`, `/api/hse/migration/export`, `/api/hse/migration/apply` | ❓ À faire |
+| 8 | `cards` | `/api/hse/catalogue` | ❓ À faire |
+| 9 | `custom` | `/api/hse/user_prefs` | ❓ À faire |
+
+### Règles de session pour l'IA
+
+- **Démarrer par `hse_shell.js`** — le shell doit fonctionner avant de coder quoi que ce soit d'autre
+- **Une page à la fois** — ne pas passer à la suivante avant que la précédente soit validée par l'humain
+- **Tester le backend** à chaque étape : si un endpoint ne répond pas correctement, ouvrir un écart DELTA séparé dans la section "Backend à corriger" ci-dessous
+- **Mode COMMIT uniquement** : pas d'EXPLORATION sans page complète à tester
+- Le CSS reste **inliné dans `hse_shell.js`** — les fichiers `/styles/*.css` sont conservés comme documentation uniquement
+
+### Backend à corriger (ouvert au fil des tests)
+
+| ID | Endpoint | Problème | Statut |
+|---|---|---|---|
+| *(vide — à compléter lors des tests)* | | | |
+
+---
+
+## Écarts abandonnés (2026-04-16)
+
+Tous les écarts suivants sont abandonnés car noyés dans DELTA-052 (refonte complète du front).
+
+| ID | Titre original | Raison de l'abandon |
+|---|---|---|
+| DELTA-045 | `HseSettingsView` → `HseSettingsPricingView` | Front à recoder — problème de nommage irrelevant avec la refonte |
+| DELTA-046 | CSS Shadow DOM non injecté | Absorbé par DELTA-052 |
+| DELTA-047 | `hse_components.shadow.css` manquant | Absorbé par DELTA-052 |
+| DELTA-048 | Fond noir résiduel | Absorbé par DELTA-052 |
+| DELTA-049 | Guard navigation rapide | Absorbé par DELTA-052 |
+| DELTA-050 | CSS inliné dans `hse_shell.js` | Absorbé par DELTA-052 — la décision d'inliner reste valide |
+| DELTA-051 | `HseMigrationExportView` + `HseMigrationApplyView` non enregistrées | `__init__.py` corrigé, backend OK — sera vérifié lors du test de l'onglet migration |
 
 ---
 
