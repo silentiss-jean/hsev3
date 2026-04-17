@@ -36,8 +36,8 @@ _LOGGER = logging.getLogger(__name__)
 
 _STATIC_DIR = Path(__file__).parent / "web_static" / "panel"
 _STATIC_URL = "/hse-static"
-# DELTA-052 0a : module_url pointe vers hse_panel.html (embed_iframe=True)
-_PANEL_MODULE_URL = f"{_STATIC_URL}/hse_panel.html"
+# DELTA-052 0a : module_url pointe vers hse_panel.js (Custom Element — crée lui-même l'iframe)
+_PANEL_MODULE_URL = f"{_STATIC_URL}/hse_panel.js"
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
@@ -74,8 +74,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             config={
                 "_panel_custom": {
                     "name": "hse-panel",
-                    # DELTA-052 0a : iframe stable — immune au cycle connectedCallback/disconnectedCallback
-                    "embed_iframe": True,
+                    # DELTA-052 0a : embed_iframe=False — hse_panel.js crée lui-même l'iframe
+                    # (embed_iframe=True invalide : HA charge module_url comme JS ES6, pas comme src iframe)
+                    "embed_iframe": False,
                     "trust_external_script": False,
                     "module_url": _PANEL_MODULE_URL,
                 }

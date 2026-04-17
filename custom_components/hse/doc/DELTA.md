@@ -19,6 +19,15 @@ Si tu lis ce fichier, tu dois :
 5. **Ne jamais passer à `✅ ALIGNED`** sans que l'humain ait explicitement confirmé que le correctif fonctionne
 6. **Vérifier la 🗂️ Carte du repo** ci-dessous pour connaître l'état réel de chaque fichier
 
+### R0 — Vérifier avant de proposer une décision d'architecture
+
+> Avant de proposer un changement architectural (intégration HA, mode de chargement, auth, cycle de vie),
+> l'IA doit soit :
+> - Citer une source vérifiable (code HA, doc officielle, précédent dans le repo)
+> - Ou signaler explicitement : `⚠️ hypothèse non vérifiée — à confirmer avant commit`
+>
+> Toute décision non sourcée reste en statut `EN_DISCUSSION` et **ne peut pas passer en COMMIT**.
+
 ### 📚 Documents de référence IA — lire dans cet ordre avant tout
 
 | Priorité | Fichier | Rôle |
@@ -49,7 +58,7 @@ hsev3/
 ├── README.md                                    ✅
 ├── hse_v3_synthese.md                           ✅
 └── custom_components/hse/
-    ├── __init__.py                              🟡 À modifier — embed_iframe=True + module_url→hse_panel.html
+    ├── __init__.py                              ✅ embed_iframe=False + module_url→hse_panel.js
     ├── manifest.json                            ✅
     ├── config_flow.py                           ✅
     ├── options_flow.py                          ✅
@@ -66,8 +75,8 @@ hsev3/
     ├── sensors/* (4 fichiers)                   ✅
     ├── web_static_old/                          ⭐ Archive — référence uniquement, ne pas toucher
     ├── web_static/panel/
-    │   ├── hse_panel.js                         ❓ À créer — wrapper Custom Element HA (postMessage token)
-    │   ├── hse_panel.html                       ❓ À créer — page HTML bootstrap iframe
+    │   ├── hse_panel.js                         ✅ Wrapper Custom Element HA (crée l'iframe, postMessage token)
+    │   ├── hse_panel.html                       ✅ Page HTML bootstrap (écoute hse-auth, importe hse_shell.js)
     │   ├── style.hse.panel.css                  ✅ conservé
     │   └── shared/
     │       ├── hse_fetch.js                     ✅ conservé
@@ -93,7 +102,7 @@ hsev3/
 | `engine/cost.py` | `shared_cost_engine.py` V2 — INTACT, ne pas toucher | `hse_v3_synthese.md` §7 |
 | Sécurité | `requires_auth=True` + `cors_allowed=False` partout | `hse_v3_synthese.md` §4 |
 | Panel HA | `require_admin=True` | `hse_v3_synthese.md` §4 |
-| **Mode intégration HA** | **`embed_iframe: True`** — immune au cycle connectedCallback/disconnectedCallback | DELTA-052 |
+| **Mode intégration HA** | **`embed_iframe: False`** — `hse_panel.js` (Custom Element) crée lui-même l'`<iframe>` et gère le postMessage token. `embed_iframe: True` invalide : HA tente de charger `module_url` comme module ES6, pas comme src iframe. | DELTA-052 (corrigé 2026-04-17) |
 | **Front à refaire** | **Refonte complète page par page** — décision 2026-04-16 | DELTA-052 |
 
 ---
@@ -133,20 +142,24 @@ Le front existant (`web_static/panel/`) a accumulé trop de dette :
 
 **Actions réalisées au 2026-04-17 :**
 - `web_static/panel/features/` supprimé (onglets JS vidés)
-- `web_static/panel/hse_panel.html` + `hse_panel.js` supprimés
+- `web_static/panel/hse_panel.html` + `hse_panel.js` créés (0b + 0c)
 - `web_static_old/` créé — archive de l'ancien front (référence, ne pas modifier)
 
 ### Décision architecture — 2026-04-17
 
-**Mode d'intégration HA retenu : `embed_iframe: True`**
+**Mode d'intégration HA retenu : `embed_iframe: False`**
 
-Raison : le bug "écran noir au retour de bureau virtuel" est causé par le cycle
-`connectedCallback`/`disconnectedCallback` de HA qui détruit l'état Shadow DOM.
-L'iframe est immune à ce cycle — elle reste stable quand HA perd le focus.
+Raison : avec `embed_iframe: True`, HA tente de charger `module_url` comme un **module ES6**
+(voir `custom-panel.ts:102`). Si `module_url` pointe vers un `.html`, HA échoue avec
+"Unable to load the panel source".
 
-**Auth :** token récupéré via `postMessage` depuis `hse_panel.js` (wrapper Custom Element
-minimaliste côté HA, ~50 lignes) → injecté dans `window.__hseToken` dans l'iframe.
-Zéro demande d'auth à l'utilisateur — le token de session HA est utilisé directement.
+Avec `embed_iframe: False`, HA charge `module_url` comme un script JS et attend un
+`customElements.define`. `hse_panel.js` enregistre `HsePanel` (Custom Element) qui crée
+lui-même `<iframe src="/hse-static/hse_panel.html">` — le bug "écran noir macOS" est
+contourné car c'est **notre code** qui contrôle le cycle de vie de l'iframe, pas HA.
+
+**Auth :** token récupéré via `postMessage` depuis `hse_panel.js` → injecté dans
+`window.__hseToken` dans l'iframe. Zéro demande d'auth à l'utilisateur.
 
 **Point d'entrée :** `hse_panel.html` servi via `StaticPathConfig` (`/hse-static/`)
 
@@ -175,9 +188,9 @@ HA charge hse_panel.js (module_url)
 
 | Ordre | Fichier | Description | Statut |
 |-------|---------|-------------|--------|
-| 0a | `__init__.py` | `embed_iframe: True` + `module_url` → `/hse-static/hse_panel.html` | ❓ À faire |
-| 0b | `web_static/panel/hse_panel.js` | Wrapper Custom Element HA — crée l'iframe, envoie le token via `postMessage` | ❓ À faire |
-| 0c | `web_static/panel/hse_panel.html` | Page HTML bootstrap — écoute `hse-auth`, injecte `window.__hseToken`, importe `hse_shell.js` | ❓ À faire |
+| 0a | `__init__.py` | `embed_iframe: False` + `module_url` → `/hse-static/hse_panel.js` | ✅ Fait |
+| 0b | `web_static/panel/hse_panel.js` | Wrapper Custom Element HA — crée l'iframe, envoie le token via `postMessage` | ✅ Fait |
+| 0c | `web_static/panel/hse_panel.html` | Page HTML bootstrap — écoute `hse-auth`, injecte `window.__hseToken`, importe `hse_shell.js` | ✅ Fait |
 | 1 | `web_static/panel/shared/hse_shell.js` | Shell principal — routing onglets, `/api/hse/ping`, `/api/hse/frontend_manifest` | ❓ À faire |
 | 2 | `web_static/panel/features/overview/overview_view.js` | Onglet Overview — `/api/hse/overview` | ❓ À faire |
 | 3 | `web_static/panel/features/diagnostic/diagnostic_view.js` | Onglet Diagnostic — `/api/hse/diagnostic` | ❓ À faire |
@@ -190,34 +203,12 @@ HA charge hse_panel.js (module_url)
 
 ### Règles de session pour l'IA
 
-- **Démarrer par l'étape 0a → 0b → 0c → 1** dans cet ordre strict — le shell doit fonctionner avant tout onglet
+- **Démarrer par l'étape 1** — 0a/0b/0c sont faits
 - **Une étape à la fois** — ne pas passer à la suivante avant validation humaine
 - **Tester le backend** à chaque étape : si un endpoint ne répond pas, ouvrir un écart DELTA dans "Backend à corriger"
 - **Mode COMMIT uniquement** : chaque réponse est un patch complet testable
 - Le CSS reste dans `hse_panel.html` (global) ou inliné dans chaque view — aucun fichier CSS chargé séparément au runtime
 - Les fichiers dans `web_static_old/` sont en lecture seule — référence uniquement
-
-### Spécifications techniques des étapes 0a–0c
-
-**0a — `__init__.py` (modification)**
-- Changer `_PANEL_MODULE_URL` : `hse_panel.js` → `hse_panel.html`
-- Changer dans `async_register_built_in_panel` : `embed_iframe: False` → `embed_iframe: True`
-- Aucune autre modification
-
-**0b — `hse_panel.js` (création)**
-- Custom Element `hse-panel` minimaliste (~50 lignes)
-- `connectedCallback` : crée `<iframe src="/hse-static/hse_panel.html">` plein écran, écoute `postMessage`
-- `set hass(hass)` : récupère `hass.auth.data.access_token`, l'envoie via `postMessage {type:'hse-auth', token}` dès que l'iframe signale `hse-ready`
-- `disconnectedCallback` : retire le listener `message`
-- Guard `embed_iframe` double-mount dans `connectedCallback`
-
-**0c — `hse_panel.html` (création)**
-- Page HTML autonome, CSS global (pas de Shadow DOM)
-- Au chargement : envoie `postMessage {type:'hse-ready'}` au parent
-- Écoute `postMessage {type:'hse-auth', token}` → stocke dans `window.__hseToken`
-- Puis `import('/hse-static/shared/hse_shell.js')` en dynamique → `new HseShell().mount(root)`
-- Affiche un état "Initialisation…" pendant l'attente du token
-- Gère le cas d'erreur si `hse_shell.js` échoue à charger
 
 ### Backend à corriger (ouvert au fil des tests)
 
