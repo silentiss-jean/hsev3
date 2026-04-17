@@ -1,0 +1,17 @@
+/*
+ * HSE V3 — hse_alias.v2.css
+ * Alias V2 → V1 pour rétro-compatibilité des variables underscore.
+ * Copié intact depuis V2 — DELTA-016 — 2026-04-10
+ */
+
+:host {
+  --hse_border:   var(--hse-border);
+  --hse_muted:    var(--hse-text-muted);
+  --hse_card_bg:  var(--hse-surface);
+  --hse_danger:   var(--hse-error);
+  --hse_accent:   var(--hse-accent);
+  --hse_gap:      var(--hse-spacing-md);
+  --hse_radius:   var(--hse-radius-lg);
+  --hse_fg:       var(--hse-text);
+  --hse_code_bg:  var(--hse-surface-muted, #f1f5f9);
+}

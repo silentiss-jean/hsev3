@@ -1,0 +1,431 @@
+/*
+ * hse_themes.shadow.css — Thèmes clair / sombre pour Shadow DOM
+ *
+ * Stratégie :
+ *   1. HA injecte son thème via des variables CSS dans :root (--primary-color, etc.)
+ *   2. On écoute l'attribut [data-theme] sur <html> posé par l'onglet Custom
+ *   3. On surcharge les tokens hse_tokens.shadow.css selon le thème actif
+ *
+ * Priorité de résolution :
+ *   Thème HSE explicite (data-theme="hse-dark")  >  prefers-color-scheme  >  défauts tokens
+ *
+ * Tokens surchargés ici : surfaces, texte, ombres.
+ * Les couleurs sémantiques (success/warning/error) sont intentionnellement
+ * stables entre les thèmes (elles communiquent un sens, pas un style).
+ */
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   THÈME CLAIR (défaut — reprend les variables HA telles quelles)
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+:host([data-theme="hse-light"]),
+:host-context([data-theme="hse-light"]) :host,
+:host-context(html:not([data-theme])) :host {
+  --hse-surface-0:      #ffffff;
+  --hse-surface-1:      #f5f5f5;
+  --hse-surface-2:      #eeeeee;
+  --hse-surface-raised: #ffffff;
+  --hse-divider:        rgba(0, 0, 0, 0.10);
+  --hse-border:         rgba(0, 0, 0, 0.08);
+
+  --hse-text:           #212121;
+  --hse-text-muted:     #616161;
+  --hse-text-faint:     #9e9e9e;
+
+  --hse-shadow-xs: 0 1px 2px  rgba(0,0,0,0.06);
+  --hse-shadow-sm: 0 2px 4px  rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --hse-shadow-md: 0 4px 12px rgba(0,0,0,0.10), 0 2px 4px rgba(0,0,0,0.06);
+  --hse-shadow-lg: 0 8px 24px rgba(0,0,0,0.12), 0 4px 8px rgba(0,0,0,0.08);
+
+  --hse-skeleton-base:  #e0e0e0;
+  --hse-skeleton-shine: #f5f5f5;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   THÈME SOMBRE
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+:host([data-theme="hse-dark"]),
+:host-context([data-theme="hse-dark"]) :host {
+  --hse-surface-0:      #1e1e1e;
+  --hse-surface-1:      #2a2a2a;
+  --hse-surface-2:      #333333;
+  --hse-surface-raised: #252525;
+  --hse-divider:        rgba(255, 255, 255, 0.08);
+  --hse-border:         rgba(255, 255, 255, 0.06);
+
+  --hse-text:           #e0e0e0;
+  --hse-text-muted:     #9e9e9e;
+  --hse-text-faint:     #616161;
+  --hse-text-inverse:   #121212;
+
+  --hse-shadow-xs: 0 1px 2px  rgba(0,0,0,0.3);
+  --hse-shadow-sm: 0 2px 4px  rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.2);
+  --hse-shadow-md: 0 4px 12px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.3);
+  --hse-shadow-lg: 0 8px 24px rgba(0,0,0,0.6), 0 4px 8px rgba(0,0,0,0.4);
+
+  --hse-skeleton-base:  #2a2a2a;
+  --hse-skeleton-shine: #383838;
+
+  --hse-table-header-bg:  #252525;
+  --hse-table-row-hover:  rgba(255,255,255,0.04);
+  --hse-table-row-stripe: rgba(255,255,255,0.02);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   RESPECT DU PRÉFÉRENCE SYSTÈME (fallback si aucun data-theme posé)
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+@media (prefers-color-scheme: dark) {
+  :host-context(html:not([data-theme])) :host {
+    --hse-surface-0:      #1e1e1e;
+    --hse-surface-1:      #2a2a2a;
+    --hse-surface-2:      #333333;
+    --hse-surface-raised: #252525;
+    --hse-divider:        rgba(255, 255, 255, 0.08);
+    --hse-border:         rgba(255, 255, 255, 0.06);
+
+    --hse-text:           #e0e0e0;
+    --hse-text-muted:     #9e9e9e;
+    --hse-text-faint:     #616161;
+
+    --hse-shadow-xs: 0 1px 2px  rgba(0,0,0,0.3);
+    --hse-shadow-sm: 0 2px 4px  rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.2);
+    --hse-shadow-md: 0 4px 12px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.3);
+    --hse-shadow-lg: 0 8px 24px rgba(0,0,0,0.6), 0 4px 8px rgba(0,0,0,0.4);
+
+    --hse-skeleton-base:  #2a2a2a;
+    --hse-skeleton-shine: #383838;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   THÈMES COULEUR HSE (accentuation personnalisée — onglet Custom)
+   Chaque thème surcharge uniquement --hse-accent et ses dérivés.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* Défaut HA (bleu) */
+:host-context([data-hse-palette="default"]) :host,
+:host([data-hse-palette="default"]) {
+  --hse-accent:       var(--primary-color, #03a9f4);
+  --hse-accent-hover: color-mix(in oklch, var(--hse-accent) 80%, #000);
+  --hse-accent-light: color-mix(in oklch, var(--hse-accent) 15%, transparent);
+}
+
+/* Vert énergie */
+:host-context([data-hse-palette="energy"]) :host,
+:host([data-hse-palette="energy"]) {
+  --hse-accent:       #43a047;
+  --hse-accent-hover: #2e7d32;
+  --hse-accent-light: rgba(67, 160, 71, 0.12);
+}
+
+/* Ambre / économies */
+:host-context([data-hse-palette="amber"]) :host,
+:host([data-hse-palette="amber"]) {
+  --hse-accent:       #f9a825;
+  --hse-accent-hover: #f57f17;
+  --hse-accent-light: rgba(249, 168, 37, 0.12);
+}
+
+/* Violet premium */
+:host-context([data-hse-palette="violet"]) :host,
+:host([data-hse-palette="violet"]) {
+  --hse-accent:       #7b1fa2;
+  --hse-accent-hover: #6a1b9a;
+  --hse-accent-light: rgba(123, 31, 162, 0.12);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   COMPOSANTS GLOBAUX (styles partagés entre tous les onglets)
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* Carte */
+.hse-card {
+  background:    var(--hse-surface-raised);
+  border:        1px solid var(--hse-border);
+  border-radius: var(--hse-radius-lg);
+  padding:       var(--hse-space-4);
+  box-shadow:    var(--hse-shadow-sm);
+  transition:    box-shadow var(--hse-transition-fast),
+                 border-color var(--hse-transition-fast);
+}
+.hse-card:hover {
+  box-shadow:    var(--hse-shadow-md);
+  border-color:  color-mix(in oklch, var(--hse-accent) 25%, var(--hse-border));
+}
+
+/* Grilles utilitaires */
+.hse-grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--hse-space-4); }
+.hse-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--hse-space-4); }
+.hse-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--hse-space-4); }
+
+@media (max-width: 900px) {
+  .hse-grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .hse-grid-3 { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .hse-grid-4,
+  .hse-grid-3,
+  .hse-grid-2 { grid-template-columns: 1fr; }
+}
+
+/* Labels et valeurs */
+.hse-label {
+  display:     block;
+  font-size:   var(--hse-text-xs);
+  font-weight: var(--hse-font-semibold);
+  color:       var(--hse-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: var(--hse-space-1);
+}
+.hse-value-large {
+  display:     block;
+  font-size:   var(--hse-text-2xl);
+  font-weight: var(--hse-font-bold);
+  color:       var(--hse-text);
+  line-height: var(--hse-leading-tight);
+  font-variant-numeric: tabular-nums;
+}
+.hse-muted {
+  color:     var(--hse-text-muted);
+  font-size: var(--hse-text-sm);
+}
+
+/* Badges */
+.hse-badge {
+  display:       inline-flex;
+  align-items:   center;
+  gap:           var(--hse-space-1);
+  padding:       var(--hse-space-1) var(--hse-space-2);
+  border-radius: var(--hse-radius-full);
+  font-size:     var(--hse-text-xs);
+  font-weight:   var(--hse-font-semibold);
+  line-height:   1;
+  white-space:   nowrap;
+  background:    var(--hse-accent-light);
+  color:         var(--hse-accent);
+}
+.hse-badge[data-level="ok"]      { background: var(--hse-success-bg); color: var(--hse-success); }
+.hse-badge[data-level="warning"] { background: var(--hse-warning-bg); color: var(--hse-warning); }
+.hse-badge[data-level="error"]   { background: var(--hse-error-bg);   color: var(--hse-error);   }
+.hse-badge[data-level="info"]    { background: var(--hse-info-bg);    color: var(--hse-info);    }
+
+/* Boutons */
+.hse-btn {
+  display:        inline-flex;
+  align-items:    center;
+  justify-content:center;
+  gap:            var(--hse-space-2);
+  padding:        var(--hse-space-2) var(--hse-space-4);
+  border:         1px solid transparent;
+  border-radius:  var(--hse-radius-md);
+  font-size:      var(--hse-text-sm);
+  font-weight:    var(--hse-font-medium);
+  cursor:         pointer;
+  white-space:    nowrap;
+  transition:     background var(--hse-transition-fast),
+                  border-color var(--hse-transition-fast),
+                  box-shadow var(--hse-transition-fast),
+                  color var(--hse-transition-fast);
+  user-select:    none;
+  text-decoration: none;
+}
+.hse-btn:focus-visible {
+  outline:        2px solid var(--hse-accent);
+  outline-offset: 2px;
+}
+.hse-btn-primary {
+  background: var(--hse-accent);
+  color:      var(--hse-text-on-accent);
+}
+.hse-btn-primary:hover {
+  background:  var(--hse-accent-hover);
+  box-shadow:  var(--hse-shadow-sm);
+}
+.hse-btn-secondary {
+  background:   var(--hse-surface-1);
+  border-color: var(--hse-border);
+  color:        var(--hse-text);
+}
+.hse-btn-secondary:hover {
+  background:   var(--hse-surface-2);
+  border-color: color-mix(in oklch, var(--hse-accent) 40%, var(--hse-border));
+}
+.hse-btn-ghost {
+  background:   transparent;
+  border-color: var(--hse-border);
+  color:        var(--hse-text-muted);
+}
+.hse-btn-ghost:hover {
+  background: var(--hse-accent-light);
+  color:      var(--hse-accent);
+  border-color: transparent;
+}
+.hse-btn:disabled {
+  opacity: 0.4;
+  cursor:  not-allowed;
+  pointer-events: none;
+}
+
+/* Inputs */
+.hse-input,
+.hse-select {
+  display:       block;
+  width:         100%;
+  padding:       var(--hse-space-2) var(--hse-space-3);
+  background:    var(--hse-surface-0);
+  border:        1px solid var(--hse-border);
+  border-radius: var(--hse-radius-md);
+  font-size:     var(--hse-text-base);
+  color:         var(--hse-text);
+  transition:    border-color var(--hse-transition-fast),
+                 box-shadow   var(--hse-transition-fast);
+}
+.hse-input:focus,
+.hse-select:focus {
+  outline:      none;
+  border-color: var(--hse-accent);
+  box-shadow:   0 0 0 3px var(--hse-accent-light);
+}
+
+/* Tableau */
+.hse-table {
+  width:           100%;
+  border-collapse: collapse;
+  font-size:       var(--hse-text-sm);
+}
+.hse-table thead th {
+  background:    var(--hse-table-header-bg);
+  padding:       var(--hse-space-2) var(--hse-space-3);
+  text-align:    left;
+  font-weight:   var(--hse-font-semibold);
+  font-size:     var(--hse-text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color:         var(--hse-text-muted);
+  border-bottom: 2px solid var(--hse-divider);
+  position:      relative;
+  white-space:   nowrap;
+  user-select:   none;
+}
+.hse-table thead th.sticky { position: sticky; top: 0; z-index: var(--hse-z-raised); }
+.hse-table thead th.sortable { cursor: pointer; }
+.hse-table thead th.sortable:hover { color: var(--hse-accent); }
+.hse-table tbody tr {
+  border-bottom: 1px solid var(--hse-table-border);
+  transition:    background var(--hse-transition-fast);
+}
+.hse-table tbody tr:hover     { background: var(--hse-table-row-hover); }
+.hse-table tbody tr:nth-child(even) { background: var(--hse-table-row-stripe); }
+.hse-table tbody tr:nth-child(even):hover { background: var(--hse-table-row-hover); }
+.hse-table td {
+  padding:    var(--hse-space-2) var(--hse-space-3);
+  color:      var(--hse-text);
+  vertical-align: middle;
+}
+.hse-table .tabnum {
+  text-align:           right;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Toolbar */
+.hse-toolbar {
+  display:     flex;
+  align-items: center;
+  gap:         var(--hse-space-3);
+  flex-wrap:   wrap;
+  padding:     var(--hse-space-3) 0;
+  margin-bottom: var(--hse-space-2);
+}
+
+/* Skeleton */
+@keyframes hse-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+.hse-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--hse-skeleton-base)  25%,
+    var(--hse-skeleton-shine) 50%,
+    var(--hse-skeleton-base)  75%
+  );
+  background-size: 200% 100%;
+  animation:       hse-shimmer var(--hse-skeleton-speed) ease-in-out infinite;
+  border-radius:   var(--hse-radius-md);
+}
+.hse-skeleton-line {
+  height:        1em;
+  margin-bottom: var(--hse-space-2);
+}
+.hse-skeleton-line:last-child { width: 60%; }
+.hse-skeleton-block { display: flex; flex-direction: column; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hse-skeleton { animation: none; }
+}
+
+/* États */
+.hse-error {
+  color:       var(--hse-error);
+  background:  var(--hse-error-bg);
+  border:      1px solid color-mix(in oklch, var(--hse-error) 30%, transparent);
+  border-radius: var(--hse-radius-md);
+  padding:     var(--hse-space-3) var(--hse-space-4);
+  font-size:   var(--hse-text-sm);
+}
+.hse-empty {
+  text-align:  center;
+  color:       var(--hse-text-faint);
+  padding:     var(--hse-space-8) var(--hse-space-4);
+  font-size:   var(--hse-text-sm);
+}
+
+/* État vide tableau */
+.hse-table-empty {
+  display:        flex;
+  flex-direction: column;
+  align-items:    center;
+  justify-content: center;
+  padding:        var(--hse-space-12) var(--hse-space-4);
+  color:          var(--hse-text-faint);
+  gap:            var(--hse-space-3);
+}
+.hse-table-empty-icon {
+  opacity: 0.4;
+  color:   var(--hse-text-muted);
+}
+.hse-table-empty p {
+  margin:    0;
+  font-size: var(--hse-text-sm);
+}
+
+/* Wrapper tableau */
+.hse-table-wrapper {
+  position: relative;
+  overflow-x: auto;
+  border:        1px solid var(--hse-border);
+  border-radius: var(--hse-radius-lg);
+  background:    var(--hse-surface-raised);
+}
+
+/* Pager */
+.hse-table-footer {
+  display:        flex;
+  align-items:    center;
+  justify-content: center;
+  gap:            var(--hse-space-3);
+  padding:        var(--hse-space-3) var(--hse-space-4);
+  border-top:     1px solid var(--hse-divider);
+  background:     var(--hse-surface-1);
+  border-radius:  0 0 var(--hse-radius-lg) var(--hse-radius-lg);
+}
+.hse-pager-info {
+  font-size:  var(--hse-text-sm);
+  color:      var(--hse-text-muted);
+  min-width:  6ch;
+  text-align: center;
+}

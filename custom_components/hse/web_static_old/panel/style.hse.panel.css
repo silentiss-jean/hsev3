@@ -1,0 +1,65 @@
+/**
+ * style.hse.panel.css — CSS global hors shadow DOM
+ *
+ * Ce fichier s'applique au document principal de hse_panel.html.
+ * Il ne pénètre PAS dans le shadow DOM de <hse-panel>.
+ * Les styles internes au panel sont dans hse_shell.js (adoptedStyleSheets
+ * ou <style> dans le shadowRoot).
+ *
+ * Rôle :
+ *   - Reset minimal pour éviter les marges body par défaut
+ *   - Garantir que <hse-panel> occupe tout l'espace disponible
+ *   - Réexpose les variables CSS HA au niveau :root pour les composants
+ *     qui les consomment hors shadow DOM
+ */
+
+/* ── Reset ───────────────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden; /* HA gère le scroll dans son propre conteneur */
+  background: var(--primary-background-color, #fafafa);
+  color: var(--primary-text-color, #212121);
+  font-family: var(--paper-font-body1_-_font-family, 'Roboto', 'Noto', sans-serif);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Panel plein écran ───────────────────────────────────────────────────── */
+hse-panel {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Variables HSE exposées au niveau document ───────────────────────────── */
+/*
+ * Ces variables sont disponibles pour tout code qui s'exécute
+ * hors shadow DOM. Le shadow DOM <hse-panel> hérite de :root
+ * pour les propriétés CSS custom (les custom properties traversent
+ * le shadow DOM par design).
+ */
+:root {
+  /* Reprend les variables HA si définies, sinon valeurs HSE par défaut */
+  --hse-color-primary:    var(--primary-color, #03a9f4);
+  --hse-color-bg:         var(--primary-background-color, #fafafa);
+  --hse-color-surface:    var(--card-background-color, #ffffff);
+  --hse-color-text:       var(--primary-text-color, #212121);
+  --hse-color-text-muted: var(--secondary-text-color, #727272);
+  --hse-color-divider:    var(--divider-color, #e0e0e0);
+  --hse-color-error:      var(--error-color, #b00020);
+  --hse-radius-sm: 4px;
+  --hse-radius-md: 8px;
+  --hse-radius-lg: 12px;
+  --hse-space-1: 4px;
+  --hse-space-2: 8px;
+  --hse-space-3: 12px;
+  --hse-space-4: 16px;
+  --hse-space-6: 24px;
+  --hse-space-8: 32px;
+}
