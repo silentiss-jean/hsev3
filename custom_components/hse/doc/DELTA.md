@@ -42,14 +42,14 @@ Si tu lis ce fichier, tu dois :
 
 ---
 
-## 🗂️ Carte du repo — état réel au 2026-04-16
+## 🗂️ Carte du repo — état réel au 2026-04-17
 
 ```
 hsev3/
 ├── README.md                                    ✅
 ├── hse_v3_synthese.md                           ✅
 └── custom_components/hse/
-    ├── __init__.py                              ✅  (backend stable)
+    ├── __init__.py                              🟡 À modifier — embed_iframe=True + module_url→hse_panel.html
     ├── manifest.json                            ✅
     ├── config_flow.py                           ✅
     ├── options_flow.py                          ✅
@@ -64,7 +64,18 @@ hsev3/
     ├── storage/manager.py                       ✅
     ├── engine/* (6 fichiers)                    ✅
     ├── sensors/* (4 fichiers)                   ✅
-    ├── web_static/panel/                        🔴  ABANDON — DELTA-052 : tout le front est à recoder
+    ├── web_static_old/                          ⭐ Archive — référence uniquement, ne pas toucher
+    ├── web_static/panel/
+    │   ├── hse_panel.js                         ❓ À créer — wrapper Custom Element HA (postMessage token)
+    │   ├── hse_panel.html                       ❓ À créer — page HTML bootstrap iframe
+    │   ├── style.hse.panel.css                  ✅ conservé
+    │   └── shared/
+    │       ├── hse_fetch.js                     ✅ conservé
+    │       ├── hse_shell.js                     🔴 À réécrire entièrement (DELTA-052 étape 1)
+    │       ├── hse_store.js                     ✅ conservé (à valider lors des tests)
+    │       ├── styles/                          ✅ conservé (tokens CSS)
+    │       ├── ui/                              ✅ conservé (dom.js, table.js)
+    │       └── features/                        ❓ Dossier à créer — un sous-dossier par onglet
     └── doc/                                     ✅
 ```
 
@@ -82,7 +93,7 @@ hsev3/
 | `engine/cost.py` | `shared_cost_engine.py` V2 — INTACT, ne pas toucher | `hse_v3_synthese.md` §7 |
 | Sécurité | `requires_auth=True` + `cors_allowed=False` partout | `hse_v3_synthese.md` §4 |
 | Panel HA | `require_admin=True` | `hse_v3_synthese.md` §4 |
-| CSS Shadow DOM | **Inliné dans `hse_shell.js`** — zéro fetch runtime (décision DELTA-050) | `hse_shell.js` |
+| **Mode intégration HA** | **`embed_iframe: True`** — immune au cycle connectedCallback/disconnectedCallback | DELTA-052 |
 | **Front à refaire** | **Refonte complète page par page** — décision 2026-04-16 | DELTA-052 |
 
 ---
@@ -112,15 +123,44 @@ hsev3/
 ### Contexte
 
 Le front existant (`web_static/panel/`) a accumulé trop de dette :
+
 - Shadow DOM sans style malgré plusieurs tentatives de correctif
 - CSS inliné non appliqué (fond noir persistant)
 - Architecture de chargement fragile (imports dynamiques échouent silencieusement)
-- Impossible de debugger incrémentalement sans casser autre chose
+- Bug irréductible : écran noir au retour de bureau virtuel macOS — non résolu en V2 malgré plusieurs tentatives
 
 **Décision 2026-04-16 :** on efface et on repart de zéro, page par page.
-Chaque page est construite + testée contre le backend réel avant de passer à la suivante.
 
-### Contraintes non négociables (hse_v3_synthese.md + 00_methode_front_commune.md)
+**Actions réalisées au 2026-04-17 :**
+- `web_static/panel/features/` supprimé (onglets JS vidés)
+- `web_static/panel/hse_panel.html` + `hse_panel.js` supprimés
+- `web_static_old/` créé — archive de l'ancien front (référence, ne pas modifier)
+
+### Décision architecture — 2026-04-17
+
+**Mode d'intégration HA retenu : `embed_iframe: True`**
+
+Raison : le bug "écran noir au retour de bureau virtuel" est causé par le cycle
+`connectedCallback`/`disconnectedCallback` de HA qui détruit l'état Shadow DOM.
+L'iframe est immune à ce cycle — elle reste stable quand HA perd le focus.
+
+**Auth :** token récupéré via `postMessage` depuis `hse_panel.js` (wrapper Custom Element
+minimaliste côté HA, ~50 lignes) → injecté dans `window.__hseToken` dans l'iframe.
+Zéro demande d'auth à l'utilisateur — le token de session HA est utilisé directement.
+
+**Point d'entrée :** `hse_panel.html` servi via `StaticPathConfig` (`/hse-static/`)
+
+**Flux de démarrage :**
+```
+HA charge hse_panel.js (module_url)
+→ HsePanel (Custom Element) crée une <iframe src="/hse-static/hse_panel.html">
+→ L'iframe envoie postMessage {type:'hse-ready'} au parent
+→ hse_panel.js répond avec postMessage {type:'hse-auth', token}
+→ hse_panel.html injecte window.__hseToken et importe hse_shell.js
+→ hse_shell.js démarre le routing des onglets
+```
+
+### Contraintes non négociables (inchangées)
 
 - **R1** — `mount()` construit le DOM une fois. `update_hass()` ne touche jamais le DOM. `unmount()` nettoie tout.
 - **R2** — Flag `_fetching` sur chaque fetch (anti race condition)
@@ -128,36 +168,62 @@ Chaque page est construite + testée contre le backend réel avant de passer à 
 - **R4** — Zéro `localStorage` — tout passe par `PATCH /api/hse/user_prefs`
 - **R5** — Skeleton `.hse-skeleton` posé dans `mount()` avant le premier fetch
 - Tous les appels HTTP via `ctx.hseFetch` (jamais `fetch` direct)
-- CSS Shadow DOM **inliné dans `hse_shell.js`** (pas de fichiers CSS chargés au runtime)
 - Vanilla JS uniquement — zéro framework
+- CSS **dans `hse_shell.js`** ou dans `hse_panel.html` — aucun fetch de CSS au runtime
 
-### Ordre de reconstruction recommandé
+### Ordre de reconstruction — mis à jour 2026-04-17
 
-| Ordre | Page | Endpoint(s) testé(s) | Statut |
-|---|---|---|---|
-| 1 | `hse_shell.js` | `/api/hse/ping`, `/api/hse/frontend_manifest` | ❓ À faire |
-| 2 | `overview` | `/api/hse/overview` | ❓ À faire |
-| 3 | `diagnostic` | `/api/hse/diagnostic` | ❓ À faire |
-| 4 | `scan` | `/api/hse/scan` | ❓ À faire |
-| 5 | `config` | `/api/hse/settings` | ❓ À faire |
-| 6 | `costs` | `/api/hse/costs`, `/api/hse/history`, `/api/hse/export` | ❓ À faire |
-| 7 | `migration` | `/api/hse/migration`, `/api/hse/migration/export`, `/api/hse/migration/apply` | ❓ À faire |
-| 8 | `cards` | `/api/hse/catalogue` | ❓ À faire |
-| 9 | `custom` | `/api/hse/user_prefs` | ❓ À faire |
+| Ordre | Fichier | Description | Statut |
+|-------|---------|-------------|--------|
+| 0a | `__init__.py` | `embed_iframe: True` + `module_url` → `/hse-static/hse_panel.html` | ❓ À faire |
+| 0b | `web_static/panel/hse_panel.js` | Wrapper Custom Element HA — crée l'iframe, envoie le token via `postMessage` | ❓ À faire |
+| 0c | `web_static/panel/hse_panel.html` | Page HTML bootstrap — écoute `hse-auth`, injecte `window.__hseToken`, importe `hse_shell.js` | ❓ À faire |
+| 1 | `web_static/panel/shared/hse_shell.js` | Shell principal — routing onglets, `/api/hse/ping`, `/api/hse/frontend_manifest` | ❓ À faire |
+| 2 | `web_static/panel/features/overview/overview_view.js` | Onglet Overview — `/api/hse/overview` | ❓ À faire |
+| 3 | `web_static/panel/features/diagnostic/diagnostic_view.js` | Onglet Diagnostic — `/api/hse/diagnostic` | ❓ À faire |
+| 4 | `web_static/panel/features/scan/scan_view.js` | Onglet Scan — `/api/hse/scan` | ❓ À faire |
+| 5 | `web_static/panel/features/config/config_view.js` | Onglet Config — `/api/hse/settings` | ❓ À faire |
+| 6 | `web_static/panel/features/costs/costs_view.js` | Onglet Costs — `/api/hse/costs`, `/api/hse/history`, `/api/hse/export` | ❓ À faire |
+| 7 | `web_static/panel/features/migration/migration_view.js` | Onglet Migration — `/api/hse/migration`, export, apply | ❓ À faire |
+| 8 | `web_static/panel/features/cards/cards_view.js` | Onglet Cards — `/api/hse/catalogue` | ❓ À faire |
+| 9 | `web_static/panel/features/custom/custom_view.js` | Onglet Custom — `/api/hse/user_prefs` | ❓ À faire |
 
 ### Règles de session pour l'IA
 
-- **Démarrer par `hse_shell.js`** — le shell doit fonctionner avant de coder quoi que ce soit d'autre
-- **Une page à la fois** — ne pas passer à la suivante avant que la précédente soit validée par l'humain
-- **Tester le backend** à chaque étape : si un endpoint ne répond pas correctement, ouvrir un écart DELTA séparé dans la section "Backend à corriger" ci-dessous
-- **Mode COMMIT uniquement** : pas d'EXPLORATION sans page complète à tester
-- Le CSS reste **inliné dans `hse_shell.js`** — les fichiers `/styles/*.css` sont conservés comme documentation uniquement
+- **Démarrer par l'étape 0a → 0b → 0c → 1** dans cet ordre strict — le shell doit fonctionner avant tout onglet
+- **Une étape à la fois** — ne pas passer à la suivante avant validation humaine
+- **Tester le backend** à chaque étape : si un endpoint ne répond pas, ouvrir un écart DELTA dans "Backend à corriger"
+- **Mode COMMIT uniquement** : chaque réponse est un patch complet testable
+- Le CSS reste dans `hse_panel.html` (global) ou inliné dans chaque view — aucun fichier CSS chargé séparément au runtime
+- Les fichiers dans `web_static_old/` sont en lecture seule — référence uniquement
+
+### Spécifications techniques des étapes 0a–0c
+
+**0a — `__init__.py` (modification)**
+- Changer `_PANEL_MODULE_URL` : `hse_panel.js` → `hse_panel.html`
+- Changer dans `async_register_built_in_panel` : `embed_iframe: False` → `embed_iframe: True`
+- Aucune autre modification
+
+**0b — `hse_panel.js` (création)**
+- Custom Element `hse-panel` minimaliste (~50 lignes)
+- `connectedCallback` : crée `<iframe src="/hse-static/hse_panel.html">` plein écran, écoute `postMessage`
+- `set hass(hass)` : récupère `hass.auth.data.access_token`, l'envoie via `postMessage {type:'hse-auth', token}` dès que l'iframe signale `hse-ready`
+- `disconnectedCallback` : retire le listener `message`
+- Guard `embed_iframe` double-mount dans `connectedCallback`
+
+**0c — `hse_panel.html` (création)**
+- Page HTML autonome, CSS global (pas de Shadow DOM)
+- Au chargement : envoie `postMessage {type:'hse-ready'}` au parent
+- Écoute `postMessage {type:'hse-auth', token}` → stocke dans `window.__hseToken`
+- Puis `import('/hse-static/shared/hse_shell.js')` en dynamique → `new HseShell().mount(root)`
+- Affiche un état "Initialisation…" pendant l'attente du token
+- Gère le cas d'erreur si `hse_shell.js` échoue à charger
 
 ### Backend à corriger (ouvert au fil des tests)
 
 | ID | Endpoint | Problème | Statut |
-|---|---|---|---|
-| *(vide — à compléter lors des tests)* | | | |
+|----|----------|----------|--------|
+| (vide — à compléter lors des tests) | | | |
 
 ---
 
