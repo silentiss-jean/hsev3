@@ -51,7 +51,7 @@ Si tu lis ce fichier, tu dois :
 
 ---
 
-## 🗂️ Carte du repo — état réel au 2026-04-17
+## 🗂️ Carte du repo — état réel au 2026-04-18
 
 ```
 hsev3/
@@ -80,7 +80,7 @@ hsev3/
     │   ├── style.hse.panel.css                  ✅ conservé
     │   └── shared/
     │       ├── hse_fetch.js                     ✅ conservé
-    │       ├── hse_shell.js                     🔴 À réécrire entièrement (DELTA-052 étape 1)
+    │       ├── hse_shell.js                     🟡 Commité 2026-04-18 — en attente de validation
     │       ├── hse_store.js                     ✅ conservé (à valider lors des tests)
     │       ├── styles/                          ✅ conservé (tokens CSS)
     │       ├── ui/                              ✅ conservé (dom.js, table.js)
@@ -123,11 +123,11 @@ hsev3/
 
 | ID | Statut | Titre | Fichier(s) | Prochaine action |
 |---|---|---|---|---|
-| DELTA-052 | 🔴 `AUDIT_EN_COURS` | **REFONTE COMPLÈTE DU FRONT** — recoder toutes les pages JS une par une | `web_static/panel/` — tout | Voir section DELTA-052 ci-dessous |
+| DELTA-052 | 🟡 `CORRECTIF_DEPLOYÉ` | **REFONTE COMPLÈTE DU FRONT** — étape 1 commitée (hse_shell.js) | `web_static/panel/` — tout | Valider étape 1, puis coder étape 2 (overview_view.js) |
 
 ---
 
-## 🔴 DELTA-052 — Refonte complète du frontend (ouvert 2026-04-16)
+## 🟡 DELTA-052 — Refonte complète du frontend (ouvert 2026-04-16)
 
 ### Contexte
 
@@ -142,8 +142,11 @@ Le front existant (`web_static/panel/`) a accumulé trop de dette :
 
 **Actions réalisées au 2026-04-17 :**
 - `web_static/panel/features/` supprimé (onglets JS vidés)
-- `web_static/panel/hse_panel.html` + `hse_panel.js` créés (0b + 0c)
+- `web_static/panel/hse_panel.html` + `hse_panel.js` créés (étapes 0b + 0c)
 - `web_static_old/` créé — archive de l'ancien front (référence, ne pas modifier)
+
+**Actions réalisées au 2026-04-18 :**
+- `web_static/panel/shared/hse_shell.js` réécrit (étape 1) — classe `HseShell` exportée, routing onglets, ping + manifest
 
 ### Décision architecture — 2026-04-17
 
@@ -184,14 +187,14 @@ HA charge hse_panel.js (module_url)
 - Vanilla JS uniquement — zéro framework
 - CSS **dans `hse_shell.js`** ou dans `hse_panel.html` — aucun fetch de CSS au runtime
 
-### Ordre de reconstruction — mis à jour 2026-04-17
+### Ordre de reconstruction — mis à jour 2026-04-18
 
 | Ordre | Fichier | Description | Statut |
 |-------|---------|-------------|--------|
-| 0a | `__init__.py` | `embed_iframe: False` + `module_url` → `/hse-static/hse_panel.js` | ✅ Fait |
+| 0a | `__init__.py` | `embed_iframe: False` + `module_url` → `hse_panel.js` | ✅ Fait |
 | 0b | `web_static/panel/hse_panel.js` | Wrapper Custom Element HA — crée l'iframe, envoie le token via `postMessage` | ✅ Fait |
 | 0c | `web_static/panel/hse_panel.html` | Page HTML bootstrap — écoute `hse-auth`, injecte `window.__hseToken`, importe `hse_shell.js` | ✅ Fait |
-| 1 | `web_static/panel/shared/hse_shell.js` | Shell principal — routing onglets, `/api/hse/ping`, `/api/hse/frontend_manifest` | ❓ À faire |
+| 1 | `web_static/panel/shared/hse_shell.js` | Shell principal — routing onglets, `/api/hse/ping`, `/api/hse/frontend_manifest` | 🟡 Commité — en attente de validation |
 | 2 | `web_static/panel/features/overview/overview_view.js` | Onglet Overview — `/api/hse/overview` | ❓ À faire |
 | 3 | `web_static/panel/features/diagnostic/diagnostic_view.js` | Onglet Diagnostic — `/api/hse/diagnostic` | ❓ À faire |
 | 4 | `web_static/panel/features/scan/scan_view.js` | Onglet Scan — `/api/hse/scan` | ❓ À faire |
@@ -203,7 +206,7 @@ HA charge hse_panel.js (module_url)
 
 ### Règles de session pour l'IA
 
-- **Démarrer par l'étape 1** — 0a/0b/0c sont faits
+- **Démarrer par l'étape 2 (overview)** une fois l'étape 1 validée
 - **Une étape à la fois** — ne pas passer à la suivante avant validation humaine
 - **Tester le backend** à chaque étape : si un endpoint ne répond pas, ouvrir un écart DELTA dans "Backend à corriger"
 - **Mode COMMIT uniquement** : chaque réponse est un patch complet testable
