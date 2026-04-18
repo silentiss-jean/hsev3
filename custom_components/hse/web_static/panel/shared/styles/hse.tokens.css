@@ -1,0 +1,41 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   HSE TOKENS — V5
+   - Tokens globaux partagés par tous les thèmes
+   - Radius, ombres, transitions, palette chart, badges, tracking, glass hook
+   ════════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --hse-radius-sm: 8px;
+  --hse-radius-md: 12px;
+  --hse-radius-lg: 18px;
+  --hse-radius-xl: 26px;
+  --hse-radius-pill: 999px;
+
+  --hse-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
+  --hse-shadow-md: 0 10px 24px rgba(0, 0, 0, 0.14);
+  --hse-shadow-lg: 0 18px 45px rgba(0, 0, 0, 0.20);
+  --hse-shadow-glow: 0 0 22px rgba(124, 58, 237, 0.18);
+
+  --hse-transition-fast: 120ms ease;
+  --hse-transition-base: 180ms ease;
+  --hse-transition-slow: 320ms ease;
+  --hse-transition-theme: 200ms ease;
+
+  --hse-chart-1: #2563eb;
+  --hse-chart-2: #7c3aed;
+  --hse-chart-3: #0ea5e9;
+  --hse-chart-4: #16a34a;
+  --hse-chart-5: #f59e0b;
+  --hse-chart-6: #ef4444;
+
+  --hse-font-tracking: 0.1px;
+
+  --hse-badge-radius: 999px;
+  --hse-badge-padding: 2px 8px;
+  --hse-badge-font-size: 11px;
+  --hse-badge-font-weight: 600;
+
+  --hse-bg-dynamic-opacity: 0.55;
+
+  --hse-backdrop-filter: none;
+}

@@ -1,0 +1,31 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   HSE GLASS — V5
+   - Active uniquement si html[data-glass="true"]
+   - N'altère pas la palette, seulement les surfaces et le blur
+   ════════════════════════════════════════════════════════════════════════════ */
+
+html[data-glass="true"] {
+  --hse-surface: rgba(255, 255, 255, 0.14);
+  --hse-surface-muted: rgba(255, 255, 255, 0.08);
+  --hse-backdrop-filter: blur(18px) saturate(160%);
+}
+
+html[data-theme="light"][data-glass="true"],
+html[data-theme="sunset"][data-glass="true"],
+html[data-theme="minimal"][data-glass="true"],
+html[data-theme="aurora"][data-glass="true"],
+html[data-theme="neuro"][data-glass="true"],
+html[data-theme="solar"][data-glass="true"] {
+  --hse-surface: rgba(255, 255, 255, 0.72);
+  --hse-surface-muted: rgba(255, 255, 255, 0.42);
+}
+
+html[data-theme="dark"][data-glass="true"],
+html[data-theme="ocean"][data-glass="true"],
+html[data-theme="forest"][data-glass="true"],
+html[data-theme="neon"][data-glass="true"],
+html[data-theme="ember"][data-glass="true"],
+html[data-theme="slate"][data-glass="true"] {
+  --hse-surface: rgba(15, 23, 42, 0.42);
+  --hse-surface-muted: rgba(15, 23, 42, 0.24);
+}
