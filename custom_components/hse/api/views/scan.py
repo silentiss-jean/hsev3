@@ -1,6 +1,6 @@
 """
-HSE V3 — GET /api/hse/scan
-Entités HA détectées non encore présentes dans le catalogue.
+HSE V3 — GET /api/hse/scan   : entités HA détectées non encore dans le catalogue.
+          POST /api/hse/scan  : force un nouveau scan et retourne le résultat (bouton Re-scanner).
 Supporte filtrage par domain et recherche textuelle.
 """
 from __future__ import annotations
@@ -23,7 +23,12 @@ class HseScanView(HseBaseView):
     def __init__(self, hass: HomeAssistant) -> None:
         super().__init__(hass)
 
-    async def get(self, request: web.Request) -> web.Response:
+    # ------------------------------------------------------------------
+    # Helpers partagés GET / POST
+    # ------------------------------------------------------------------
+
+    async def _build_response(self, request: web.Request) -> web.Response:
+        """Logique commune : scan HA → filtre → pagine → retourne JSON."""
         domain_filter = request.query.get("domain")
         q = (request.query.get("q") or "").lower().strip()
         try:
@@ -58,7 +63,7 @@ class HseScanView(HseBaseView):
             state_obj = self.hass.states.get(eid)
             ha_state_raw = getattr(state_obj, "state", None) if state_obj else None
 
-            # Item synthétique pour quality_scorer — construit depuis les attributs HA
+            # Item synthétique pour quality_scorer
             attrs = (getattr(state_obj, "attributes", {}) or {}) if state_obj else {}
             synthetic_item = {
                 "source": {
@@ -72,13 +77,13 @@ class HseScanView(HseBaseView):
             }
             quality_score_int = score_item(synthetic_item, ha_state_raw)
 
-            # suggested_action basé sur le status string d'origine (non remplacé)
             status_str = c.get("status") or ""
             result.append({
                 "entity_id": eid,
                 "name": attrs.get("friendly_name") or eid,
                 "domain": eid.split(".")[0] if "." in eid else "",
                 "device": c.get("device_id"),
+                "integration": c.get("integration_label") or c.get("platform") or "unknown",
                 "quality_score": quality_score_int,
                 "suggested_action": "select" if status_str == "ok" else "review",
             })
@@ -91,3 +96,18 @@ class HseScanView(HseBaseView):
             "per_page": per_page,
             "items": result[start:start + per_page],
         })
+
+    # ------------------------------------------------------------------
+    # GET  /api/hse/scan
+    # ------------------------------------------------------------------
+
+    async def get(self, request: web.Request) -> web.Response:
+        return await self._build_response(request)
+
+    # ------------------------------------------------------------------
+    # POST /api/hse/scan  — bouton Re-scanner
+    # Force un nouveau scan (même logique que GET, sans cache)
+    # ------------------------------------------------------------------
+
+    async def post(self, request: web.Request) -> web.Response:
+        return await self._build_response(request)

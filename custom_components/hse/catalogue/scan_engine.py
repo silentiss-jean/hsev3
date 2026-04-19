@@ -7,6 +7,9 @@ from __future__ import annotations
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
+# Plateformes internes HSE à exclure du scan (évite l'auto-scan)
+_HSE_PLATFORMS: frozenset[str] = frozenset({"hse"})
+
 
 def detect_kind(device_class: str | None, unit: str | None) -> str | None:
     if device_class == "energy" or unit in ("kWh", "Wh"):
@@ -52,13 +55,15 @@ def status_from_registry(
 async def async_scan_hass(hass: HomeAssistant) -> dict:
     """
     Scanne le registry HA et retourne les candidats energy/power.
+    Exclut les entités générées par HSE lui-même (platform in _HSE_PLATFORMS).
+    Exclut les entités sans état actif dans HA (ha_state is None).
 
     Retourne
     --------
     {"candidates": [{
         "entity_id", "kind", "unit", "device_class", "state_class",
         "unique_id", "device_id", "area_id", "integration_domain",
-        "platform", "config_entry_id", "disabled_by",
+        "platform", "integration_label", "config_entry_id", "disabled_by",
         "status", "status_reason", "ha_state", "ha_restored"
     }]}
     Shape attendue par merge_scan_into_catalogue().
@@ -71,8 +76,18 @@ async def async_scan_hass(hass: HomeAssistant) -> dict:
         if not isinstance(eid, str) or not eid.startswith("sensor."):
             continue
 
+        # B2 — exclure les entités produites par HSE lui-même
+        platform = getattr(entry, "platform", None) or ""
+        if platform in _HSE_PLATFORMS:
+            continue
+
         state_obj = hass.states.get(eid)
-        ha_state = getattr(state_obj, "state", None) if state_obj else None
+
+        # B2 — exclure les entités sans état actif dans HA
+        if state_obj is None:
+            continue
+
+        ha_state = getattr(state_obj, "state", None)
         attrs = getattr(state_obj, "attributes", {}) or {}
 
         unit = attrs.get("unit_of_measurement") or getattr(entry, "unit_of_measurement", None)
@@ -93,6 +108,10 @@ async def async_scan_hass(hass: HomeAssistant) -> dict:
         disabled_by = getattr(entry, "disabled_by", None)
         disabled_by_val = getattr(disabled_by, "value", str(disabled_by)) if disabled_by is not None else None
 
+        # Label lisible de l'intégration source (utile pour grouper dans le front)
+        integration_domain = getattr(entry, "integration_domain", None) or platform or None
+        integration_label = integration_domain or "unknown"
+
         candidates.append({
             "entity_id": eid,
             "kind": kind,
@@ -102,8 +121,9 @@ async def async_scan_hass(hass: HomeAssistant) -> dict:
             "unique_id": getattr(entry, "unique_id", None),
             "device_id": getattr(entry, "device_id", None),
             "area_id": getattr(entry, "area_id", None),
-            "integration_domain": getattr(entry, "integration_domain", None),
-            "platform": getattr(entry, "platform", None),
+            "integration_domain": integration_domain,
+            "integration_label": integration_label,
+            "platform": platform,
             "config_entry_id": getattr(entry, "config_entry_id", None),
             "disabled_by": disabled_by_val,
             "status": status,
