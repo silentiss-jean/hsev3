@@ -4,6 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>HSE — Home Suivi Élec</title>
+
+  <!-- CSS V5 — chargés ici car data-theme est posé sur ce <html> (iframe) -->
+  <link rel="stylesheet" href="/hse-static/shared/styles/hse.base.css">
+  <link rel="stylesheet" href="/hse-static/shared/styles/hse.tokens.css">
+  <link rel="stylesheet" href="/hse-static/shared/styles/hse.themes.css">
+  <link rel="stylesheet" href="/hse-static/shared/styles/hse.glass.css">
+
   <style>
     /* Reset et base globale — pas de Shadow DOM ici (DELTA-052) */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -11,8 +18,8 @@
     html, body {
       height: 100%;
       font-family: var(--font-body, system-ui, sans-serif);
-      background: #111;
-      color: #e0e0e0;
+      background: var(--hse-bg, #111);
+      color: var(--hse-text, #e0e0e0);
       overflow: hidden;
     }
 
