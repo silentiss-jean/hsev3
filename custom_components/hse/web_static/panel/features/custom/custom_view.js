@@ -58,8 +58,9 @@ export class CustomView {
         max-width: 880px;
         margin: 0 auto;
       }
+      /* --hse-bg est toujours opaque dans les 12 thèmes — jamais semi-transparent */
       .hse-custom__card {
-        background: var(--hse-surface, rgba(255,255,255,0.88));
+        background: var(--hse-bg, #f7f9ff);
         border: 1px solid var(--hse-border, rgba(0,0,0,0.08));
         border-radius: 16px;
         padding: 20px;
@@ -69,10 +70,11 @@ export class CustomView {
         font-size: 1.125rem;
         font-weight: 700;
         margin-bottom: 6px;
+        color: var(--hse-text);
       }
       .hse-custom__subtitle {
         font-size: 0.92rem;
-        opacity: 0.78;
+        color: var(--hse-text-muted, rgba(0,0,0,0.65));
         margin-bottom: 18px;
       }
       .hse-custom__grid {
@@ -86,14 +88,15 @@ export class CustomView {
       .hse-custom__label {
         font-size: 0.9rem;
         font-weight: 600;
+        color: var(--hse-text);
       }
       .hse-custom__select {
         width: 100%;
         min-height: 44px;
         border-radius: 12px;
-        border: 1px solid var(--hse-border, rgba(0,0,0,0.12));
-        background: var(--hse-surface-2, rgba(255,255,255,0.92));
-        color: inherit;
+        border: 2px solid var(--hse-accent, #2563eb);
+        background: var(--hse-bg, #f7f9ff);
+        color: var(--hse-text, #111827);
         padding: 10px 12px;
         font: inherit;
       }
@@ -105,8 +108,9 @@ export class CustomView {
         min-height: 44px;
         padding: 12px 14px;
         border-radius: 12px;
-        background: var(--hse-surface-2, rgba(255,255,255,0.92));
+        background: var(--hse-bg, #f7f9ff);
         border: 1px solid var(--hse-border, rgba(0,0,0,0.08));
+        color: var(--hse-text, #111827);
       }
       .hse-custom__toggle input {
         width: 18px;
@@ -122,8 +126,8 @@ export class CustomView {
         min-height: 44px;
         border-radius: 12px;
         border: 1px solid var(--hse-border, rgba(0,0,0,0.12));
-        background: var(--hse-surface-2, rgba(255,255,255,0.92));
-        color: inherit;
+        background: var(--hse-bg, #f7f9ff);
+        color: var(--hse-text, #111827);
         padding: 10px 16px;
         font: inherit;
         cursor: pointer;
@@ -134,21 +138,26 @@ export class CustomView {
       .hse-custom__status {
         font-size: 0.88rem;
         min-height: 1.2em;
+        color: var(--hse-text-muted);
       }
-      .hse-custom__status[data-kind="success"] { color: #15803d; }
-      .hse-custom__status[data-kind="error"] { color: #dc2626; }
+      .hse-custom__status[data-kind="success"] { color: var(--hse-success, #15803d); }
+      .hse-custom__status[data-kind="error"]   { color: var(--hse-error, #dc2626); }
       .hse-custom__preview {
         display: grid;
         gap: 14px;
         grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       }
+      /* sample : fond opaque --hse-bg-secondary, jamais --hse-surface semi-transparent */
       .hse-custom__sample {
         border-radius: 16px;
         border: 1px solid var(--hse-border, rgba(0,0,0,0.08));
-        background: var(--hse-surface-2, rgba(255,255,255,0.94));
+        background: var(--hse-bg-secondary, #eef2ff);
         padding: 16px;
         display: grid;
         gap: 10px;
+      }
+      .hse-custom__sample strong {
+        color: var(--hse-text, #111827);
       }
       .hse-custom__badge {
         display: inline-flex;
@@ -159,7 +168,7 @@ export class CustomView {
         padding: 0 10px;
         border-radius: 999px;
         background: var(--hse-accent, #2563eb);
-        color: #fff;
+        color: var(--hse-on-accent, #fff);
         font-size: 0.78rem;
         font-weight: 700;
       }
@@ -170,10 +179,14 @@ export class CustomView {
         border-radius: 10px;
         border: none;
         background: var(--hse-accent, #2563eb);
-        color: white;
+        color: var(--hse-on-accent, white);
         font: inherit;
+        cursor: default;
       }
-      .hse-custom__muted { opacity: 0.72; }
+      .hse-custom__muted {
+        font-size: 0.88rem;
+        color: var(--hse-text-muted, rgba(0,0,0,0.65));
+      }
       @media (max-width: 640px) {
         .hse-custom__card { padding: 16px; }
       }
