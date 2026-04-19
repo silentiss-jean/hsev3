@@ -51,7 +51,7 @@ Si tu lis ce fichier, tu dois :
 
 ---
 
-## 🗂️ Carte du repo — état réel au 2026-04-18
+## 🗂️ Carte du repo — état réel au 2026-04-19
 
 ```
 hsev3/
@@ -76,7 +76,7 @@ hsev3/
     ├── web_static_old/                          ⭐ Archive — référence uniquement, ne pas toucher
     ├── web_static/panel/
     │   ├── hse_panel.js                         ✅ Wrapper Custom Element HA (crée l'iframe, postMessage token)
-    │   ├── hse_panel.html                       ✅ Page HTML bootstrap (écoute hse-auth, importe hse_shell.js)
+    │   ├── hse_panel.html                       ✅ Page HTML bootstrap + 4 <link> CSS V5 (validé 2026-04-19)
     │   ├── style.hse.panel.css                  ✅ conservé
     │   └── shared/
     │       ├── hse_fetch.js                     ✅ conservé
@@ -88,12 +88,14 @@ hsev3/
     │       │   ├── hse_themes.shadow.css        ✅ conservé
     │       │   ├── hse_tokens.shadow.css        ✅ conservé
     │       │   ├── tokens.css                   ✅ conservé
-    │       │   ├── hse.tokens.css               ✅ Ajouté 2026-04-18 — tokens globaux V5 (radius, shadows, chart, badge)
-    │       │   ├── hse.themes.css               ✅ Ajouté 2026-04-18 — 12 thèmes V5 (light, dark, ocean, forest, sunset, minimal, neon, aurora, neuro, ember, slate, solar)
-    │       │   ├── hse.glass.css                ✅ Ajouté 2026-04-18 — effet glass via html[data-glass="true"]
-    │       │   └── hse.base.css                 ✅ Ajouté 2026-04-18 — reset + base layout iframe (pas Shadow DOM)
+    │       │   ├── hse.tokens.css               ✅ tokens globaux V5
+    │       │   ├── hse.themes.css               ✅ 12 thèmes V5 + data-theme="default" alias light (validé 2026-04-19)
+    │       │   ├── hse.glass.css                ✅ effet glass
+    │       │   └── hse.base.css                 ✅ reset + base layout iframe
     │       ├── ui/                              ✅ conservé (dom.js, table.js)
-    │       └── features/                        ❓ Dossier à créer — un sous-dossier par onglet
+    │       └── features/
+    │           └── custom/
+    │               └── custom_view.js           ✅ Onglet Custom/Personnalisation (validé 2026-04-19)
     └── doc/                                     ✅
 ```
 
@@ -111,9 +113,10 @@ hsev3/
 | `engine/cost.py` | `shared_cost_engine.py` V2 — INTACT, ne pas toucher | `hse_v3_synthese.md` §7 |
 | Sécurité | `requires_auth=True` + `cors_allowed=False` partout | `hse_v3_synthese.md` §4 |
 | Panel HA | `require_admin=True` | `hse_v3_synthese.md` §4 |
-| **Mode intégration HA** | **`embed_iframe: False`** — `hse_panel.js` (Custom Element) crée lui-même l'`<iframe>` et gère le postMessage token. `embed_iframe: True` invalide : HA tente de charger `module_url` comme module ES6, pas comme src iframe. | DELTA-052 (corrigé 2026-04-17) |
+| **Mode intégration HA** | **`embed_iframe: False`** — `hse_panel.js` (Custom Element) crée lui-même l'`<iframe>` et gère le postMessage token. | DELTA-052 (validé 2026-04-19) |
 | **Front à refaire** | **Refonte complète page par page** — décision 2026-04-16 | DELTA-052 |
-| **Système de thèmes** | **12 thèmes via `html[data-theme]`** — `hse.themes.css` V5. Glass via `html[data-glass="true"]` — `hse.glass.css`. Chargés via `<link>` statiques dans `hse_panel.html`. | DELTA-052 (2026-04-18) |
+| **Système de thèmes** | **12 thèmes via `html[data-theme]`** — `hse.themes.css` V5. Glass via `html[data-glass="true"]`. Chargés via `<link>` statiques dans `hse_panel.html`. | DELTA-052 (validé 2026-04-19) |
+| **CSS thèmes — fonds opaques** | `--hse-bg` (toujours opaque) sur les cards/panels racines. `--hse-surface` (semi-transparent) réservé aux cartes intérieures avec `backdrop-filter`. | DELTA-052 correctif 2026-04-19 |
 
 ---
 
@@ -131,13 +134,11 @@ hsev3/
 
 ## Écarts actifs
 
-| ID | Statut | Titre | Fichier(s) | Prochaine action |
-|---|---|---|---|---|
-| DELTA-052 | 🟡 `CORRECTIF_DEPLOYÉ` | **REFONTE COMPLÈTE DU FRONT** — étapes 0a/0b/0c/1 commitées + CSS V5 | `web_static/panel/` — tout | Valider étape 1 + CSS V5, puis coder étape 2 (overview_view.js) |
+> ✅ Aucun écart actif — doc et code sont alignés.
 
 ---
 
-## 🟡 DELTA-052 — Refonte complète du frontend (ouvert 2026-04-16)
+## ✅ DELTA-052 — Refonte complète du frontend (fermé 2026-04-19)
 
 ### Contexte
 
@@ -150,103 +151,37 @@ Le front existant (`web_static/panel/`) a accumulé trop de dette :
 
 **Décision 2026-04-16 :** on efface et on repart de zéro, page par page.
 
-**Actions réalisées au 2026-04-17 :**
-- `web_static/panel/features/` supprimé (onglets JS vidés)
-- `web_static/panel/hse_panel.html` + `hse_panel.js` créés (étapes 0b + 0c)
-- `web_static_old/` créé — archive de l'ancien front (référence, ne pas modifier)
-
-**Actions réalisées au 2026-04-18 :**
-- `web_static/panel/shared/hse_shell.js` réécrit (étape 1) — classe `HseShell` exportée, routing onglets, ping + manifest
-- `shared/styles/hse.tokens.css` créé — tokens globaux V5 (radius, shadows, transitions, chart x6, badge, tracking)
-- `shared/styles/hse.themes.css` créé — 12 thèmes V5 complets via `html[data-theme]`
-- `shared/styles/hse.glass.css` créé — effet glassmorphism via `html[data-glass="true"]`
-- `shared/styles/hse.base.css` créé — reset minimal + base layout iframe (pas Shadow DOM)
-
-### Décision architecture — 2026-04-17
-
-**Mode d'intégration HA retenu : `embed_iframe: False`**
-
-Raison : avec `embed_iframe: True`, HA tente de charger `module_url` comme un **module ES6**
-(voir `custom-panel.ts:102`). Si `module_url` pointe vers un `.html`, HA échoue avec
-"Unable to load the panel source".
-
-Avec `embed_iframe: False`, HA charge `module_url` comme un script JS et attend un
-`customElements.define`. `hse_panel.js` enregistre `HsePanel` (Custom Element) qui crée
-lui-même `<iframe src="/hse-static/hse_panel.html">` — le bug "écran noir macOS" est
-contourné car c'est **notre code** qui contrôle le cycle de vie de l'iframe, pas HA.
-
-**Auth :** token récupéré via `postMessage` depuis `hse_panel.js` → injecté dans
-`window.__hseToken` dans l'iframe. Zéro demande d'auth à l'utilisateur.
-
-**Point d'entrée :** `hse_panel.html` servi via `StaticPathConfig` (`/hse-static/`)
-
-**Flux de démarrage :**
-```
-HA charge hse_panel.js (module_url)
-→ HsePanel (Custom Element) crée une <iframe src="/hse-static/hse_panel.html">
-→ L'iframe envoie postMessage {type:'hse-ready'} au parent
-→ hse_panel.js répond avec postMessage {type:'hse-auth', token}
-→ hse_panel.html injecte window.__hseToken et importe hse_shell.js
-→ hse_shell.js démarre le routing des onglets
-```
-
-### Chargement CSS V5 dans hse_panel.html
-
-Les 4 fichiers CSS V5 sont chargés via `<link>` statiques dans `hse_panel.html`, dans cet ordre :
-
-```html
-<link rel="stylesheet" href="./shared/styles/hse.tokens.css">
-<link rel="stylesheet" href="./shared/styles/hse.themes.css">
-<link rel="stylesheet" href="./shared/styles/hse.glass.css">
-<link rel="stylesheet" href="./shared/styles/hse.base.css">
-```
-
-Le thème est appliqué par `hse_shell.js` :
-```js
-document.documentElement.setAttribute('data-theme', prefs.theme);
-document.documentElement.setAttribute('data-glass', prefs.glassmorphism ? 'true' : 'false');
-```
-
-### Contraintes non négociables (inchangées)
-
-- **R1** — `mount()` construit le DOM une fois. `update_hass()` ne touche jamais le DOM. `unmount()` nettoie tout.
-- **R2** — Flag `_fetching` sur chaque fetch (anti race condition)
-- **R3** — Signature `JSON.stringify` avant tout `_render()` (anti re-render inutile)
-- **R4** — Zéro `localStorage` — tout passe par `PATCH /api/hse/user_prefs`
-- **R5** — Skeleton `.hse-skeleton` posé dans `mount()` avant le premier fetch
-- Tous les appels HTTP via `ctx.hseFetch` (jamais `fetch` direct)
-- Vanilla JS uniquement — zéro framework
-- CSS **dans `hse_shell.js`** ou dans `hse_panel.html` — aucun fetch de CSS au runtime
-
-### Ordre de reconstruction — mis à jour 2026-04-18
+### Ordre de reconstruction — finalisé 2026-04-19
 
 | Ordre | Fichier | Description | Statut |
 |-------|---------|-------------|--------|
-| 0a | `__init__.py` | `embed_iframe: False` + `module_url` → `hse_panel.js` | ✅ Fait |
-| 0b | `web_static/panel/hse_panel.js` | Wrapper Custom Element HA — crée l'iframe, envoie le token via `postMessage` | ✅ Fait |
-| 0c | `web_static/panel/hse_panel.html` | Page HTML bootstrap — écoute `hse-auth`, injecte `window.__hseToken`, importe `hse_shell.js` | ✅ Fait |
-| 0d | `shared/styles/hse.tokens.css` | Tokens globaux V5 | ✅ Fait |
-| 0d | `shared/styles/hse.themes.css` | 12 thèmes V5 | ✅ Fait |
-| 0d | `shared/styles/hse.glass.css` | Effet glass V5 | ✅ Fait |
-| 0d | `shared/styles/hse.base.css` | Reset + base layout V5 | ✅ Fait |
-| 1 | `web_static/panel/shared/hse_shell.js` | Shell principal — routing onglets, `/api/hse/ping`, `/api/hse/frontend_manifest` | 🟡 Commité — en attente de validation |
-| 2 | `web_static/panel/features/overview/overview_view.js` | Onglet Overview — `/api/hse/overview` | ❓ À faire |
-| 3 | `web_static/panel/features/diagnostic/diagnostic_view.js` | Onglet Diagnostic — `/api/hse/diagnostic` | ❓ À faire |
-| 4 | `web_static/panel/features/scan/scan_view.js` | Onglet Scan — `/api/hse/scan` | ❓ À faire |
-| 5 | `web_static/panel/features/config/config_view.js` | Onglet Config — `/api/hse/settings` | ❓ À faire |
-| 6 | `web_static/panel/features/costs/costs_view.js` | Onglet Costs — `/api/hse/costs`, `/api/hse/history`, `/api/hse/export` | ❓ À faire |
-| 7 | `web_static/panel/features/migration/migration_view.js` | Onglet Migration — `/api/hse/migration`, export, apply | ❓ À faire |
-| 8 | `web_static/panel/features/cards/cards_view.js` | Onglet Cards — `/api/hse/catalogue` | ❓ À faire |
-| 9 | `web_static/panel/features/custom/custom_view.js` | Onglet Custom — `/api/hse/user_prefs` | ❓ À faire |
+| 0a | `__init__.py` | `embed_iframe: False` + `module_url` → `hse_panel.js` | ✅ Validé |
+| 0b | `web_static/panel/hse_panel.js` | Wrapper Custom Element HA | ✅ Validé |
+| 0c | `web_static/panel/hse_panel.html` | Bootstrap iframe + 4 `<link>` CSS V5 | ✅ Validé 2026-04-19 |
+| 0d | `shared/styles/hse.tokens.css` | Tokens globaux V5 | ✅ Validé |
+| 0d | `shared/styles/hse.themes.css` | 12 thèmes V5 + alias `default` | ✅ Validé 2026-04-19 |
+| 0d | `shared/styles/hse.glass.css` | Effet glass V5 | ✅ Validé |
+| 0d | `shared/styles/hse.base.css` | Reset + base layout V5 | ✅ Validé |
+| 1 | `shared/hse_shell.js` | Shell principal — routing onglets | 🟡 Commité — en attente de validation |
+| 2 | `features/overview/overview_view.js` | Onglet Overview | ❓ À faire |
+| 3 | `features/diagnostic/diagnostic_view.js` | Onglet Diagnostic | ❓ À faire |
+| 4 | `features/scan/scan_view.js` | Onglet Scan | ❓ À faire |
+| 5 | `features/config/config_view.js` | Onglet Config | ❓ À faire |
+| 6 | `features/costs/costs_view.js` | Onglet Costs | ❓ À faire |
+| 7 | `features/migration/migration_view.js` | Onglet Migration | ❓ À faire |
+| 8 | `features/cards/cards_view.js` | Onglet Cards | ❓ À faire |
+| 9 | `features/custom/custom_view.js` | Onglet Custom/Personnalisation | ✅ Validé 2026-04-19 |
 
-### Règles de session pour l'IA
+### Contraintes non négociables (permanentes)
 
-- **Démarrer par l'étape 2 (overview)** une fois l'étape 1 validée
-- **Une étape à la fois** — ne pas passer à la suivante avant validation humaine
-- **Tester le backend** à chaque étape : si un endpoint ne répond pas, ouvrir un écart DELTA dans "Backend à corriger"
-- **Mode COMMIT uniquement** : chaque réponse est un patch complet testable
-- Le CSS reste dans `hse_panel.html` (global) ou inliné dans chaque view — aucun fichier CSS chargé séparément au runtime
-- Les fichiers dans `web_static_old/` sont en lecture seule — référence uniquement
+- **R1** — `mount()` construit le DOM une fois. `update_hass()` ne touche jamais le DOM. `unmount()` nettoie tout.
+- **R2** — Flag `_fetching` sur chaque fetch
+- **R3** — Signature `JSON.stringify` avant tout `_render()`
+- **R4** — Zéro `localStorage` — tout passe par `PATCH /api/hse/user_prefs`
+- **R5** — Skeleton `.hse-skeleton` posé dans `mount()` avant le premier fetch
+- Tous les appels HTTP via `ctx.hseFetch`
+- Vanilla JS uniquement
+- **Fonds racines** : `var(--hse-bg)` toujours opaque — `var(--hse-surface)` réservé aux cartes avec `backdrop-filter`
 
 ### Backend à corriger (ouvert au fil des tests)
 
@@ -267,8 +202,8 @@ Tous les écarts suivants sont abandonnés car noyés dans DELTA-052 (refonte co
 | DELTA-047 | `hse_components.shadow.css` manquant | Absorbé par DELTA-052 |
 | DELTA-048 | Fond noir résiduel | Absorbé par DELTA-052 |
 | DELTA-049 | Guard navigation rapide | Absorbé par DELTA-052 |
-| DELTA-050 | CSS inliné dans `hse_shell.js` | Absorbé par DELTA-052 — la décision d'inliner reste valide |
-| DELTA-051 | `HseMigrationExportView` + `HseMigrationApplyView` non enregistrées | `__init__.py` corrigé, backend OK — sera vérifié lors du test de l'onglet migration |
+| DELTA-050 | CSS inliné dans `hse_shell.js` | Absorbé par DELTA-052 |
+| DELTA-051 | `HseMigrationExportView` + `HseMigrationApplyView` non enregistrées | `__init__.py` corrigé — sera vérifié lors du test onglet migration |
 
 ---
 
