@@ -3,8 +3,10 @@
    - 12 thèmes via html[data-theme="..."]
    - Les 9 thèmes V4 sont repris à l'identique
    - Ajout: ember, slate, solar
+   - "default" = alias de "light" (fallback quand aucun thème n'est sélectionné)
    ════════════════════════════════════════════════════════════════════════════ */
 
+html[data-theme="default"],
 html[data-theme="light"] {
   color-scheme: light;
 
