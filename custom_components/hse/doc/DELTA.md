@@ -51,7 +51,7 @@ Si tu lis ce fichier, tu dois :
 
 ---
 
-## 🗂️ Carte du repo — état réel au 2026-04-19
+## 🗂️ Carte du repo — état réel au 2026-04-20
 
 ```
 hsev3/
@@ -94,6 +94,10 @@ hsev3/
     │       │   └── hse.base.css                 ✅ reset + base layout iframe
     │       ├── ui/                              ✅ conservé (dom.js, table.js)
     │       └── features/
+    │           ├── scan/
+    │           │   └── scan_view.js             🟡 Commité 2026-04-20 — en attente de validation
+    │           │                                   F1 : POST /api/hse/scan (corrigé, était /catalogue/refresh)
+    │           │                                   F2 : inbox groupée par integration (<details> collapsibles)
     │           └── custom/
     │               └── custom_view.js           ✅ Onglet Custom/Personnalisation (validé 2026-04-19)
     └── doc/                                     ✅
@@ -117,6 +121,8 @@ hsev3/
 | **Front à refaire** | **Refonte complète page par page** — décision 2026-04-16 | DELTA-052 |
 | **Système de thèmes** | **12 thèmes via `html[data-theme]`** — `hse.themes.css` V5. Glass via `html[data-glass="true"]`. Chargés via `<link>` statiques dans `hse_panel.html`. | DELTA-052 (validé 2026-04-19) |
 | **CSS thèmes — fonds opaques** | `--hse-bg` (toujours opaque) sur les cards/panels racines. `--hse-surface` (semi-transparent) réservé aux cartes intérieures avec `backdrop-filter`. | DELTA-052 correctif 2026-04-19 |
+| **Re-scan endpoint** | `POST /api/hse/scan` (pas `/catalogue/refresh`) | F1 — 2026-04-20 |
+| **Inbox scan groupement** | Groupé par `item.integration` via `<details>` collapsibles + checkbox par groupe | F2 — 2026-04-20 |
 
 ---
 
@@ -151,7 +157,7 @@ Le front existant (`web_static/panel/`) a accumulé trop de dette :
 
 **Décision 2026-04-16 :** on efface et on repart de zéro, page par page.
 
-### Ordre de reconstruction — finalisé 2026-04-19
+### Ordre de reconstruction — mis à jour 2026-04-20
 
 | Ordre | Fichier | Description | Statut |
 |-------|---------|-------------|--------|
@@ -165,12 +171,19 @@ Le front existant (`web_static/panel/`) a accumulé trop de dette :
 | 1 | `shared/hse_shell.js` | Shell principal — routing onglets | 🟡 Commité — en attente de validation |
 | 2 | `features/overview/overview_view.js` | Onglet Overview | ❓ À faire |
 | 3 | `features/diagnostic/diagnostic_view.js` | Onglet Diagnostic | ❓ À faire |
-| 4 | `features/scan/scan_view.js` | Onglet Scan | ❓ À faire |
+| 4 | `features/scan/scan_view.js` | Onglet Scan | 🟡 Commité 2026-04-20 — en attente de validation |
 | 5 | `features/config/config_view.js` | Onglet Config | ❓ À faire |
 | 6 | `features/costs/costs_view.js` | Onglet Costs | ❓ À faire |
 | 7 | `features/migration/migration_view.js` | Onglet Migration | ❓ À faire |
 | 8 | `features/cards/cards_view.js` | Onglet Cards | ❓ À faire |
 | 9 | `features/custom/custom_view.js` | Onglet Custom/Personnalisation | ✅ Validé 2026-04-19 |
+
+### Correctifs appliqués dans scan_view.js (2026-04-20)
+
+| ID | Nature | Détail |
+|----|--------|--------|
+| F1 | Bug URL | `_triggerRescan()` appelait `POST /api/hse/catalogue/refresh` → corrigé en `POST /api/hse/scan`. La réponse du POST est injectée directement sans second GET. Gestion 409 (scan déjà en cours). |
+| F2 | UX inbox | Inbox groupée par `item.integration` via `<details>` collapsibles. Chips `energy` / `power`. Checkbox par groupe. Tri : plus grand groupe en premier puis alpha. Auto-open si un seul groupe. |
 
 ### Contraintes non négociables (permanentes)
 
