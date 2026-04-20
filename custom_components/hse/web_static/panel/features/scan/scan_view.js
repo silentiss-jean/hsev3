@@ -1,10 +1,10 @@
 /**
  * scan_view.js — Onglet Détection HSE V3
  *
- * DELTA-052 étape 4
+ * DELTA-052 étape 4 — rev F1+F2
  * Endpoints :
  *   GET  /api/hse/scan                   → inbox entités non triées
- *   POST /api/hse/catalogue/refresh      → re-scan
+ *   POST /api/hse/scan                   → re-scan (F1 — corrigé)
  *   POST /api/hse/catalogue/triage       → select | ignore | reset (unitaire)
  *   POST /api/hse/catalogue/triage/bulk  → triage en masse
  *   GET  /api/hse/catalogue              → entités déjà triées (bas de page)
@@ -133,12 +133,62 @@ const CSS = `
 .hse-scan__bulk-bar.visible { display: flex; }
 .hse-scan__bulk-label { flex: 1; color: var(--hse-text-muted, #6b7280); }
 
+/* ── Groupes intégration (F2) ────────────────────────────────────── */
+.hse-scan__groups { display: flex; flex-direction: column; gap: 10px; }
+
+.hse-scan__group {
+  border: 1px solid var(--hse-border, #e5e7eb);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--hse-bg, #fff);
+}
+.hse-scan__group-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  background: var(--hse-surface, #f9fafb);
+  border-bottom: 1px solid transparent;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.hse-scan__group[open] .hse-scan__group-summary {
+  border-bottom-color: var(--hse-border, #e5e7eb);
+}
+.hse-scan__group-summary::-webkit-details-marker { display: none; }
+.hse-scan__group-arrow {
+  font-size: 0.7rem;
+  color: var(--hse-text-muted, #6b7280);
+  transition: transform 180ms;
+  margin-right: 2px;
+}
+.hse-scan__group[open] .hse-scan__group-arrow { transform: rotate(90deg); }
+.hse-scan__group-name {
+  flex: 1;
+  font-family: monospace;
+  font-size: 0.85rem;
+  color: var(--hse-text, #111);
+}
+.hse-scan__group-chips { display: flex; gap: 4px; }
+.hse-scan__chip {
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: var(--hse-surface, #f3f4f6);
+  border: 1px solid var(--hse-border, #e5e7eb);
+  color: var(--hse-text-muted, #6b7280);
+}
+.hse-scan__chip--energy { background: rgba(37,99,235,0.08); color: #1d4ed8; border-color: rgba(37,99,235,0.2); }
+.hse-scan__chip--power  { background: rgba(234,179,8,0.10);  color: #b45309; border-color: rgba(234,179,8,0.25); }
+.hse-scan__group-body { padding: 0; }
+
 /* ── Table ───────────────────────────────────────────────────────── */
 .hse-scan__table-wrap {
   overflow-x: auto;
-  border: 1px solid var(--hse-border, #e5e7eb);
-  border-radius: 12px;
-  background: var(--hse-bg, #fff);
 }
 table.hse-scan__table {
   width: 100%;
@@ -157,8 +207,6 @@ table.hse-scan__table {
   white-space: nowrap;
   background: var(--hse-surface, #f9fafb);
 }
-.hse-scan__table th:first-child { border-radius: 12px 0 0 0; }
-.hse-scan__table th:last-child  { border-radius: 0 12px 0 0; }
 .hse-scan__table td {
   padding: 10px 12px;
   border-bottom: 1px solid var(--hse-border, #e5e7eb);
@@ -203,6 +251,16 @@ table.hse-scan__table {
 .hse-scan__status--pending  { background: rgba(234,179,8,0.12);  color: #b45309; }
 
 .hse-scan__actions { display: flex; gap: 6px; flex-wrap: nowrap; }
+
+/* ── Catalogue table wrapper (avec bordure) ──────────────────────── */
+.hse-scan__cat-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--hse-border, #e5e7eb);
+  border-radius: 12px;
+  background: var(--hse-bg, #fff);
+}
+.hse-scan__cat-table-wrap table.hse-scan__table th:first-child { border-radius: 12px 0 0 0; }
+.hse-scan__cat-table-wrap table.hse-scan__table th:last-child  { border-radius: 0 12px 0 0; }
 
 /* ── Pagination ──────────────────────────────────────────────────── */
 .hse-scan__pager {
@@ -482,7 +540,7 @@ export class ScanView {
     }
   }
 
-  /* ── Re-scan ─────────────────────────────────────────────────────── */
+  /* ── Re-scan (F1 — POST /api/hse/scan) ──────────────────────────── */
 
   async _triggerRescan() {
     const btn = this._el?.querySelector('#hse-rescan-btn');
@@ -490,7 +548,8 @@ export class ScanView {
     btn.disabled = true;
     btn.textContent = '⟳ Scan en cours…';
     try {
-      const r = await this._ctx.hseFetch('/api/hse/catalogue/refresh', {
+      /* F1 : URL corrigée — POST /api/hse/scan (plus /catalogue/refresh) */
+      const r = await this._ctx.hseFetch('/api/hse/scan', {
         method: 'POST',
         signal: this._abort?.signal,
       });
@@ -500,15 +559,25 @@ export class ScanView {
         return;
       }
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      btn.textContent = '✓ Scan lancé';
-      /* Polling : recharge l'inbox dans 4s puis 8s */
-      this._scanSig = null;
-      setTimeout(() => { this._scanPage = 1; this._loadScan(); this._loadCatalogue(); }, 4000);
-      setTimeout(() => { this._scanSig = null; this._loadScan(); this._loadCatalogue(); }, 8000);
-      setTimeout(() => { btn.disabled = false; btn.textContent = '↻ Re-scanner'; }, 8500);
+
+      /* Le POST retourne directement les résultats — on les injecte */
+      const data = await r.json();
+      this._scanSig  = JSON.stringify(data);
+      this._scanData = data;
+      this._scanPage = 1;
+      this._selected.clear();
+      this._renderScan();
+      this._populateDomainFilter(data.items);
+
+      /* Recharge aussi le catalogue (les items triés peuvent avoir changé) */
+      this._catSig = null;
+      this._loadCatalogue();
+
+      btn.textContent = '✓ Scan terminé';
+      setTimeout(() => { btn.disabled = false; btn.textContent = '↻ Re-scanner'; }, 2500);
     } catch (e) {
       if (e.name === 'AbortError') return;
-      btn.textContent = `⚠ Erreur`;
+      btn.textContent = '⚠ Erreur';
       setTimeout(() => { btn.disabled = false; btn.textContent = '↻ Re-scanner'; }, 3000);
     }
   }
@@ -527,7 +596,6 @@ export class ScanView {
         signal:  this._abort?.signal,
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      /* Invalide les deux signatures → re-render */
       this._scanSig = null;
       this._catSig  = null;
       this._selected.delete(entityId);
@@ -568,7 +636,7 @@ export class ScanView {
     }
   }
 
-  /* ── Render : inbox ──────────────────────────────────────────────── */
+  /* ── Render : inbox (F2 — groupement par intégration) ────────────── */
 
   _renderScan() {
     const d = this._scanData;
@@ -577,25 +645,106 @@ export class ScanView {
     const badge = this._el?.querySelector('#hse-scan-badge');
     if (badge) badge.textContent = d.total ?? 0;
 
+    const pager = this._el?.querySelector('#hse-scan-pager');
+
     if (!d.items?.length) {
       this._setScanBody(`
         <div class="hse-scan__empty">
           <div class="hse-scan__empty-icon">🔍</div>
           <p>Aucune entité non triée${this._scanQ ? ` pour « ${this._scanQ} »` : ''}.</p>
         </div>`);
-      const pager = this._el?.querySelector('#hse-scan-pager');
       if (pager) pager.style.display = 'none';
       return;
     }
 
-    this._setScanBody(this._buildScanTable(d.items));
+    /* F2 — grouper par integration */
+    const groups = this._groupByIntegration(d.items);
+    const html   = this._buildGroupsHTML(groups);
+    this._setScanBody(html);
     this._bindScanRows();
+
+    /* Pagination globale (toujours utile si > 1 page) */
     this._renderScanPager(d);
     this._updateBulkBar();
   }
 
+  /* F2 — groupement par intégration (inspiré V2 scan.view.js) */
+  _groupByIntegration(items) {
+    const map = new Map();
+    for (const item of items) {
+      const key = item.integration || 'unknown';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(item);
+    }
+    const groups = [];
+    for (const [integration, list] of map) {
+      const energy = list.filter(i => i.kind === 'energy' || !i.kind).length;
+      const power  = list.filter(i => i.kind === 'power').length;
+      groups.push({ integration, items: list, energy, power });
+    }
+    /* trier : plus grand nombre d'abord, puis alpha */
+    groups.sort((a, b) =>
+      (b.items.length - a.items.length) || a.integration.localeCompare(b.integration)
+    );
+    return groups;
+  }
+
+  _buildGroupsHTML(groups) {
+    if (!groups.length) return '';
+    /* Auto-ouvrir si un seul groupe */
+    const autoOpen = groups.length === 1;
+    const parts = groups.map(g => {
+      const chipEnergy = g.energy  ? `<span class="hse-scan__chip hse-scan__chip--energy">⚡ ${g.energy} energy</span>` : '';
+      const chipPower  = g.power   ? `<span class="hse-scan__chip hse-scan__chip--power">⚙ ${g.power} power</span>` : '';
+      const chipTotal  = `<span class="hse-scan__chip">${g.items.length} entité${g.items.length > 1 ? 's' : ''}</span>`;
+      const rows = g.items.map(item => {
+        const score      = this._scoreClass(item.quality_score);
+        const scoreLabel = item.quality_score >= 75 ? 'Bon' : item.quality_score >= 40 ? 'Moyen' : 'Faible';
+        const sel        = this._selected.has(item.entity_id);
+        return `
+        <tr data-entity-id="${this._esc(item.entity_id)}" class="${sel ? 'selected' : ''}">
+          <td><input type="checkbox" class="hse-scan__cb" aria-label="Sélectionner" ${sel ? 'checked' : ''} /></td>
+          <td>
+            <div>${this._esc(item.name ?? item.entity_id)}</div>
+            <div class="hse-scan__entity-id">${this._esc(item.entity_id)}</div>
+          </td>
+          <td>${this._esc(item.domain ?? '—')}</td>
+          <td class="hse-scan__device">${this._esc(item.device ?? '—')}</td>
+          <td><span class="hse-scan__score hse-scan__score--${score}">${item.quality_score ?? '?'}% ${scoreLabel}</span></td>
+          <td class="hse-scan__actions">
+            <button class="hse-btn hse-btn--primary hse-btn--sm"
+              data-triage-id="${this._esc(item.entity_id)}" data-triage-action="select">✓ Utiliser</button>
+            <button class="hse-btn hse-btn--ghost hse-btn--sm"
+              data-triage-id="${this._esc(item.entity_id)}" data-triage-action="ignore">✕ Ignorer</button>
+          </td>
+        </tr>`;
+      }).join('');
+
+      return `
+      <details class="hse-scan__group" ${autoOpen ? 'open' : ''}>
+        <summary class="hse-scan__group-summary">
+          <span class="hse-scan__group-arrow">▶</span>
+          <span class="hse-scan__group-name">${this._esc(g.integration)}</span>
+          <div class="hse-scan__group-chips">${chipTotal}${chipEnergy}${chipPower}</div>
+        </summary>
+        <div class="hse-scan__group-body">
+          <div class="hse-scan__table-wrap">
+            <table class="hse-scan__table" role="grid">
+              <thead><tr>
+                <th style="width:36px"><input type="checkbox" class="hse-scan__cb-group" aria-label="Tout sélectionner ce groupe" data-group="${this._esc(g.integration)}" /></th>
+                <th>Entité</th><th>Domaine</th><th>Appareil</th><th>Qualité</th><th>Actions</th>
+              </tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>
+      </details>`;
+    }).join('');
+
+    return `<div class="hse-scan__groups">${parts}</div>`;
+  }
+
   _renderScanRows() {
-    /* Re-render uniquement les checkboxes + classes sélection — sans re-fetch */
     const rows = this._el?.querySelectorAll('.hse-scan__table tr[data-entity-id]');
     rows?.forEach(row => {
       const id  = row.dataset.entityId;
@@ -606,64 +755,26 @@ export class ScanView {
     });
   }
 
-  _buildScanTable(items) {
-    const rows = items.map(item => {
-      const score     = this._scoreClass(item.quality_score);
-      const scoreLabel = item.quality_score >= 75 ? 'Bon' : item.quality_score >= 40 ? 'Moyen' : 'Faible';
-      const sel       = this._selected.has(item.entity_id);
-      return `
-      <tr data-entity-id="${this._esc(item.entity_id)}" class="${sel ? 'selected' : ''}">
-        <td><input type="checkbox" class="hse-scan__cb" aria-label="Sélectionner" ${sel ? 'checked' : ''} /></td>
-        <td>
-          <div>${this._esc(item.name ?? item.entity_id)}</div>
-          <div class="hse-scan__entity-id">${this._esc(item.entity_id)}</div>
-        </td>
-        <td>${this._esc(item.domain ?? '—')}</td>
-        <td class="hse-scan__device">${this._esc(item.device ?? '—')}</td>
-        <td><span class="hse-scan__score hse-scan__score--${score}">${item.quality_score ?? '?'}% ${scoreLabel}</span></td>
-        <td class="hse-scan__actions">
-          <button class="hse-btn hse-btn--primary hse-btn--sm"
-            data-triage-id="${this._esc(item.entity_id)}" data-triage-action="select"
-            title="Sélectionner">✓ Utiliser</button>
-          <button class="hse-btn hse-btn--ghost hse-btn--sm"
-            data-triage-id="${this._esc(item.entity_id)}" data-triage-action="ignore"
-            title="Ignorer">✕ Ignorer</button>
-        </td>
-      </tr>`;
-    }).join('');
-
-    return `
-    <div class="hse-scan__table-wrap">
-      <table class="hse-scan__table" role="grid">
-        <thead><tr>
-          <th style="width:36px"><input type="checkbox" id="hse-cb-all" aria-label="Tout sélectionner" /></th>
-          <th>Entité</th>
-          <th>Domaine</th>
-          <th>Appareil</th>
-          <th>Qualité</th>
-          <th>Actions</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
-  }
-
   _bindScanRows() {
-    const wrap = this._el?.querySelector('.hse-scan__table-wrap');
-    if (!wrap) return;
+    const body = this._el?.querySelector('#hse-scan-body');
+    if (!body) return;
 
-    /* Checkbox "tout sélectionner" */
-    const cbAll = wrap.querySelector('#hse-cb-all');
-    cbAll?.addEventListener('change', () => {
-      const ids = this._scanData?.items?.map(i => i.entity_id) ?? [];
-      if (cbAll.checked) ids.forEach(id => this._selected.add(id));
-      else               ids.forEach(id => this._selected.delete(id));
-      this._updateBulkBar();
-      this._renderScanRows();
+    /* Checkboxes de groupe */
+    body.querySelectorAll('.hse-scan__cb-group').forEach(cbg => {
+      cbg.addEventListener('change', () => {
+        const grp  = cbg.dataset.group;
+        const rows = cbg.closest('table')?.querySelectorAll('tr[data-entity-id]');
+        rows?.forEach(row => {
+          const id = row.dataset.entityId;
+          cbg.checked ? this._selected.add(id) : this._selected.delete(id);
+        });
+        this._updateBulkBar();
+        this._renderScanRows();
+      });
     });
 
     /* Checkboxes individuelles */
-    wrap.querySelectorAll('.hse-scan__cb').forEach(cb => {
+    body.querySelectorAll('.hse-scan__cb').forEach(cb => {
       cb.addEventListener('change', () => {
         const row = cb.closest('tr[data-entity-id]');
         if (!row) return;
@@ -675,7 +786,7 @@ export class ScanView {
     });
 
     /* Boutons triage unitaire */
-    wrap.querySelectorAll('[data-triage-id]').forEach(btn => {
+    body.querySelectorAll('[data-triage-id]').forEach(btn => {
       btn.addEventListener('click', () =>
         this._triage(btn.dataset.triageId, btn.dataset.triageAction));
     });
@@ -753,7 +864,7 @@ export class ScanView {
     }).join('');
 
     return `
-    <div class="hse-scan__table-wrap">
+    <div class="hse-scan__cat-table-wrap">
       <table class="hse-scan__table" role="grid">
         <thead><tr>
           <th>Entité</th>
@@ -769,7 +880,7 @@ export class ScanView {
   }
 
   _bindCatRows() {
-    const wrap = this._el?.querySelector('#hse-cat-body .hse-scan__table-wrap');
+    const wrap = this._el?.querySelector('#hse-cat-body .hse-scan__cat-table-wrap');
     if (!wrap) return;
     wrap.querySelectorAll('[data-cat-id]').forEach(btn => {
       btn.addEventListener('click', () =>
