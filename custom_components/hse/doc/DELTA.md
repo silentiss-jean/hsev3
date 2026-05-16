@@ -1,6 +1,6 @@
 # DELTA.md — Écarts doc/code actifs HSE V3
 
-> Mis à jour : 2026-05-16 17:20 CEST
+> Mis à jour : 2026-05-16 17:47 CEST
 >
 > **Règle** : aucun patch ne doit contredire un écart EN_DISCUSSION.
 > Fermer un écart = écrire la solution ici avant de commiter.
@@ -22,6 +22,7 @@
 | DELTA-054 | Onglet Détection — capteurs non affichés (1re occurrence) | Diagnostic : capteurs déjà catalogués (comportement correct). Seul Tuya restait dans l'inbox. | 2026-05-16 |
 | DELTA-055 | Groupe `"integration"` dans le catalogue (artefact pre-DELTA-053) | Patch backend `catalogue.py` + frontend libellés lisibles. | 2026-05-16 |
 | DELTA-056 | Onglet Détection — capteurs par intégration toujours non affichés | **2 bugs corrigés dans `scan_view.js`** : (1) `mount()` ne réinitialisait pas `_scanSig`/`_catSig` → R3 court-circuitait `_renderScan()` ; (2) `_triage()` appelait `CSS.escape()` sur la constante string CSS → TypeError silencieux. Fix : reset signatures + `_attrVal()`. | 2026-05-16 |
+| DELTA-057 | scan_view.js — `customElements.define('hse-panel', HsePanel)` parasite en bas du fichier | Ligne copiée par erreur lors d'un patch précédent → `ReferenceError: HsePanel is not defined` au chargement du module ES. Supprimée. Stubs ajoutés pour les 5 onglets manquants (overview, config, costs, diagnostic, migration) → élimine les `TypeError: Failed to fetch dynamically imported module`. | 2026-05-16 |
 
 ---
 
@@ -50,14 +51,14 @@
 |---------|--------|-------|
 | `hse_panel.js` | ✅ | Correctif bureau virtuel macOS inclus |
 | `hse_shell.js` | 🟡 | Commité — validation humaine en attente |
-| `scan_view.js` | ✅ | DELTA-056 fermé — 2 bugs corrigés |
-| `overview_view.js` | ❌ | À coder (étape 2) |
-| `config_view.js` | ❌ | À coder (étape 3) |
-| `costs_view.js` | ❌ | À coder (étape 4) |
-| `diagnostic_view.js` | ❌ | À coder (étape 5) |
-| `migration_view.js` | ❌ | À coder (étape 6) |
+| `scan_view.js` | ✅ | DELTA-057 : ligne parasite supprimée |
+| `overview_view.js` | 🟡 | Stub présent — à implémenter (étape 2) |
+| `config_view.js` | 🟡 | Stub présent — à implémenter (étape 3) |
+| `costs_view.js` | 🟡 | Stub présent — à implémenter (étape 4) |
+| `diagnostic_view.js` | 🟡 | Stub présent — à implémenter (étape 5) |
+| `migration_view.js` | 🟡 | Stub présent — à implémenter (étape 6) |
 | `cards_view.js` | ❌ | À coder (étape 7) |
 
 ### Prochaine action
 
-Valider `scan_view.js` (onglet Détection — 5 capteurs Tuya doivent apparaître groupés) puis valider `hse_shell.js` → coder `overview_view.js`.
+Recharger HA → vérifier que l'onglet Détection affiche les capteurs sans erreur console → valider `hse_shell.js` → implémenter `overview_view.js`.
