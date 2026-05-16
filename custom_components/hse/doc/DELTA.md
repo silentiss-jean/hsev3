@@ -1,13 +1,33 @@
 # DELTA.md — Écarts doc/code actifs HSE V3
 
-> Mis à jour : 2026-05-16 17:47 CEST
+> Mis à jour : 2026-05-16 18:02 CEST
 >
 > **Règle** : aucun patch ne doit contredire un écart EN_DISCUSSION.
 > Fermer un écart = écrire la solution ici avant de commiter.
 
 ---
 
-## ✅ Aucun écart actif
+## Écarts actifs
+
+### DELTA-058 — `PATCH/DELETE /api/hse/catalogue/{entity_id}` manquants
+- **Statut** : `EN_DISCUSSION`
+- **Priorité** : Moyenne
+- **Contexte** : `04_onglet_config.md` (sous-section A) prévoit l'édition inline du nom et la suppression individuelle d'un item du catalogue via `PATCH` et `DELETE`. Ces deux routes n'existent pas dans `catalogue.py`.
+- **Impact front** : `config_view.js` ne peut pas implémenter l'édition/suppression individuelle tant que ces routes sont absentes. **Contournement temporaire** : utiliser `POST /api/hse/catalogue/triage` avec `action: ignore` pour "désactiver" un item (sémantique différente mais fonctionnellement acceptable pour la V1 de l'onglet).
+- **Solution proposée** : Ajouter dans `catalogue.py` :
+  - `PATCH /api/hse/catalogue/{entity_id}` → modifie `display_name`, `room`, `type` d'un item
+  - `DELETE /api/hse/catalogue/{entity_id}` → supprime l'item du store
+- **Décision** : ⏳ En attente — coder `config_view.js` avec le contournement triage, puis implémenter les routes PATCH/DELETE dans un second commit.
+
+---
+
+### DELTA-059 — `POST /api/hse/meta` (création manuelle pièce/type) manquant
+- **Statut** : `EN_DISCUSSION`
+- **Priorité** : Faible
+- **Contexte** : `04_onglet_config.md` (sous-section B) prévoit la création manuelle de pièces et de types via `POST /api/hse/meta`. `meta.py` n'expose qu'un `GET` + les routes `sync/preview` et `sync/apply`.
+- **Impact front** : La sous-section B de `config_view.js` sera en lecture seule pour les pièces/types (affichage + sync uniquement). La création manuelle est bloquée.
+- **Solution proposée** : Ajouter `POST /api/hse/meta` dans `meta.py` avec body `{action: "create_room"|"create_type", name: string}`.
+- **Décision** : ⏳ En attente — implémenter `config_view.js` sans création manuelle. Ajouter un bouton "Créer" grisé avec tooltip "Bientôt disponible".
 
 ---
 
@@ -39,7 +59,9 @@
 | `catalogue/scan_engine.py` | ✅ | Détection entités énergie/puissance |
 | `sensors/quality_scorer.py` | ✅ | Score qualité |
 | `api/views/scan.py` | ✅ | GET/POST /api/hse/scan |
-| `api/views/catalogue.py` | ✅ | DELTA-055 appliqué |
+| `api/views/catalogue.py` | ✅ | DELTA-055 appliqué — PATCH/DELETE manquants (DELTA-058) |
+| `api/views/meta.py` | ✅ | GET + sync/preview + sync/apply — POST création manquant (DELTA-059) |
+| `api/views/settings.py` | ✅ | GET/PUT /api/hse/settings/pricing |
 | `api/views/costs.py` | ✅ | Backend dispo |
 | `api/views/overview.py` | ✅ | Backend dispo |
 | `api/views/diagnostic.py` | ✅ | Backend dispo |
@@ -53,7 +75,7 @@
 | `hse_shell.js` | 🟡 | Commité — validation humaine en attente |
 | `scan_view.js` | ✅ | DELTA-057 : ligne parasite supprimée |
 | `overview_view.js` | 🟡 | Stub présent — à implémenter (étape 2) |
-| `config_view.js` | 🟡 | Stub présent — à implémenter (étape 3) |
+| `config_view.js` | 🟡 | Stub présent — **en cours** (étape 3) — contraintes DELTA-058 + DELTA-059 |
 | `costs_view.js` | 🟡 | Stub présent — à implémenter (étape 4) |
 | `diagnostic_view.js` | 🟡 | Stub présent — à implémenter (étape 5) |
 | `migration_view.js` | 🟡 | Stub présent — à implémenter (étape 6) |
@@ -61,4 +83,4 @@
 
 ### Prochaine action
 
-Recharger HA → vérifier que l'onglet Détection affiche les capteurs sans erreur console → valider `hse_shell.js` → implémenter `overview_view.js`.
+Implémenter `config_view.js` avec les contournements DELTA-058/059 documentés ci-dessus, puis coder les routes PATCH/DELETE/POST-meta dans un second commit.
