@@ -21,6 +21,48 @@ from ...sensors.quality_scorer import score_item
 _VALID_ACTIONS = ("select", "ignore", "reset")
 _VALID_STATUS = ("all", "selected", "ignored", "pending")
 
+# Valeurs de platform/domain qui sont des artefacts HA internes
+# et ne correspondent pas à une vraie intégration réseau.
+_HA_INTERNAL_PLATFORMS = frozenset({"integration", "recorder", "homeassistant"})
+
+
+def _resolve_integration_domain(hass: HomeAssistant, src: dict) -> str:
+    """
+    Résout le domaine technique (clé de groupement) pour un item du catalogue.
+
+    Problème DELTA-055 : les items catalogués avant le patch 2026-05-16
+    ont integration_domain = "integration" (la platform HA des helpers).
+    Ce n'est pas un vrai domaine réseau → on résout via config_entry_id.
+
+    Ordre de résolution :
+    1. integration_domain stocké ET valide (≠ "integration" ou autre interne)
+    2. config_entry_id → config_entries.async_get_entry().domain (live)
+    3. platform stocké (si valide)
+    4. Fallback : "unknown"
+    """
+    stored_domain = src.get("integration_domain")
+    if stored_domain and stored_domain not in _HA_INTERNAL_PLATFORMS:
+        return stored_domain
+
+    # Résolution live via config_entry_id
+    config_entry_id = src.get("config_entry_id")
+    if config_entry_id:
+        entry = hass.config_entries.async_get_entry(config_entry_id)
+        if entry and entry.domain and entry.domain not in _HA_INTERNAL_PLATFORMS:
+            return entry.domain
+
+    # Fallback platform stockée
+    platform = src.get("platform")
+    if platform and platform not in _HA_INTERNAL_PLATFORMS:
+        return platform
+
+    # Si c'était un artefact "integration", on retourne la valeur stockée
+    # telle quelle (utility_meter par exemple est correctement nommé).
+    if stored_domain:
+        return stored_domain
+
+    return "unknown"
+
 
 def _resolve_integration_label(hass: HomeAssistant, src: dict) -> str | None:
     """
@@ -29,7 +71,7 @@ def _resolve_integration_label(hass: HomeAssistant, src: dict) -> str | None:
     Stratégie :
     1. integration_label stocké lors du scan (présent après le patch 2026-05-16)
     2. Fallback live : config_entry_id → config_entries.async_get_entry().title
-    3. Fallback : integration_domain stocké
+    3. Fallback : integration_domain résolu
     4. Fallback : platform stocké
     5. None
     """
@@ -45,9 +87,9 @@ def _resolve_integration_label(hass: HomeAssistant, src: dict) -> str | None:
         if entry:
             return entry.title or entry.domain
 
-    # 3. integration_domain stocké
-    domain = src.get("integration_domain")
-    if domain:
+    # 3. integration_domain résolu
+    domain = _resolve_integration_domain(hass, src)
+    if domain and domain != "unknown":
         return domain
 
     # 4. platform
@@ -95,6 +137,10 @@ class HseCatalogueView(HseBaseView):
             )
             ha_state_raw = getattr(state_obj, "state", None) if state_obj else None
 
+            # DELTA-055 : résoudre integration_domain à la volée
+            # pour corriger les artefacts "integration" pre-DELTA-053
+            resolved_domain = _resolve_integration_domain(self.hass, src)
+
             filtered.append({
                 "entity_id": eid,
                 "name": friendly_name,
@@ -103,9 +149,9 @@ class HseCatalogueView(HseBaseView):
                 "type": (item.get("enrichment") or {}).get("type_id"),
                 "status": policy,
                 "quality_score": score_item(item, ha_state_raw),
-                # Intégration source — stockée ou résolue live
+                # Intégration source — domain résolu + label lisible
                 "integration": _resolve_integration_label(self.hass, src),
-                "integration_domain": src.get("integration_domain"),
+                "integration_domain": resolved_domain,
                 "platform": src.get("platform"),
             })
 

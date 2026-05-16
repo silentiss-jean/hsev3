@@ -8,6 +8,10 @@
  *           integration_label affiché en sous-titre si différent du domain
  *           Catalogue aussi groupé par intégration (même logique)
  *
+ * DELTA-055 — Libellés lisibles pour groupes HA internes :
+ *   "utility_meter" → "Compteurs HA"
+ *   "integration"   → "Helpers HA" (artefact pre-DELTA-053 résiduel)
+ *
  * Endpoints :
  *   GET  /api/hse/scan                   → inbox entités non triées
  *   POST /api/hse/scan                   → re-scan (F1 — corrigé)
@@ -203,6 +207,12 @@ const CSS = `
 }
 .hse-scan__chip--energy { background: rgba(37,99,235,0.08); color: #1d4ed8; border-color: rgba(37,99,235,0.2); }
 .hse-scan__chip--power  { background: rgba(234,179,8,0.10);  color: #b45309; border-color: rgba(234,179,8,0.25); }
+.hse-scan__chip--internal {
+  background: rgba(107,114,128,0.10);
+  color: #6b7280;
+  border-color: rgba(107,114,128,0.25);
+  font-style: italic;
+}
 .hse-scan__group-body { padding: 0; }
 
 /* ── Table ───────────────────────────────────────────────────────── */
@@ -342,6 +352,28 @@ table.hse-scan__table {
 
 const PER_PAGE = 25;
 const CATALOGUE_PER_PAGE = 50;
+
+/**
+ * DELTA-055 — Libellés lisibles pour les domaines HA internes.
+ * Ces domaines ne correspondent pas à une intégration réseau mais à
+ * des plateformes HA internes (helpers, compteurs, etc.).
+ */
+const DOMAIN_DISPLAY_NAMES = {
+  utility_meter: 'Compteurs HA',
+  integration:   'Helpers HA',
+  homeassistant: 'Core HA',
+  recorder:      'Recorder HA',
+};
+
+/** Retourne le nom d'affichage d'un domain (libellé lisible si connu, sinon le domain brut) */
+function domainDisplayName(domain) {
+  return DOMAIN_DISPLAY_NAMES[domain] || domain;
+}
+
+/** Retourne true si le domain est un domaine HA interne (pas une intégration réseau) */
+function isInternalDomain(domain) {
+  return domain in DOMAIN_DISPLAY_NAMES;
+}
 
 export class ScanView {
   constructor() {
@@ -685,12 +717,8 @@ export class ScanView {
   _groupByIntegration(items) {
     const map = new Map();
     for (const item of items) {
-      // integration_domain = clé de groupement technique ("tuya", "tplink"…)
-      // Rétrocompat : fallback sur l'ancien champ "integration" si migration partielle
       const key = item.integration_domain || item.integration || 'unknown';
       if (!map.has(key)) {
-        // Récupérer un label lisible parmi les items du groupe
-        // integration_label peut être "tuya@ftoure.net" → on l'affiche en sous-titre
         map.set(key, { label: item.integration_label || key, items: [] });
       }
       map.get(key).items.push(item);
@@ -711,11 +739,13 @@ export class ScanView {
     if (!groups.length) return '';
     const autoOpen = groups.length === 1;
     const parts = groups.map(g => {
-      // Afficher le label en sous-titre seulement s'il est différent du domain
-      const showLabel = g.label && g.label !== g.domain;
+      const displayName = domainDisplayName(g.domain);
+      const internal    = isInternalDomain(g.domain);
+      // Afficher le label en sous-titre seulement s'il est différent du displayName
+      const showLabel = g.label && g.label !== g.domain && g.label !== displayName;
       const chipEnergy = g.energy ? `<span class="hse-scan__chip hse-scan__chip--energy">⚡ ${g.energy} energy</span>` : '';
       const chipPower  = g.power  ? `<span class="hse-scan__chip hse-scan__chip--power">⚙ ${g.power} power</span>` : '';
-      const chipTotal  = `<span class="hse-scan__chip">${g.items.length} entité${g.items.length > 1 ? 's' : ''}</span>`;
+      const chipTotal  = `<span class="hse-scan__chip${internal ? ' hse-scan__chip--internal' : ''}">${g.items.length} entité${g.items.length > 1 ? 's' : ''}</span>`;
 
       const rows = g.items.map(item => {
         const score      = this._scoreClass(item.quality_score);
@@ -745,7 +775,7 @@ export class ScanView {
         <summary class="hse-scan__group-summary">
           <span class="hse-scan__group-arrow">▶</span>
           <div class="hse-scan__group-meta">
-            <span class="hse-scan__group-name">${this._esc(g.domain)}</span>
+            <span class="hse-scan__group-name">${this._esc(displayName)}</span>
             ${showLabel ? `<span class="hse-scan__group-label">${this._esc(g.label)}</span>` : ''}
           </div>
           <div class="hse-scan__group-chips">${chipTotal}${chipEnergy}${chipPower}</div>
@@ -754,176 +784,11 @@ export class ScanView {
           <div class="hse-scan__table-wrap">
             <table class="hse-scan__table" role="grid">
               <thead><tr>
-                <th style="width:36px"><input type="checkbox" class="hse-scan__cb-group" aria-label="Tout sélectionner ce groupe" data-group="${this._esc(g.domain)}" /></th>
-                <th>Entité</th><th>Domaine</th><th>Appareil</th><th>Qualité</th><th>Actions</th>
-              </tr></thead>
-              <tbody>${rows}</tbody>
-            </table>
-          </div>
-        </div>
-      </details>`;
-    }).join('');
-
-    return `<div class="hse-scan__groups">${parts}</div>`;
-  }
-
-  _renderScanRows() {
-    const rows = this._el?.querySelectorAll('.hse-scan__table tr[data-entity-id]');
-    rows?.forEach(row => {
-      const id  = row.dataset.entityId;
-      const cb  = row.querySelector('.hse-scan__cb');
-      const sel = this._selected.has(id);
-      row.classList.toggle('selected', sel);
-      if (cb) cb.checked = sel;
-    });
-  }
-
-  _bindScanRows() {
-    const body = this._el?.querySelector('#hse-scan-body');
-    if (!body) return;
-
-    body.querySelectorAll('.hse-scan__cb-group').forEach(cbg => {
-      cbg.addEventListener('change', () => {
-        const rows = cbg.closest('table')?.querySelectorAll('tr[data-entity-id]');
-        rows?.forEach(row => {
-          const id = row.dataset.entityId;
-          cbg.checked ? this._selected.add(id) : this._selected.delete(id);
-        });
-        this._updateBulkBar();
-        this._renderScanRows();
-      });
-    });
-
-    body.querySelectorAll('.hse-scan__cb').forEach(cb => {
-      cb.addEventListener('change', () => {
-        const row = cb.closest('tr[data-entity-id]');
-        if (!row) return;
-        const id = row.dataset.entityId;
-        cb.checked ? this._selected.add(id) : this._selected.delete(id);
-        row.classList.toggle('selected', cb.checked);
-        this._updateBulkBar();
-      });
-    });
-
-    body.querySelectorAll('[data-triage-id]').forEach(btn => {
-      btn.addEventListener('click', () =>
-        this._triage(btn.dataset.triageId, btn.dataset.triageAction));
-    });
-  }
-
-  _renderScanPager(d) {
-    const pager = this._el?.querySelector('#hse-scan-pager');
-    if (!pager) return;
-    const totalPages = Math.ceil(d.total / d.per_page) || 1;
-    if (totalPages <= 1) { pager.style.display = 'none'; return; }
-    pager.style.display = 'flex';
-    pager.innerHTML = `
-      <span>${d.total} entité(s) — page ${d.page} / ${totalPages}</span>
-      <div class="hse-scan__pager-btns">
-        <button class="hse-btn hse-btn--ghost hse-btn--sm" id="hse-scan-prev"
-          ${d.page <= 1 ? 'disabled' : ''}>← Préc.</button>
-        <button class="hse-btn hse-btn--ghost hse-btn--sm" id="hse-scan-next"
-          ${d.page >= totalPages ? 'disabled' : ''}>Suiv. →</button>
-      </div>`;
-    pager.querySelector('#hse-scan-prev')?.addEventListener('click', () => {
-      this._scanPage--; this._selected.clear(); this._loadScan();
-    });
-    pager.querySelector('#hse-scan-next')?.addEventListener('click', () => {
-      this._scanPage++; this._selected.clear(); this._loadScan();
-    });
-  }
-
-  /* ── Render : catalogue (groupé par intégration) ─────────────────── */
-
-  _renderCatalogue() {
-    const d = this._catData;
-    if (!d) return;
-
-    const badge = this._el?.querySelector('#hse-cat-badge');
-    if (badge) badge.textContent = d.total ?? 0;
-
-    if (!d.items?.length) {
-      this._setCatBody(`
-        <div class="hse-scan__empty">
-          <div class="hse-scan__empty-icon">📭</div>
-          <p>Aucune entité cataloguée${this._catStatus !== 'all' ? ` avec le statut « ${this._catStatus} »` : ''}.</p>
-        </div>`);
-      const pager = this._el?.querySelector('#hse-cat-pager');
-      if (pager) pager.style.display = 'none';
-      return;
-    }
-
-    this._setCatBody(this._buildCatGroups(d.items));
-    this._bindCatRows();
-    this._renderCatPager(d);
-  }
-
-  /* Catalogue groupé par integration_domain — même logique que l'inbox */
-  _buildCatGroups(items) {
-    // Grouper
-    const map = new Map();
-    for (const item of items) {
-      const key = item.integration_domain || item.integration || 'unknown';
-      if (!map.has(key)) {
-        map.set(key, { label: item.integration_label || key, items: [] });
-      }
-      map.get(key).items.push(item);
-    }
-    const groups = [];
-    for (const [domain, { label, items: list }] of map) {
-      groups.push({ domain, label, items: list });
-    }
-    groups.sort((a, b) =>
-      (b.items.length - a.items.length) || a.domain.localeCompare(b.domain)
-    );
-
-    const autoOpen = groups.length === 1;
-    const parts = groups.map(g => {
-      const showLabel = g.label && g.label !== g.domain;
-      const chipTotal = `<span class="hse-scan__chip">${g.items.length} entité${g.items.length > 1 ? 's' : ''}</span>`;
-
-      const rows = g.items.map(item => {
-        const score     = this._scoreClass(item.quality_score);
-        const statusCls = `hse-scan__status--${item.status ?? 'pending'}`;
-        const statusLbl = item.status === 'selected' ? 'Actif'
-                        : item.status === 'ignored'  ? 'Ignoré' : 'En attente';
-        return `
-        <tr data-entity-id="${this._esc(item.entity_id)}">
-          <td>
-            <div>${this._esc(item.name ?? item.entity_id)}</div>
-            <div class="hse-scan__entity-id">${this._esc(item.entity_id)}</div>
-          </td>
-          <td>${this._esc(item.room ?? '—')}</td>
-          <td>${this._esc(item.type ?? '—')}</td>
-          <td><span class="hse-scan__status ${statusCls}">${statusLbl}</span></td>
-          <td><span class="hse-scan__score hse-scan__score--${score}">${item.quality_score ?? '?'}%</span></td>
-          <td class="hse-scan__actions">
-            ${item.status !== 'selected' ? `<button class="hse-btn hse-btn--primary hse-btn--sm" data-cat-id="${this._esc(item.entity_id)}" data-cat-action="select">✓ Activer</button>` : ''}
-            ${item.status !== 'ignored'  ? `<button class="hse-btn hse-btn--ghost hse-btn--sm"   data-cat-id="${this._esc(item.entity_id)}" data-cat-action="ignore">✕ Ignorer</button>` : ''}
-            <button class="hse-btn hse-btn--ghost hse-btn--sm" data-cat-id="${this._esc(item.entity_id)}" data-cat-action="reset">↺ Reset</button>
-          </td>
-        </tr>`;
-      }).join('');
-
-      return `
-      <details class="hse-scan__group" ${autoOpen ? 'open' : ''}>
-        <summary class="hse-scan__group-summary">
-          <span class="hse-scan__group-arrow">▶</span>
-          <div class="hse-scan__group-meta">
-            <span class="hse-scan__group-name">${this._esc(g.domain)}</span>
-            ${showLabel ? `<span class="hse-scan__group-label">${this._esc(g.label)}</span>` : ''}
-          </div>
-          <div class="hse-scan__group-chips">${chipTotal}</div>
-        </summary>
-        <div class="hse-scan__group-body">
-          <div class="hse-scan__table-wrap">
-            <table class="hse-scan__table" role="grid">
-              <thead><tr>
+                <th style="width:36px"><input type="checkbox" class="hse-scan__cb-group" aria-label="Tout sélectionner dans ce groupe" /></th>
                 <th>Entité</th>
-                <th>Pièce</th>
-                <th>Type</th>
-                <th>Statut</th>
-                <th>Qualité</th>
+                <th>Domaine</th>
+                <th>Appareil</th>
+                <th>Score</th>
                 <th>Actions</th>
               </tr></thead>
               <tbody>${rows}</tbody>
@@ -936,82 +801,208 @@ export class ScanView {
     return `<div class="hse-scan__groups">${parts}</div>`;
   }
 
-  _bindCatRows() {
-    const body = this._el?.querySelector('#hse-cat-body');
-    if (!body) return;
-    body.querySelectorAll('[data-cat-id]').forEach(btn => {
-      btn.addEventListener('click', () =>
-        this._triageCat(btn.dataset.catId, btn.dataset.catAction));
-    });
+  /* ── Render : catalogue ──────────────────────────────────────────── */
+
+  _renderCatalogue() {
+    const d = this._catData;
+    if (!d) return;
+
+    const badge = this._el?.querySelector('#hse-cat-badge');
+    if (badge) badge.textContent = d.total ?? 0;
+
+    if (!d.items?.length) {
+      this._setCatBody(`
+        <div class="hse-scan__empty">
+          <div class="hse-scan__empty-icon">📭</div>
+          <p>Aucune entité cataloguée${this._catStatus !== 'all' ? ` avec statut « ${this._catStatus} »` : ''}.</p>
+        </div>`);
+      const pager = this._el?.querySelector('#hse-cat-pager');
+      if (pager) pager.style.display = 'none';
+      return;
+    }
+
+    /* Groupement par integration_domain (même logique que inbox) */
+    const map = new Map();
+    for (const item of d.items) {
+      const key = item.integration_domain || item.integration || 'unknown';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(item);
+    }
+
+    const groupParts = [];
+    for (const [domain, items] of map) {
+      const displayName = domainDisplayName(domain);
+      const internal    = isInternalDomain(domain);
+      const rows = items.map(item => {
+        const score      = this._scoreClass(item.quality_score);
+        const scoreLabel = item.quality_score >= 75 ? 'Bon' : item.quality_score >= 40 ? 'Moyen' : 'Faible';
+        const statusCls  = `hse-scan__status--${item.status}`;
+        const statusLbl  = { selected: 'Sélectionné', ignored: 'Ignoré', pending: 'En attente' }[item.status] || item.status;
+        return `
+        <tr>
+          <td>
+            <div>${this._esc(item.name ?? item.entity_id)}</div>
+            <div class="hse-scan__entity-id">${this._esc(item.entity_id)}</div>
+          </td>
+          <td><span class="hse-scan__status ${statusCls}">${statusLbl}</span></td>
+          <td><span class="hse-scan__score hse-scan__score--${score}">${item.quality_score ?? '?'}%</span></td>
+          <td class="hse-scan__actions">
+            <button class="hse-btn hse-btn--ghost hse-btn--sm"
+              data-triage-id="${this._esc(item.entity_id)}" data-triage-action="reset">↺ Remettre</button>
+          </td>
+        </tr>`;
+      }).join('');
+
+      groupParts.push(`
+      <details class="hse-scan__group" open>
+        <summary class="hse-scan__group-summary">
+          <span class="hse-scan__group-arrow">▶</span>
+          <div class="hse-scan__group-meta">
+            <span class="hse-scan__group-name">${this._esc(displayName)}</span>
+          </div>
+          <span class="hse-scan__chip${internal ? ' hse-scan__chip--internal' : ''}">${items.length} entité${items.length > 1 ? 's' : ''}</span>
+        </summary>
+        <div class="hse-scan__group-body">
+          <div class="hse-scan__cat-table-wrap">
+            <table class="hse-scan__table" role="grid">
+              <thead><tr>
+                <th>Entité</th>
+                <th>Statut</th>
+                <th>Score</th>
+                <th>Actions</th>
+              </tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>
+      </details>`);
+    }
+
+    const html = `<div class="hse-scan__groups">${groupParts.join('')}</div>`;
+    this._setCatBody(html);
+    this._bindCatRows();
+    this._renderCatPager(d);
   }
 
-  async _triageCat(entityId, action) {
-    const btn = this._el?.querySelector(`[data-cat-id="${CSS.escape(entityId)}"][data-cat-action="${action}"]`);
-    if (btn) { btn.disabled = true; btn.textContent = '…'; }
-    try {
-      const r = await this._ctx.hseFetch('/api/hse/catalogue/triage', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ entity_id: entityId, action }),
-        signal:  this._abort?.signal,
-      });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      this._scanSig = null;
-      this._catSig  = null;
-      await Promise.all([this._loadScan(), this._loadCatalogue()]);
-    } catch (e) {
-      if (e.name === 'AbortError') return;
-      if (btn) btn.disabled = false;
-    }
+  /* ── Pagers ──────────────────────────────────────────────────────── */
+
+  _renderScanPager(d) {
+    const pager = this._el?.querySelector('#hse-scan-pager');
+    if (!pager) return;
+    const totalPages = Math.ceil(d.total / PER_PAGE);
+    if (totalPages <= 1) { pager.style.display = 'none'; return; }
+    pager.style.display = 'flex';
+    pager.innerHTML = `
+      <span>Page ${this._scanPage} / ${totalPages} — ${d.total} entité${d.total > 1 ? 's' : ''}</span>
+      <div class="hse-scan__pager-btns">
+        <button class="hse-btn hse-btn--ghost hse-btn--sm" id="hse-scan-prev" ${this._scanPage <= 1 ? 'disabled' : ''}>← Préc.</button>
+        <button class="hse-btn hse-btn--ghost hse-btn--sm" id="hse-scan-next" ${this._scanPage >= totalPages ? 'disabled' : ''}>Suiv. →</button>
+      </div>`;
+    pager.querySelector('#hse-scan-prev')?.addEventListener('click', () => { this._scanPage--; this._scanSig = null; this._loadScan(); });
+    pager.querySelector('#hse-scan-next')?.addEventListener('click', () => { this._scanPage++; this._scanSig = null; this._loadScan(); });
   }
 
   _renderCatPager(d) {
     const pager = this._el?.querySelector('#hse-cat-pager');
     if (!pager) return;
-    const totalPages = Math.ceil(d.total / d.per_page) || 1;
+    const totalPages = Math.ceil(d.total / CATALOGUE_PER_PAGE);
     if (totalPages <= 1) { pager.style.display = 'none'; return; }
     pager.style.display = 'flex';
     pager.innerHTML = `
-      <span>${d.total} entité(s) — page ${d.page} / ${totalPages}</span>
+      <span>Page ${this._catPage} / ${totalPages} — ${d.total} entité${d.total > 1 ? 's' : ''}</span>
       <div class="hse-scan__pager-btns">
-        <button class="hse-btn hse-btn--ghost hse-btn--sm" id="hse-cat-prev"
-          ${d.page <= 1 ? 'disabled' : ''}>← Préc.</button>
-        <button class="hse-btn hse-btn--ghost hse-btn--sm" id="hse-cat-next"
-          ${d.page >= totalPages ? 'disabled' : ''}>Suiv. →</button>
+        <button class="hse-btn hse-btn--ghost hse-btn--sm" id="hse-cat-prev" ${this._catPage <= 1 ? 'disabled' : ''}>← Préc.</button>
+        <button class="hse-btn hse-btn--ghost hse-btn--sm" id="hse-cat-next" ${this._catPage >= totalPages ? 'disabled' : ''}>Suiv. →</button>
       </div>`;
-    pager.querySelector('#hse-cat-prev')?.addEventListener('click', () => {
-      this._catPage--; this._loadCatalogue();
+    pager.querySelector('#hse-cat-prev')?.addEventListener('click', () => { this._catPage--; this._catSig = null; this._loadCatalogue(); });
+    pager.querySelector('#hse-cat-next')?.addEventListener('click', () => { this._catPage++; this._catSig = null; this._loadCatalogue(); });
+  }
+
+  /* ── Bind row events ─────────────────────────────────────────────── */
+
+  _bindScanRows() {
+    const body = this._el?.querySelector('#hse-scan-body');
+    if (!body) return;
+    /* Triage buttons */
+    body.querySelectorAll('[data-triage-id][data-triage-action]').forEach(btn => {
+      btn.addEventListener('click', () => this._triage(btn.dataset.triageId, btn.dataset.triageAction));
     });
-    pager.querySelector('#hse-cat-next')?.addEventListener('click', () => {
-      this._catPage++; this._loadCatalogue();
+    /* Checkboxes individuels */
+    body.querySelectorAll('.hse-scan__cb').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const row = cb.closest('tr');
+        const eid = row?.dataset.entityId;
+        if (!eid) return;
+        if (cb.checked) this._selected.add(eid);
+        else            this._selected.delete(eid);
+        row?.classList.toggle('selected', cb.checked);
+        this._updateBulkBar();
+      });
+    });
+    /* Checkbox de groupe */
+    body.querySelectorAll('.hse-scan__cb-group').forEach(cbg => {
+      cbg.addEventListener('change', () => {
+        const table = cbg.closest('table');
+        table?.querySelectorAll('.hse-scan__cb').forEach(cb => {
+          const row = cb.closest('tr');
+          const eid = row?.dataset.entityId;
+          if (!eid) return;
+          cb.checked = cbg.checked;
+          if (cbg.checked) this._selected.add(eid);
+          else             this._selected.delete(eid);
+          row?.classList.toggle('selected', cbg.checked);
+        });
+        this._updateBulkBar();
+      });
     });
   }
 
-  /* ── Bulk bar update ─────────────────────────────────────────────── */
+  _bindCatRows() {
+    const body = this._el?.querySelector('#hse-cat-body');
+    if (!body) return;
+    body.querySelectorAll('[data-triage-id][data-triage-action]').forEach(btn => {
+      btn.addEventListener('click', () => this._triage(btn.dataset.triageId, btn.dataset.triageAction));
+    });
+  }
+
+  /* ── Bulk bar ────────────────────────────────────────────────────── */
 
   _updateBulkBar() {
     const bar   = this._el?.querySelector('#hse-bulk-bar');
     const label = this._el?.querySelector('#hse-bulk-label');
     if (!bar) return;
-    const count = this._selected.size;
-    bar.classList.toggle('visible', count > 0);
-    if (label) label.textContent = `${count} sélectionné(s)`;
+    const n = this._selected.size;
+    bar.classList.toggle('visible', n > 0);
+    if (label) label.textContent = `${n} sélectionné${n > 1 ? 's' : ''}`;
   }
 
-  /* ── Domain filter population ────────────────────────────────────── */
+  _renderScanRows() {
+    /* Re-render uniquement les lignes pour mettre à jour l'état coché */
+    const body = this._el?.querySelector('#hse-scan-body');
+    if (!body) return;
+    body.querySelectorAll('tr[data-entity-id]').forEach(row => {
+      const eid = row.dataset.entityId;
+      const sel = this._selected.has(eid);
+      row.classList.toggle('selected', sel);
+      const cb = row.querySelector('.hse-scan__cb');
+      if (cb) cb.checked = sel;
+    });
+  }
+
+  /* ── Domain filter populate ──────────────────────────────────────── */
 
   _populateDomainFilter(items) {
-    const sel = this._el?.querySelector('.hse-scan__filter');
-    if (!sel) return;
-    const current = sel.value;
-    const domains = [...new Set((items ?? []).map(i => i.domain).filter(Boolean))].sort();
-    const opts = ['<option value="">Tous les domaines</option>',
-      ...domains.map(d => `<option value="${this._esc(d)}" ${d === current ? 'selected' : ''}>${this._esc(d)}</option>`)
-    ];
-    sel.innerHTML = opts.join('');
+    const select = this._el?.querySelector('.hse-scan__filter');
+    if (!select) return;
+    const domains = [...new Set((items || []).map(i => i.integration_domain || i.integration).filter(Boolean))];
+    domains.sort();
+    /* Conserver la valeur sélectionnée */
+    const current = this._scanDomain;
+    select.innerHTML = '<option value="">Tous les domaines</option>' +
+      domains.map(d => `<option value="${this._esc(d)}" ${d === current ? 'selected' : ''}>${this._esc(domainDisplayName(d))}</option>`).join('');
   }
 
-  /* ── Helpers ─────────────────────────────────────────────────────── */
+  /* ── DOM helpers ─────────────────────────────────────────────────── */
 
   _setScanBody(html) {
     const el = this._el?.querySelector('#hse-scan-body');
@@ -1024,15 +1015,19 @@ export class ScanView {
   }
 
   _scoreClass(score) {
-    if (score == null) return 'medium';
+    if (score == null) return 'low';
     if (score >= 75) return 'high';
     if (score >= 40) return 'medium';
     return 'low';
   }
 
   _esc(str) {
-    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    if (str == null) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 }
-
-export default ScanView;
