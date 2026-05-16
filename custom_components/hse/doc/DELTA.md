@@ -1,6 +1,6 @@
 # DELTA.md — Écarts doc/code actifs HSE V3
 
-> Mis à jour : 2026-05-16 21:10 CEST
+> Mis à jour : 2026-05-16 21:22 CEST
 >
 > **Règle** : aucun patch ne doit contredire un écart EN_DISCUSSION.
 > Fermer un écart = écrire la solution ici avant de commiter.
@@ -11,16 +11,43 @@
 
 ## Écarts actifs
 
-### DELTA-063 — `config_view.js` — Présentation à affiner (en attente de captures V1)
-- **Statut** : `EN_ATTENTE_SCREENSHOTS`
+### DELTA-064 — Audit code avant refonte `config_view.js` — 3 questions bloquantes
+- **Statut** : `A_AUDITER` 🔍
+- **Priorité** : **Haute** — bloque DELTA-063
+- **Contexte** : Screenshots V1 reçus (9 captures). La refonte `config_view.js` est prête à être spécifiée mais 3 questions nécessitent une vérification dans le code backend avant de commiter quoi que ce soit.
+- **Questions à résoudre par lecture du code** :
+
+  **Q1 — Sélection automatique intelligente**
+  La V1 avait un bouton `✨ Lancer la sélection automatique` qui analysait tous les capteurs et sélectionnait les meilleurs selon des critères (Energy > Power, score qualité, pas de doublons, physique > virtuel).
+  → Existe-t-il une route backend pour ça ? Chercher dans `catalogue.py` et `scan_engine.py` : un mode `auto`, une action `best`, ou un `POST /api/hse/catalogue/triage/bulk` avec payload spécial.
+  → **Fichiers à lire** : `api/views/catalogue.py`, `catalogue/scan_engine.py`
+
+  **Q2 — Capteur de référence (étoile ⭐)**
+  La V1 permettait de désigner un capteur de référence externe (ex: Linky/Zlinky) avec un dropdown et un bouton Sauvegarder.
+  → Où est stocké `reference_sensor_id` ? Dans `settings.py` ? Dans `storage/manager.py` ?
+  → Quelle route pour lire/écrire ce champ ?
+  → **Fichiers à lire** : `api/views/settings.py`, `storage/manager.py`
+
+  **Q3 — Bug Pièces & Types : `name` affiché `?`**
+  Le sous-onglet Pièces & Types affiche `?` pour toutes les pièces (12 pièces, 0 types).
+  → Quelle est la structure JSON exacte retournée par `GET /api/hse/meta` ?
+  → La clé est-elle `name`, `label`, `display_name`, ou autre ?
+  → **Fichiers à lire** : `api/views/meta.py`, `storage/manager.py`
+
+- **Action IA** : Lire les fichiers listés, répondre aux 3 questions, puis passer en mode COMMIT sur DELTA-063.
+- **Décision** : ⏳ En attente d'audit — NE PAS commiter `config_view.js` avant.
+
+---
+
+### DELTA-063 — `config_view.js` — Refonte UI (screenshots V1 reçus)
+- **Statut** : `BLOQUÉ_PAR_DELTA-064`
 - **Priorité** : Moyenne
-- **Contexte** : `config_view.js` est fonctionnel (3 sous-onglets R1-R5), mais la présentation visuelle doit être améliorée en s'inspirant de la V1.
-- **Ce qui manque** : Captures d'écran de référence (V1) à fournir par le dev pour guider la refonte UI.
-- **Zones identifiées à retravailler** :
-  - Sous-onglet **Appareils** : affichage des rows capteur (icône intégration ? room inline ? type inline ?)
-  - Sous-onglet **Tarification** : options supplémentaires possibles (fournisseur, puissance souscrite ?)
-- **Blocage** : ⏳ En attente — le dev doit fournir des captures d'écran de la V1 pour chaque sous-onglet avant tout patch UI.
-- **Action dev** : Envoyer screenshots V1 des 3 sous-onglets de config, l'IA appliquera en mode COMMIT.
+- **Contexte** : Screenshots V1 reçus (9 captures, 2026-05-16 21:17). Analyse faite.
+- **Ce qui est prévu** (à confirmer après audit DELTA-064) :
+  - **Sous-onglet Appareils** : layout 2 colonnes (Sélectionnés | Ignorés/Alternatives), groupes par intégration collapse/expand avec compteur bubble, rows avec badge intégration + icône type ⚡/🔋 + qualité stars + badge Summary, bloc capteur de référence ⭐, bloc sélection automatique ✨
+  - **Sous-onglet Pièces & Types** : corriger bug `?` (Q3), afficher `entity_id` HA sous le nom
+  - **Sous-onglet Tarification** : labels en gras, bouton Enregistrer plus visible, layout conforme V1
+- **Blocage** : DELTA-064 doit être résolu (Q1 + Q2 + Q3) avant tout patch.
 
 ---
 
@@ -109,16 +136,16 @@
 | `hse_panel.js` | ✅ | Bureau virtuel macOS : DELTA-051-PANEL ouvert, priorité basse |
 | `hse_shell.js` | ✅ | 8 onglets, navigation, validé |
 | `scan_view.js` | ✅ | Groupement par intégration fonctionnel — validé capture d'écran |
-| `config_view.js` | 🟡 | Fonctionnel — UI à affiner (DELTA-063, en attente screenshots V1) |
-| `overview_view.js` | 🟡 | Stub — **priorité 1** à implémenter |
-| `costs_view.js` | 🟡 | Stub — priorité 2 |
-| `diagnostic_view.js` | 🟡 | Stub — priorité 3 |
-| `migration_view.js` | 🟡 | Stub — priorité 4 |
+| `config_view.js` | 🔴 | Fonctionnel mais UI à refondre — bloqué DELTA-064 (audit) |
+| `overview_view.js` | 🟡 | Stub — priorité 2 (après déblocage DELTA-064) |
+| `costs_view.js` | 🟡 | Stub — priorité 3 |
+| `diagnostic_view.js` | 🟡 | Stub — priorité 4 |
+| `migration_view.js` | 🟡 | Stub — priorité 5 |
 | `cards_view.js` | ❌ | Absent — crash onglet (DELTA-062, priorité basse) |
 
 ### Prochaine action
 
-1. 📸 **DELTA-063** — Dev fournit screenshots V1 de `config_view.js` → l'IA affine l'UI en mode COMMIT
-2. 🟡 **Implémenter `overview_view.js`** — GET /api/hse/overview, dashboard principal
-3. 🟡 **Implémenter `costs_view.js`** — GET /api/hse/costs, raison d'être du projet
-4. ⏳ DELTA-058/059 — endpoints backend manquants (config_view fonctionne avec contournement)
+1. 🔍 **DELTA-064** — Audit `catalogue.py` + `scan_engine.py` + `settings.py` + `meta.py` + `manager.py` → répondre Q1/Q2/Q3
+2. 🔴 **DELTA-063** — Refonte `config_view.js` (débloqué après DELTA-064)
+3. 🟡 **Implémenter `overview_view.js`** — GET /api/hse/overview
+4. 🟡 **Implémenter `costs_view.js`** — GET /api/hse/costs
