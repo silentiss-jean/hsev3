@@ -24,11 +24,13 @@ from .api.views.catalogue import HseCatalogueView
 from .api.views.costs import HseCostsView, HseHistoryView, HseExportView, _build_costs_data
 from .api.views.diagnostic import HseDiagnosticView
 from .api.views.frontend_manifest import HseFrontendManifestView
-from .api.views.meta import HseMetaView
-from .api.views.migration import HseMigrationView, HseMigrationExportView, HseMigrationApplyView  # DELTA-051
+# DELTA-060 : HseMigrationView supprimé (n'existe pas dans migration.py)
+# DELTA-061 : HseMetaSyncPreviewView + HseMetaSyncApplyView ajoutés
+from .api.views.meta import HseMetaView, HseMetaSyncPreviewView, HseMetaSyncApplyView
+from .api.views.migration import HseMigrationExportView, HseMigrationApplyView
 from .api.views.overview import HseOverviewView
 from .api.views.scan import HseScanView
-from .api.views.settings import HseSettingsPricingView  # DELTA-045
+from .api.views.settings import HseSettingsPricingView
 from .api.views.user_prefs import HseUserPrefsView
 from .repairs import async_sync_repairs
 
@@ -49,7 +51,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {}
 
-    # ── Fichiers statiques ───────────────────────────────────────────────────
+    # ── Fichiers statiques ─────────────────────────────────────────────
     if not _STATIC_DIR.exists():
         _LOGGER.error(
             "HSE V3 : répertoire statique introuvable : %s — panel HA désactivé", _STATIC_DIR
@@ -62,7 +64,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except ValueError:
             _LOGGER.debug("HSE V3 : static path déjà enregistré, ignoré.")
 
-    # ── Panel HA ─────────────────────────────────────────────────────────────
+    # ── Panel HA ─────────────────────────────────────────────────────
     async_remove_panel(hass, DOMAIN)
     try:
         await async_register_built_in_panel(
@@ -86,7 +88,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except Exception:  # noqa: BLE001
         _LOGGER.warning("HSE V3 : panel déjà enregistré, ignoré.")
 
-    # ── Vues API ─────────────────────────────────────────────────────────────
+    # ── Vues API ───────────────────────────────────────────────────────
     for view in [
         HsePingView(hass),
         HseCatalogueView(hass),
@@ -96,7 +98,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         HseDiagnosticView(hass),
         HseFrontendManifestView(hass),
         HseMetaView(hass),
-        HseMigrationView(hass),
+        HseMetaSyncPreviewView(hass),   # DELTA-061
+        HseMetaSyncApplyView(hass),     # DELTA-061
         HseMigrationExportView(hass),   # DELTA-051
         HseMigrationApplyView(hass),    # DELTA-051
         HseOverviewView(hass),
@@ -106,10 +109,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     ]:
         hass.http.register_view(view)
 
-    # ── Services HA ──────────────────────────────────────────────────────────
+    # ── Services HA ──────────────────────────────────────────────────
     _register_services(hass)
 
-    # ── Repairs ──────────────────────────────────────────────────────────────
+    # ── Repairs ────────────────────────────────────────────────────────
     hass.async_create_task(async_sync_repairs(hass))
 
     _LOGGER.info("HSE V3 %s démarré (entry: %s)", VERSION, entry.entry_id)
