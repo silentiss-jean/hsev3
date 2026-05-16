@@ -68,15 +68,16 @@ hsev3/
     ├── services.yaml                            ✅
     ├── translations/fr.json + en.json           ✅
     ├── api/base.py + views/* (13 views)         ✅
-    │   └── api/views/scan.py                   🟡 DELTA-053 CORRECTIF_DEPLOYÉ 2026-05-16
-    ├── catalogue/* (5 fichiers)                 ✅
+    │   └── api/views/scan.py                   🟡 DELTA-053 CORRECTIF_DEPLOYÉ — non validé en prod
+    ├── catalogue/scan_engine.py                 ✅ expose integration_domain + integration_label
+    ├── catalogue/* (4 autres fichiers)          ✅
     ├── meta/* (5 fichiers)                      ✅
     ├── storage/manager.py                       ✅
     ├── engine/* (6 fichiers)                    ✅
     ├── sensors/* (4 fichiers)                   ✅
     ├── web_static_old/                          ⭐ Archive — référence uniquement, ne pas toucher
     ├── web_static/panel/
-    │   ├── hse_panel.js                         ✅ Wrapper Custom Element HA (crée l'iframe, postMessage token)
+    │   ├── hse_panel.js                         ✅ Wrapper Custom Element HA + guard bureau virtuel macOS
     │   ├── hse_panel.html                       ✅ Page HTML bootstrap + 4 <link> CSS V5 (validé 2026-04-19)
     │   ├── style.hse.panel.css                  ✅ conservé
     │   └── shared/
@@ -96,7 +97,7 @@ hsev3/
     │       ├── ui/                              ✅ conservé (dom.js, table.js)
     │       └── features/
     │           ├── scan/
-    │           │   └── scan_view.js             🟡 DELTA-053 CORRECTIF_DEPLOYÉ 2026-05-16
+    │           │   └── scan_view.js             🟡 DELTA-053 CORRECTIF_DEPLOYÉ — non validé en prod
     │           └── custom/
     │               └── custom_view.js           ✅ Onglet Custom/Personnalisation (validé 2026-04-19)
     └── doc/                                     ✅
@@ -122,6 +123,7 @@ hsev3/
 | **CSS thèmes — fonds opaques** | `--hse-bg` (toujours opaque) sur les cards/panels racines. `--hse-surface` (semi-transparent) réservé aux cartes intérieures avec `backdrop-filter`. | DELTA-052 correctif 2026-04-19 |
 | **Re-scan endpoint** | `POST /api/hse/scan` (pas `/catalogue/refresh`) | F1 — 2026-04-20 |
 | **Inbox scan groupement** | Groupé par `integration_domain` (domaine technique stable) via `<details>` collapsibles. `integration_label` affiché en sous-titre si différent du domain. Catalogue aussi groupé. | F3 — DELTA-053 — 2026-05-16 |
+| **scan_engine scope** | Scanne uniquement `sensor.*` avec `kind = energy \| power`. Entités sans état HA exclues. | `catalogue/scan_engine.py` |
 
 ---
 
@@ -142,6 +144,69 @@ hsev3/
 | ID | Statut | Titre | Fichiers impactés | Date |
 |---|---|---|---|---|
 | DELTA-053 | 🟡 `CORRECTIF_DEPLOYÉ` | Groupement scan par `integration_domain` (pas `integration_label`) | `api/views/scan.py` + `scan_view.js` | 2026-05-16 |
+| DELTA-054 | 🟠 `EN_DISCUSSION` | Onglet Détection n'affiche pas les capteurs groupés par intégration | `hse_shell.js` + `scan_view.js` + possiblement `hse_panel.html` | 2026-05-16 |
+
+---
+
+## 🟠 DELTA-054 — Onglet Détection ne s'affiche pas (2026-05-16)
+
+### Symptôme rapporté
+L'onglet Détection ne montre pas les capteurs groupés par intégration, malgré le correctif DELTA-053 commité.
+
+### Analyse des causes possibles (EXPLORATION — non encore confirmé)
+
+Le backend est sain : `scan_engine.py` expose correctement `integration_domain` et `integration_label`
+depuis la config entry réelle (`hass.config_entries.async_get_entry()`). `scan.py` les transmet tels quels.
+
+Les hypothèses à vérifier par ordre de priorité :
+
+#### H1 — `hse_shell.js` ne monte pas `scan_view.js` (priorité HAUTE)
+`hse_shell.js` est 🟡 `CORRECTIF_DEPLOYÉ` mais **non validé en prod**. Si le shell ne charge pas
+`ScanView` ou ne l'enregistre pas sur l'onglet "Détection", l'onglet affiche un écran vide
+ou le skeleton ne disparaît jamais.
+
+**Vérification** : ouvrir la console JS dans l'iframe et chercher :
+- `import('./features/scan/scan_view.js')` — s'exécute-t-il ?
+- `Uncaught SyntaxError` ou `404` sur le fichier JS ?
+- `ScanView.mount()` — est-il appelé ?
+
+#### H2 — `hse_panel.html` ne déclare pas le bon chemin pour `scan_view.js` (priorité HAUTE)
+Si `hse_panel.html` importe `hse_shell.js` avec un chemin relatif incorrect, ou si `hse_shell.js`
+fait un `import()` dynamique vers un chemin qui ne correspond pas au chemin servi par HA
+(`/hse-static/...`), le fichier ne charge pas silencieusement.
+
+**Vérification** : dans la console, onglet Network — chercher une requête 404 vers `scan_view.js`.
+
+#### H3 — HA n'a pas redémarré depuis le commit DELTA-053 (priorité MOYENNE)
+`scan.py` et `scan_view.js` ont été commités mais si HA n'a pas rechargé l'intégration, l'ancien
+code (sans `integration_domain`) tourne encore. Le front reçoit alors `undefined` pour ce champ
+et le fallback `|| 'unknown'` groupe tout sous `"unknown"`.
+
+**Vérification** : appeler `GET /api/hse/scan` directement (curl ou DevTools) et inspecter
+le JSON — les items ont-ils le champ `integration_domain` avec une valeur non-`"unknown"` ?
+
+#### H4 — `scan_engine.py` retourne 0 candidats (priorité FAIBLE)
+`scan_engine.py` filtre strict : uniquement `sensor.*` avec `device_class = energy/power`
+OU `unit ∈ {kWh, Wh, W, kW}`. Si les capteurs de l'installation ne matchent pas ces critères,
+`candidates` est vide et l'inbox affiche "Aucune entité non triée" — ce qui est correct mais
+peut sembler bugué.
+
+**Vérification** : inspecter la réponse JSON de `GET /api/hse/scan` — `total` vaut-il 0 ?
+
+### ⚠️ Blocage actuel
+Impossible de trancher sans les logs de la console JS dans l'iframe ET le JSON brut de
+`GET /api/hse/scan`. Les deux sont nécessaires.
+
+### Plan de debug
+1. Ouvrir les DevTools HA → onglet panel HSE → inspecter l'iframe
+2. Console : chercher erreurs JS (404, SyntaxError, TypeError)
+3. Network : chercher requête vers `/api/hse/scan` — status + réponse JSON
+4. Si JSON OK et `integration_domain` présent → bug dans `hse_shell.js` (H1)
+5. Si JSON OK mais `integration_domain = "unknown"` partout → redémarrer HA (H3)
+6. Si JSON absent (404 ou erreur auth) → problème de routing API ou token
+
+### Statut
+🟠 `EN_DISCUSSION` — en attente des logs de debug. Ne pas commiter de correctif avant confirmation.
 
 ---
 
@@ -172,7 +237,8 @@ const key = item.integration || 'unknown';  // recevait le label d'instance
 5. **Rétrocompat** : fallback sur `item.integration` si champs absents (migration partielle)
 
 ### Statut
-🟡 `CORRECTIF_DEPLOYÉ` — visible au prochain redémarrage HA. En attente de validation.
+🟡 `CORRECTIF_DEPLOYÉ` — commité 2026-05-16. Non validé en prod (bloqué par DELTA-054).
+Fermer uniquement après confirmation que l'onglet Détection affiche bien les groupes.
 
 ---
 
@@ -194,16 +260,16 @@ Le front existant (`web_static/panel/`) a accumulé trop de dette :
 | Ordre | Fichier | Description | Statut |
 |-------|---------|-------------|--------|
 | 0a | `__init__.py` | `embed_iframe: False` + `module_url` → `hse_panel.js` | ✅ Validé |
-| 0b | `web_static/panel/hse_panel.js` | Wrapper Custom Element HA | ✅ Validé |
+| 0b | `web_static/panel/hse_panel.js` | Wrapper Custom Element HA + guard bureau virtuel | ✅ Validé |
 | 0c | `web_static/panel/hse_panel.html` | Bootstrap iframe + 4 `<link>` CSS V5 | ✅ Validé 2026-04-19 |
 | 0d | `shared/styles/hse.tokens.css` | Tokens globaux V5 | ✅ Validé |
 | 0d | `shared/styles/hse.themes.css` | 12 thèmes V5 + alias `default` | ✅ Validé 2026-04-19 |
 | 0d | `shared/styles/hse.glass.css` | Effet glass V5 | ✅ Validé |
 | 0d | `shared/styles/hse.base.css` | Reset + base layout V5 | ✅ Validé |
-| 1 | `shared/hse_shell.js` | Shell principal — routing onglets | 🟡 Commité — en attente de validation |
-| 2 | `features/overview/overview_view.js` | Onglet Overview | ❓ À faire |
+| 1 | `shared/hse_shell.js` | Shell principal — routing onglets | 🟡 Commité — **bloqué DELTA-054** |
+| 2 | `features/overview/overview_view.js` | Onglet Overview | ❓ À faire — **bloqué DELTA-054** |
 | 3 | `features/diagnostic/diagnostic_view.js` | Onglet Diagnostic | ❓ À faire |
-| 4 | `features/scan/scan_view.js` | Onglet Scan | 🟡 DELTA-053 CORRECTIF_DEPLOYÉ 2026-05-16 |
+| 4 | `features/scan/scan_view.js` | Onglet Scan | 🟡 DELTA-053 — **bloqué DELTA-054** |
 | 5 | `features/config/config_view.js` | Onglet Config | ❓ À faire |
 | 6 | `features/costs/costs_view.js` | Onglet Costs | ❓ À faire |
 | 7 | `features/migration/migration_view.js` | Onglet Migration | ❓ À faire |
@@ -215,7 +281,7 @@ Le front existant (`web_static/panel/`) a accumulé trop de dette :
 | ID | Nature | Détail |
 |----|--------|--------|
 | F1 | Bug URL | `_triggerRescan()` appelait `POST /api/hse/catalogue/refresh` → corrigé en `POST /api/hse/scan`. La réponse du POST est injectée directement sans second GET. Gestion 409. |
-| F2 | UX inbox | Inbox groupée par `item.integration` via `<details>` collapsibles (sera remplacé par F3). |
+| F2 | UX inbox | Inbox groupée par `item.integration` via `<details>` collapsibles (remplacé par F3). |
 | F3 | Bug groupement | Groupement sur `integration_domain` (domaine technique) au lieu de `integration_label` (titre d'instance). Catalogue aussi groupé. Voir DELTA-053. |
 
 ### Contraintes non négociables (permanentes)
