@@ -1,6 +1,6 @@
 # DELTA.md — Écarts doc/code actifs HSE V3
 
-> Mis à jour : 2026-05-16 18:30 CEST
+> Mis à jour : 2026-05-16 20:45 CEST
 >
 > **Règle** : aucun patch ne doit contredire un écart EN_DISCUSSION.
 > Fermer un écart = écrire la solution ici avant de commiter.
@@ -12,16 +12,65 @@
 ### DELTA-054 — Onglet Détection : capteurs non affichés par intégration
 - **Statut** : `EN_DISCUSSION` 🔴
 - **Priorité** : Haute (bloquante utilisateur)
-- **Contexte** : L'onglet Détection (`scan_view.js`) est commité et le backend (`scan_engine.py`) semble sain, mais les capteurs ne s'affichent toujours pas groupés par intégration.
-- **Symptôme** : onglet Détection vide ou sans groupes, en dépit de DELTA-056/057 fermés.
-- **Hypothèses en cours** :
-  | # | Hypothèse | Proba | Comment vérifier |
-  |---|-----------|-------|------------------|
-  | H1 | `hse_shell.js` ne monte pas `ScanView` correctement | 🔴 Haute | Console JS iframe → chercher erreur 404/SyntaxError sur `scan_view.js` |
-  | H2 | Chemin `import()` dynamique ≠ path servi par HA (`/hse-static/...`) | 🔴 Haute | Network tab → chercher requête 404 vers `scan_view.js` |
-  | H3 | HA non redémarré depuis DELTA-056/057 | 🟡 Moyenne | Appeler `GET /api/hse/scan` directement — items avec `integration_domain` non-`"unknown"` ? |
-  | H4 | `scan_engine.py` retourne 0 candidats | 🟢 Faible | Même appel — `total` vaut 0 ? |
-- **Prochaine action** : fournir logs console iframe + réponse JSON brute de `GET /api/hse/scan` → diagnostic précis → COMMIT.
+
+#### Diagnostic code lu (2026-05-16 20:45)
+
+**`hse_panel.html`** importe `hse_shell.js` depuis `/hse-static/shared/hse_shell.js`.  
+HA sert `/hse-static/` → `custom_components/hse/web_static/panel/` (mapping statique).  
+Le fichier est bien à `web_static/panel/shared/hse_shell.js` — **le chemin est correct**.
+
+**`hse_shell.js`** — `_activateTab('scan')` construit l'URL :
+```js
+const url = `/hse-static/features/${tabId}/${tabId}_view.js`;
+// → /hse-static/features/scan/scan_view.js
+```
+Correspondance disque : `web_static/panel/features/scan/scan_view.js` ✅ — **le fichier existe**.
+
+**`scan_view.js`** — `_groupByIntegration()` groupe sur `item.integration_domain || item.integration || 'unknown'`.  
+Si tous les items ont `integration_domain = null` ou absent, tout tombe dans le groupe `'unknown'` → affiché, mais sans label lisible.
+
+**`_loadScan()`** appelle `this._ctx.hseFetch(...)`.  
+**`_buildCtx()`** dans `hse_shell.js` expose `hseFetch` importé depuis `./hse_fetch.js`.  
+`ScanView` reçoit `ctx.hseFetch` et l'appelle correctement.
+
+#### Causes probables identifiées (par ordre de probabilité)
+
+| # | Cause | Probabilité | Preuve code |
+|---|-------|-------------|-------------|
+| **C1** | `scan_engine.py` ne remplit pas `integration_domain` → le champ est `null` / absent → groupe `"unknown"` affiché mais invisible (pas de label, pas de chip) | 🔴 **Très haute** | `_groupByIntegration()` fallback sur `'unknown'` silencieux |
+| **C2** | `/api/hse/scan` retourne `items: []` (total=0) — aucune entité éligible détectée | 🟡 Moyenne | `_renderScan()` affiche empty state si `!d.items?.length` |
+| **C3** | Erreur HTTP (`/api/hse/scan` → 401/404/500) | 🟡 Moyenne | Catch → affiche `hse-error` visible dans l'onglet |
+| **C4** | `hse_shell.js` `_bootstrap()` échoue (ping/manifest/user_prefs) → `_activateTab` jamais appelé | 🟢 Faible | Afficherait l'erreur dans `#hse-view` |
+
+#### Solution à implémenter selon C1 (la plus probable)
+
+Si `scan_engine.py` ne fournit pas `integration_domain`, ajouter dans le fallback de `_groupByIntegration()` une détection par préfixe d'`entity_id` :
+```js
+// Fallback : déduire l'intégration du préfixe de l'entity_id
+function guessDomain(item) {
+  if (item.integration_domain) return item.integration_domain;
+  if (item.integration) return item.integration;
+  // ex: "sensor.tuya_plug_1" → "tuya"
+  const id = item.entity_id || '';
+  const parts = id.split('.');
+  if (parts.length >= 2) {
+    const name = parts[1];
+    // Patterns courants
+    for (const known of ['tuya', 'tplink', 'shelly', 'esphome', 'zha', 'zwave', 'hue', 'tasmota']) {
+      if (name.startsWith(known)) return known;
+    }
+  }
+  return 'unknown';
+}
+```
+**Mais** : solution fragile — la vraie correction est dans `scan_engine.py` pour garantir `integration_domain` toujours rempli.
+
+#### Prochaine action (COMMIT)
+
+1. **Vérifier** `GET /api/hse/scan` en direct → regarder si `integration_domain` est présent dans les items  
+2. **Si absent** → patch `scan_engine.py` pour remplir le champ  
+3. **Si présent mais groupe vide** → ajouter un `console.log` temporaire dans `_groupByIntegration()` pour voir ce qui arrive  
+4. **Si total=0** → vérifier les filtres de `scan_engine.py` (critères `energy`/`power`)
 
 ---
 
@@ -71,7 +120,7 @@
 | DELTA-055 | Groupe `"integration"` dans le catalogue | Patch backend + frontend | 2026-05-16 |
 | DELTA-056 | Onglet Détection — 2 bugs dans `scan_view.js` | Corrigés | 2026-05-16 |
 | DELTA-057 | `scan_view.js` — `customElements.define` parasite | Ligne supprimée, stubs ajoutés | 2026-05-16 |
-| **DELTA-CONF-01** | `config_view.js` — onglet Configuration | **Implémenté** — 3 sous-onglets : Appareils / Pièces & Types / Tarification. Contournements DELTA-058/059 intégrés. Commit [`2795a…`](https://github.com/silentiss-jean/hsev3) | 2026-05-16 |
+| **DELTA-CONF-01** | `config_view.js` — onglet Configuration | **Implémenté** — 3 sous-onglets : Appareils / Pièces & Types / Tarification. Contournements DELTA-058/059 intégrés. | 2026-05-16 |
 
 ---
 
@@ -84,7 +133,7 @@
 | `__init__.py` | ✅ | DELTA-060 + DELTA-061 corrigés |
 | `const.py` | ✅ | |
 | `storage/manager.py` | ✅ | |
-| `catalogue/scan_engine.py` | ✅ | |
+| `catalogue/scan_engine.py` | ⚠️ | Suspect DELTA-054 C1 — `integration_domain` peut-être absent |
 | `api/views/scan.py` | ✅ | GET/POST /api/hse/scan |
 | `api/views/catalogue.py` | ✅ | GET/POST — PATCH/DELETE ⏳ (DELTA-058) |
 | `api/views/meta.py` | ✅ | GET + sync — POST création ⏳ (DELTA-059) |
@@ -99,10 +148,10 @@
 
 | Fichier | Statut | Notes |
 |---------|--------|-------|
-| `hse_panel.js` | ✅ | Correctif bureau virtuel macOS |
-| `hse_shell.js` | 🟡 | Commité — validation humaine en attente |
-| `scan_view.js` | 🟡 | Commité — DELTA-054 toujours ouvert (capteurs non affichés) |
-| `config_view.js` | ✅ | **Commité** — 3 sous-onglets, R1-R5, contournements DELTA-058/059 |
+| `hse_panel.js` | ✅ | Correctif bureau virtuel macOS inclus |
+| `hse_shell.js` | 🟡 | Commité — flux `_activateTab` → `import()` → `mount()` vérifié ✅ |
+| `scan_view.js` | 🟡 | Commité — DELTA-054 ouvert : groupement fonctionnel si `integration_domain` rempli |
+| `config_view.js` | ✅ | Commité — 3 sous-onglets, R1-R5, contournements DELTA-058/059 |
 | `overview_view.js` | 🟡 | Stub — à implémenter (priorité 1 après DELTA-054) |
 | `costs_view.js` | 🟡 | Stub — à implémenter (priorité 2) |
 | `diagnostic_view.js` | 🟡 | Stub — à implémenter (priorité 3) |
@@ -111,6 +160,6 @@
 
 ### Prochaine action
 
-1. 🔴 **DELTA-054** — Résoudre l'affichage des capteurs dans l'onglet Détection (fournir logs console + JSON `GET /api/hse/scan`)
-2. 🟢 Redémarrer HA + tester `config_view.js` (3 sous-onglets)
-3. 🟡 Implémenter `overview_view.js`
+1. 🔴 **DELTA-054** — Appeler `GET /api/hse/scan` en direct et regarder si `integration_domain` est rempli dans les items JSON
+2. 🔴 Si `integration_domain` absent → patch `scan_engine.py` → COMMIT
+3. 🟡 Implémenter `overview_view.js` (après DELTA-054 fermé)
