@@ -77,13 +77,35 @@ class HseScanView(HseBaseView):
             }
             quality_score_int = score_item(synthetic_item, ha_state_raw)
 
+            # ----------------------------------------------------------
+            # integration_domain : domaine technique = clé de groupement
+            #   ex: "tuya", "tplink", "tibber"
+            # integration_label  : titre de l'instance configurée dans HA
+            #   ex: "tuya@ftoure.net", "Ma box Tibber"
+            #   Affiché comme sous-titre dans le front si ≠ domain.
+            # Les deux champs sont exposés séparément pour que le front
+            # puisse grouper sur le domaine technique (stable) et
+            # afficher le label lisible (variable par instance).
+            # ----------------------------------------------------------
+            integration_domain = (
+                c.get("integration_domain")
+                or c.get("platform")
+                or "unknown"
+            )
+            integration_label = (
+                c.get("integration_label")
+                or integration_domain
+            )
+
             status_str = c.get("status") or ""
             result.append({
                 "entity_id": eid,
                 "name": attrs.get("friendly_name") or eid,
                 "domain": eid.split(".")[0] if "." in eid else "",
                 "device": c.get("device_id"),
-                "integration": c.get("integration_label") or c.get("platform") or "unknown",
+                # Deux champs distincts — ne plus utiliser l'ancien "integration"
+                "integration_domain": integration_domain,
+                "integration_label": integration_label,
                 "quality_score": quality_score_int,
                 "suggested_action": "select" if status_str == "ok" else "review",
             })

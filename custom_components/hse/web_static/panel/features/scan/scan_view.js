@@ -1,7 +1,13 @@
 /**
  * scan_view.js — Onglet Détection HSE V3
  *
- * DELTA-052 étape 4 — rev F1+F2
+ * DELTA-053 — rev F3 : groupement par integration_domain (nom technique)
+ *   Avant : groupé sur item.integration = integration_label (titre d'instance)
+ *           → affichait "tuya@ftoure.net" au lieu de "tuya"
+ *   Après : groupé sur item.integration_domain ("tuya", "tplink", …)
+ *           integration_label affiché en sous-titre si différent du domain
+ *           Catalogue aussi groupé par intégration (même logique)
+ *
  * Endpoints :
  *   GET  /api/hse/scan                   → inbox entités non triées
  *   POST /api/hse/scan                   → re-scan (F1 — corrigé)
@@ -133,7 +139,7 @@ const CSS = `
 .hse-scan__bulk-bar.visible { display: flex; }
 .hse-scan__bulk-label { flex: 1; color: var(--hse-text-muted, #6b7280); }
 
-/* ── Groupes intégration (F2) ────────────────────────────────────── */
+/* ── Groupes intégration ─────────────────────────────────────────── */
 .hse-scan__groups { display: flex; flex-direction: column; gap: 10px; }
 
 .hse-scan__group {
@@ -167,10 +173,23 @@ const CSS = `
 }
 .hse-scan__group[open] .hse-scan__group-arrow { transform: rotate(90deg); }
 .hse-scan__group-name {
-  flex: 1;
   font-family: monospace;
   font-size: 0.85rem;
   color: var(--hse-text, #111);
+  font-weight: 700;
+}
+.hse-scan__group-label {
+  font-size: 0.78rem;
+  color: var(--hse-text-muted, #6b7280);
+  font-family: inherit;
+  font-weight: 400;
+  margin-left: 4px;
+}
+.hse-scan__group-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
 }
 .hse-scan__group-chips { display: flex; gap: 4px; }
 .hse-scan__chip {
@@ -548,7 +567,6 @@ export class ScanView {
     btn.disabled = true;
     btn.textContent = '⟳ Scan en cours…';
     try {
-      /* F1 : URL corrigée — POST /api/hse/scan (plus /catalogue/refresh) */
       const r = await this._ctx.hseFetch('/api/hse/scan', {
         method: 'POST',
         signal: this._abort?.signal,
@@ -560,7 +578,6 @@ export class ScanView {
       }
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
 
-      /* Le POST retourne directement les résultats — on les injecte */
       const data = await r.json();
       this._scanSig  = JSON.stringify(data);
       this._scanData = data;
@@ -569,7 +586,6 @@ export class ScanView {
       this._renderScan();
       this._populateDomainFilter(data.items);
 
-      /* Recharge aussi le catalogue (les items triés peuvent avoir changé) */
       this._catSig = null;
       this._loadCatalogue();
 
@@ -636,7 +652,7 @@ export class ScanView {
     }
   }
 
-  /* ── Render : inbox (F2 — groupement par intégration) ────────────── */
+  /* ── Render : inbox ──────────────────────────────────────────────── */
 
   _renderScan() {
     const d = this._scanData;
@@ -657,46 +673,50 @@ export class ScanView {
       return;
     }
 
-    /* F2 — grouper par integration */
     const groups = this._groupByIntegration(d.items);
     const html   = this._buildGroupsHTML(groups);
     this._setScanBody(html);
     this._bindScanRows();
-
-    /* Pagination globale (toujours utile si > 1 page) */
     this._renderScanPager(d);
     this._updateBulkBar();
   }
 
-  /* F2 — groupement par intégration (inspiré V2 scan.view.js) */
+  /* F3 — groupement par integration_domain (domaine technique stable) */
   _groupByIntegration(items) {
     const map = new Map();
     for (const item of items) {
-      const key = item.integration || 'unknown';
-      if (!map.has(key)) map.set(key, []);
-      map.get(key).push(item);
+      // integration_domain = clé de groupement technique ("tuya", "tplink"…)
+      // Rétrocompat : fallback sur l'ancien champ "integration" si migration partielle
+      const key = item.integration_domain || item.integration || 'unknown';
+      if (!map.has(key)) {
+        // Récupérer un label lisible parmi les items du groupe
+        // integration_label peut être "tuya@ftoure.net" → on l'affiche en sous-titre
+        map.set(key, { label: item.integration_label || key, items: [] });
+      }
+      map.get(key).items.push(item);
     }
     const groups = [];
-    for (const [integration, list] of map) {
+    for (const [domain, { label, items: list }] of map) {
       const energy = list.filter(i => i.kind === 'energy' || !i.kind).length;
       const power  = list.filter(i => i.kind === 'power').length;
-      groups.push({ integration, items: list, energy, power });
+      groups.push({ domain, label, items: list, energy, power });
     }
-    /* trier : plus grand nombre d'abord, puis alpha */
     groups.sort((a, b) =>
-      (b.items.length - a.items.length) || a.integration.localeCompare(b.integration)
+      (b.items.length - a.items.length) || a.domain.localeCompare(b.domain)
     );
     return groups;
   }
 
   _buildGroupsHTML(groups) {
     if (!groups.length) return '';
-    /* Auto-ouvrir si un seul groupe */
     const autoOpen = groups.length === 1;
     const parts = groups.map(g => {
-      const chipEnergy = g.energy  ? `<span class="hse-scan__chip hse-scan__chip--energy">⚡ ${g.energy} energy</span>` : '';
-      const chipPower  = g.power   ? `<span class="hse-scan__chip hse-scan__chip--power">⚙ ${g.power} power</span>` : '';
+      // Afficher le label en sous-titre seulement s'il est différent du domain
+      const showLabel = g.label && g.label !== g.domain;
+      const chipEnergy = g.energy ? `<span class="hse-scan__chip hse-scan__chip--energy">⚡ ${g.energy} energy</span>` : '';
+      const chipPower  = g.power  ? `<span class="hse-scan__chip hse-scan__chip--power">⚙ ${g.power} power</span>` : '';
       const chipTotal  = `<span class="hse-scan__chip">${g.items.length} entité${g.items.length > 1 ? 's' : ''}</span>`;
+
       const rows = g.items.map(item => {
         const score      = this._scoreClass(item.quality_score);
         const scoreLabel = item.quality_score >= 75 ? 'Bon' : item.quality_score >= 40 ? 'Moyen' : 'Faible';
@@ -724,14 +744,17 @@ export class ScanView {
       <details class="hse-scan__group" ${autoOpen ? 'open' : ''}>
         <summary class="hse-scan__group-summary">
           <span class="hse-scan__group-arrow">▶</span>
-          <span class="hse-scan__group-name">${this._esc(g.integration)}</span>
+          <div class="hse-scan__group-meta">
+            <span class="hse-scan__group-name">${this._esc(g.domain)}</span>
+            ${showLabel ? `<span class="hse-scan__group-label">${this._esc(g.label)}</span>` : ''}
+          </div>
           <div class="hse-scan__group-chips">${chipTotal}${chipEnergy}${chipPower}</div>
         </summary>
         <div class="hse-scan__group-body">
           <div class="hse-scan__table-wrap">
             <table class="hse-scan__table" role="grid">
               <thead><tr>
-                <th style="width:36px"><input type="checkbox" class="hse-scan__cb-group" aria-label="Tout sélectionner ce groupe" data-group="${this._esc(g.integration)}" /></th>
+                <th style="width:36px"><input type="checkbox" class="hse-scan__cb-group" aria-label="Tout sélectionner ce groupe" data-group="${this._esc(g.domain)}" /></th>
                 <th>Entité</th><th>Domaine</th><th>Appareil</th><th>Qualité</th><th>Actions</th>
               </tr></thead>
               <tbody>${rows}</tbody>
@@ -759,10 +782,8 @@ export class ScanView {
     const body = this._el?.querySelector('#hse-scan-body');
     if (!body) return;
 
-    /* Checkboxes de groupe */
     body.querySelectorAll('.hse-scan__cb-group').forEach(cbg => {
       cbg.addEventListener('change', () => {
-        const grp  = cbg.dataset.group;
         const rows = cbg.closest('table')?.querySelectorAll('tr[data-entity-id]');
         rows?.forEach(row => {
           const id = row.dataset.entityId;
@@ -773,7 +794,6 @@ export class ScanView {
       });
     });
 
-    /* Checkboxes individuelles */
     body.querySelectorAll('.hse-scan__cb').forEach(cb => {
       cb.addEventListener('change', () => {
         const row = cb.closest('tr[data-entity-id]');
@@ -785,7 +805,6 @@ export class ScanView {
       });
     });
 
-    /* Boutons triage unitaire */
     body.querySelectorAll('[data-triage-id]').forEach(btn => {
       btn.addEventListener('click', () =>
         this._triage(btn.dataset.triageId, btn.dataset.triageAction));
@@ -814,7 +833,7 @@ export class ScanView {
     });
   }
 
-  /* ── Render : catalogue ──────────────────────────────────────────── */
+  /* ── Render : catalogue (groupé par intégration) ─────────────────── */
 
   _renderCatalogue() {
     const d = this._catData;
@@ -834,55 +853,93 @@ export class ScanView {
       return;
     }
 
-    this._setCatBody(this._buildCatTable(d.items));
+    this._setCatBody(this._buildCatGroups(d.items));
     this._bindCatRows();
     this._renderCatPager(d);
   }
 
-  _buildCatTable(items) {
-    const rows = items.map(item => {
-      const score      = this._scoreClass(item.quality_score);
-      const statusCls  = `hse-scan__status--${item.status ?? 'pending'}`;
-      const statusLbl  = item.status === 'selected' ? 'Actif'
-                       : item.status === 'ignored'  ? 'Ignoré' : 'En attente';
+  /* Catalogue groupé par integration_domain — même logique que l'inbox */
+  _buildCatGroups(items) {
+    // Grouper
+    const map = new Map();
+    for (const item of items) {
+      const key = item.integration_domain || item.integration || 'unknown';
+      if (!map.has(key)) {
+        map.set(key, { label: item.integration_label || key, items: [] });
+      }
+      map.get(key).items.push(item);
+    }
+    const groups = [];
+    for (const [domain, { label, items: list }] of map) {
+      groups.push({ domain, label, items: list });
+    }
+    groups.sort((a, b) =>
+      (b.items.length - a.items.length) || a.domain.localeCompare(b.domain)
+    );
+
+    const autoOpen = groups.length === 1;
+    const parts = groups.map(g => {
+      const showLabel = g.label && g.label !== g.domain;
+      const chipTotal = `<span class="hse-scan__chip">${g.items.length} entité${g.items.length > 1 ? 's' : ''}</span>`;
+
+      const rows = g.items.map(item => {
+        const score     = this._scoreClass(item.quality_score);
+        const statusCls = `hse-scan__status--${item.status ?? 'pending'}`;
+        const statusLbl = item.status === 'selected' ? 'Actif'
+                        : item.status === 'ignored'  ? 'Ignoré' : 'En attente';
+        return `
+        <tr data-entity-id="${this._esc(item.entity_id)}">
+          <td>
+            <div>${this._esc(item.name ?? item.entity_id)}</div>
+            <div class="hse-scan__entity-id">${this._esc(item.entity_id)}</div>
+          </td>
+          <td>${this._esc(item.room ?? '—')}</td>
+          <td>${this._esc(item.type ?? '—')}</td>
+          <td><span class="hse-scan__status ${statusCls}">${statusLbl}</span></td>
+          <td><span class="hse-scan__score hse-scan__score--${score}">${item.quality_score ?? '?'}%</span></td>
+          <td class="hse-scan__actions">
+            ${item.status !== 'selected' ? `<button class="hse-btn hse-btn--primary hse-btn--sm" data-cat-id="${this._esc(item.entity_id)}" data-cat-action="select">✓ Activer</button>` : ''}
+            ${item.status !== 'ignored'  ? `<button class="hse-btn hse-btn--ghost hse-btn--sm"   data-cat-id="${this._esc(item.entity_id)}" data-cat-action="ignore">✕ Ignorer</button>` : ''}
+            <button class="hse-btn hse-btn--ghost hse-btn--sm" data-cat-id="${this._esc(item.entity_id)}" data-cat-action="reset">↺ Reset</button>
+          </td>
+        </tr>`;
+      }).join('');
+
       return `
-      <tr data-entity-id="${this._esc(item.entity_id)}">
-        <td>
-          <div>${this._esc(item.name ?? item.entity_id)}</div>
-          <div class="hse-scan__entity-id">${this._esc(item.entity_id)}</div>
-        </td>
-        <td>${this._esc(item.room ?? '—')}</td>
-        <td>${this._esc(item.type ?? '—')}</td>
-        <td><span class="hse-scan__status ${statusCls}">${statusLbl}</span></td>
-        <td><span class="hse-scan__score hse-scan__score--${score}">${item.quality_score ?? '?'}%</span></td>
-        <td class="hse-scan__actions">
-          ${item.status !== 'selected' ? `<button class="hse-btn hse-btn--primary hse-btn--sm" data-cat-id="${this._esc(item.entity_id)}" data-cat-action="select">✓ Activer</button>` : ''}
-          ${item.status !== 'ignored'  ? `<button class="hse-btn hse-btn--ghost hse-btn--sm"   data-cat-id="${this._esc(item.entity_id)}" data-cat-action="ignore">✕ Ignorer</button>` : ''}
-          <button class="hse-btn hse-btn--ghost hse-btn--sm" data-cat-id="${this._esc(item.entity_id)}" data-cat-action="reset">↺ Reset</button>
-        </td>
-      </tr>`;
+      <details class="hse-scan__group" ${autoOpen ? 'open' : ''}>
+        <summary class="hse-scan__group-summary">
+          <span class="hse-scan__group-arrow">▶</span>
+          <div class="hse-scan__group-meta">
+            <span class="hse-scan__group-name">${this._esc(g.domain)}</span>
+            ${showLabel ? `<span class="hse-scan__group-label">${this._esc(g.label)}</span>` : ''}
+          </div>
+          <div class="hse-scan__group-chips">${chipTotal}</div>
+        </summary>
+        <div class="hse-scan__group-body">
+          <div class="hse-scan__table-wrap">
+            <table class="hse-scan__table" role="grid">
+              <thead><tr>
+                <th>Entité</th>
+                <th>Pièce</th>
+                <th>Type</th>
+                <th>Statut</th>
+                <th>Qualité</th>
+                <th>Actions</th>
+              </tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>
+      </details>`;
     }).join('');
 
-    return `
-    <div class="hse-scan__cat-table-wrap">
-      <table class="hse-scan__table" role="grid">
-        <thead><tr>
-          <th>Entité</th>
-          <th>Pièce</th>
-          <th>Type</th>
-          <th>Statut</th>
-          <th>Qualité</th>
-          <th>Actions</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
+    return `<div class="hse-scan__groups">${parts}</div>`;
   }
 
   _bindCatRows() {
-    const wrap = this._el?.querySelector('#hse-cat-body .hse-scan__cat-table-wrap');
-    if (!wrap) return;
-    wrap.querySelectorAll('[data-cat-id]').forEach(btn => {
+    const body = this._el?.querySelector('#hse-cat-body');
+    if (!body) return;
+    body.querySelectorAll('[data-cat-id]').forEach(btn => {
       btn.addEventListener('click', () =>
         this._triageCat(btn.dataset.catId, btn.dataset.catAction));
     });

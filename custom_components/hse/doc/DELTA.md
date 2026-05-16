@@ -51,7 +51,7 @@ Si tu lis ce fichier, tu dois :
 
 ---
 
-## 🗂️ Carte du repo — état réel au 2026-04-20
+## 🗂️ Carte du repo — état réel au 2026-05-16
 
 ```
 hsev3/
@@ -68,6 +68,7 @@ hsev3/
     ├── services.yaml                            ✅
     ├── translations/fr.json + en.json           ✅
     ├── api/base.py + views/* (13 views)         ✅
+    │   └── api/views/scan.py                   🟡 DELTA-053 CORRECTIF_DEPLOYÉ 2026-05-16
     ├── catalogue/* (5 fichiers)                 ✅
     ├── meta/* (5 fichiers)                      ✅
     ├── storage/manager.py                       ✅
@@ -95,9 +96,7 @@ hsev3/
     │       ├── ui/                              ✅ conservé (dom.js, table.js)
     │       └── features/
     │           ├── scan/
-    │           │   └── scan_view.js             🟡 Commité 2026-04-20 — en attente de validation
-    │           │                                   F1 : POST /api/hse/scan (corrigé, était /catalogue/refresh)
-    │           │                                   F2 : inbox groupée par integration (<details> collapsibles)
+    │           │   └── scan_view.js             🟡 DELTA-053 CORRECTIF_DEPLOYÉ 2026-05-16
     │           └── custom/
     │               └── custom_view.js           ✅ Onglet Custom/Personnalisation (validé 2026-04-19)
     └── doc/                                     ✅
@@ -122,7 +121,7 @@ hsev3/
 | **Système de thèmes** | **12 thèmes via `html[data-theme]`** — `hse.themes.css` V5. Glass via `html[data-glass="true"]`. Chargés via `<link>` statiques dans `hse_panel.html`. | DELTA-052 (validé 2026-04-19) |
 | **CSS thèmes — fonds opaques** | `--hse-bg` (toujours opaque) sur les cards/panels racines. `--hse-surface` (semi-transparent) réservé aux cartes intérieures avec `backdrop-filter`. | DELTA-052 correctif 2026-04-19 |
 | **Re-scan endpoint** | `POST /api/hse/scan` (pas `/catalogue/refresh`) | F1 — 2026-04-20 |
-| **Inbox scan groupement** | Groupé par `item.integration` via `<details>` collapsibles + checkbox par groupe | F2 — 2026-04-20 |
+| **Inbox scan groupement** | Groupé par `integration_domain` (domaine technique stable) via `<details>` collapsibles. `integration_label` affiché en sous-titre si différent du domain. Catalogue aussi groupé. | F3 — DELTA-053 — 2026-05-16 |
 
 ---
 
@@ -140,7 +139,40 @@ hsev3/
 
 ## Écarts actifs
 
-> ✅ Aucun écart actif — doc et code sont alignés.
+| ID | Statut | Titre | Fichiers impactés | Date |
+|---|---|---|---|---|
+| DELTA-053 | 🟡 `CORRECTIF_DEPLOYÉ` | Groupement scan par `integration_domain` (pas `integration_label`) | `api/views/scan.py` + `scan_view.js` | 2026-05-16 |
+
+---
+
+## 🟡 DELTA-053 — Groupement scan par integration_domain (2026-05-16)
+
+### Symptôme
+Les entités s'affichaient groupées par `integration_label` (ex: `tuya@ftoure.net` = titre d'instance HA)
+au lieu de `integration_domain` (ex: `tuya` = nom technique de l'intégration).
+
+### Cause racine
+`api/views/scan.py` fusionnait les deux champs en un seul champ `integration` :
+```python
+# AVANT (incorrect)
+"integration": c.get("integration_label") or c.get("platform") or "unknown"
+```
+Et `scan_view.js` groupait sur ce champ unique :
+```js
+const key = item.integration || 'unknown';  // recevait le label d'instance
+```
+
+### Correction appliquée
+1. **`scan.py`** — expose deux champs séparés :
+   - `integration_domain` : domaine technique = clé de groupement stable (`"tuya"`, `"tplink"`)
+   - `integration_label` : titre de l'instance (`"tuya@ftoure.net"`) — affiché en sous-titre
+2. **`scan_view.js` `_groupByIntegration()`** — groupe sur `item.integration_domain`
+3. **`scan_view.js` `_buildGroupsHTML()`** — affiche `integration_label` en sous-titre grisé si ≠ domain
+4. **`scan_view.js` `_buildCatGroups()`** — catalogue aussi groupé par intégration (remplace `_buildCatTable()` plate)
+5. **Rétrocompat** : fallback sur `item.integration` si champs absents (migration partielle)
+
+### Statut
+🟡 `CORRECTIF_DEPLOYÉ` — visible au prochain redémarrage HA. En attente de validation.
 
 ---
 
@@ -157,7 +189,7 @@ Le front existant (`web_static/panel/`) a accumulé trop de dette :
 
 **Décision 2026-04-16 :** on efface et on repart de zéro, page par page.
 
-### Ordre de reconstruction — mis à jour 2026-04-20
+### Ordre de reconstruction — mis à jour 2026-05-16
 
 | Ordre | Fichier | Description | Statut |
 |-------|---------|-------------|--------|
@@ -171,19 +203,20 @@ Le front existant (`web_static/panel/`) a accumulé trop de dette :
 | 1 | `shared/hse_shell.js` | Shell principal — routing onglets | 🟡 Commité — en attente de validation |
 | 2 | `features/overview/overview_view.js` | Onglet Overview | ❓ À faire |
 | 3 | `features/diagnostic/diagnostic_view.js` | Onglet Diagnostic | ❓ À faire |
-| 4 | `features/scan/scan_view.js` | Onglet Scan | 🟡 Commité 2026-04-20 — en attente de validation |
+| 4 | `features/scan/scan_view.js` | Onglet Scan | 🟡 DELTA-053 CORRECTIF_DEPLOYÉ 2026-05-16 |
 | 5 | `features/config/config_view.js` | Onglet Config | ❓ À faire |
 | 6 | `features/costs/costs_view.js` | Onglet Costs | ❓ À faire |
 | 7 | `features/migration/migration_view.js` | Onglet Migration | ❓ À faire |
 | 8 | `features/cards/cards_view.js` | Onglet Cards | ❓ À faire |
 | 9 | `features/custom/custom_view.js` | Onglet Custom/Personnalisation | ✅ Validé 2026-04-19 |
 
-### Correctifs appliqués dans scan_view.js (2026-04-20)
+### Correctifs appliqués dans scan_view.js
 
 | ID | Nature | Détail |
 |----|--------|--------|
-| F1 | Bug URL | `_triggerRescan()` appelait `POST /api/hse/catalogue/refresh` → corrigé en `POST /api/hse/scan`. La réponse du POST est injectée directement sans second GET. Gestion 409 (scan déjà en cours). |
-| F2 | UX inbox | Inbox groupée par `item.integration` via `<details>` collapsibles. Chips `energy` / `power`. Checkbox par groupe. Tri : plus grand groupe en premier puis alpha. Auto-open si un seul groupe. |
+| F1 | Bug URL | `_triggerRescan()` appelait `POST /api/hse/catalogue/refresh` → corrigé en `POST /api/hse/scan`. La réponse du POST est injectée directement sans second GET. Gestion 409. |
+| F2 | UX inbox | Inbox groupée par `item.integration` via `<details>` collapsibles (sera remplacé par F3). |
+| F3 | Bug groupement | Groupement sur `integration_domain` (domaine technique) au lieu de `integration_label` (titre d'instance). Catalogue aussi groupé. Voir DELTA-053. |
 
 ### Contraintes non négociables (permanentes)
 
@@ -195,12 +228,6 @@ Le front existant (`web_static/panel/`) a accumulé trop de dette :
 - Tous les appels HTTP via `ctx.hseFetch`
 - Vanilla JS uniquement
 - **Fonds racines** : `var(--hse-bg)` toujours opaque — `var(--hse-surface)` réservé aux cartes avec `backdrop-filter`
-
-### Backend à corriger (ouvert au fil des tests)
-
-| ID | Endpoint | Problème | Statut |
-|----|----------|----------|--------|
-| (vide — à compléter lors des tests) | | | |
 
 ---
 
