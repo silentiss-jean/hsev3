@@ -63,10 +63,14 @@ async def async_scan_hass(hass: HomeAssistant) -> dict:
     {"candidates": [{
         "entity_id", "kind", "unit", "device_class", "state_class",
         "unique_id", "device_id", "area_id", "integration_domain",
-        "platform", "integration_label", "config_entry_id", "disabled_by",
+        "integration_label", "platform", "config_entry_id", "disabled_by",
         "status", "status_reason", "ha_state", "ha_restored"
     }]}
-    Shape attendue par merge_scan_into_catalogue().
+
+    integration_domain : domaine technique de la config entry (ex: "tuya", "tibber").
+    integration_label  : titre lisible de la config entry tel que saisi dans HA
+                         (ex: "Tuya Smart", "Ma box Tibber").
+                         Fallback : domain, puis platform, puis "unknown".
     """
     ent_reg = er.async_get(hass)
     candidates = []
@@ -108,9 +112,28 @@ async def async_scan_hass(hass: HomeAssistant) -> dict:
         disabled_by = getattr(entry, "disabled_by", None)
         disabled_by_val = getattr(disabled_by, "value", str(disabled_by)) if disabled_by is not None else None
 
-        # Label lisible de l'intégration source (utile pour grouper dans le front)
-        integration_domain = getattr(entry, "integration_domain", None) or platform or None
-        integration_label = integration_domain or "unknown"
+        # Résolution de l'intégration source via la config entry réelle.
+        # hass.config_entries.async_get_entry() est synchrone et safe en contexte async.
+        #
+        # integration_domain : domaine technique (ex: "tuya", "tibber")
+        #   → utilisé pour grouper des intégrations du même type
+        # integration_label  : titre de l'instance tel que configuré dans HA
+        #   → affiché dans le front, plus lisible que le domain technique
+        #
+        # Fallback chain : config_entry.domain → platform → "unknown"
+        config_entry_id = getattr(entry, "config_entry_id", None)
+        config_entry = (
+            hass.config_entries.async_get_entry(config_entry_id)
+            if config_entry_id
+            else None
+        )
+
+        if config_entry is not None:
+            integration_domain = config_entry.domain
+            integration_label  = config_entry.title or config_entry.domain
+        else:
+            integration_domain = platform or "unknown"
+            integration_label  = integration_domain
 
         candidates.append({
             "entity_id": eid,
@@ -124,7 +147,7 @@ async def async_scan_hass(hass: HomeAssistant) -> dict:
             "integration_domain": integration_domain,
             "integration_label": integration_label,
             "platform": platform,
-            "config_entry_id": getattr(entry, "config_entry_id", None),
+            "config_entry_id": config_entry_id,
             "disabled_by": disabled_by_val,
             "status": status,
             "status_reason": status_reason,
