@@ -14,8 +14,13 @@
  *
  * Contraintes (DELTA-052) :
  *   - Guard anti double-mount
- *   - disconnectedCallback retire le listener message
+ *   - disconnectedCallback retire le listener message + visibilitychange
  *   - Zéro dépendance externe
+ *
+ * Correctif étape 0 (2026-05-16) :
+ *   - Guard visibilitychange : si l'iframe est vide au retour de bureau virtuel macOS,
+ *     on la recharge (elle re-enverra hse-ready → token re-transmis).
+ *     Non-destructif : ne touche pas au flux normal.
  */
 
 class HsePanel extends HTMLElement {
@@ -25,6 +30,7 @@ class HsePanel extends HTMLElement {
     this._token = null;
     this._iframeReady = false;
     this._messageHandler = null;
+    this._visibilityHandler = null;
     this._mounted = false;
   }
 
@@ -60,12 +66,36 @@ class HsePanel extends HTMLElement {
     // Écoute des messages en provenance de l'iframe
     this._messageHandler = (event) => this._onMessage(event);
     window.addEventListener('message', this._messageHandler);
+
+    // Guard bureau virtuel macOS :
+    // Au retour de bureau virtuel, l'iframe peut être vide (body sans enfants).
+    // On détecte ce cas et on recharge l'iframe — elle re-enverra hse-ready → token re-transmis.
+    this._visibilityHandler = () => {
+      if (document.visibilityState === 'visible' && this._mounted) {
+        try {
+          const body = this._iframe?.contentDocument?.body;
+          if (body && body.children.length === 0) {
+            this._iframeReady = false;
+            this._iframe.src = '/hse-static/hse_panel.html';
+          }
+        } catch (e) {
+          // Cross-origin ou iframe non disponible — reload sécurisé
+          this._iframeReady = false;
+          this._iframe.src = '/hse-static/hse_panel.html';
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', this._visibilityHandler);
   }
 
   disconnectedCallback() {
     if (this._messageHandler) {
       window.removeEventListener('message', this._messageHandler);
       this._messageHandler = null;
+    }
+    if (this._visibilityHandler) {
+      document.removeEventListener('visibilitychange', this._visibilityHandler);
+      this._visibilityHandler = null;
     }
     this._mounted = false;
     this._iframeReady = false;
