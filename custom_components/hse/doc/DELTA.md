@@ -1,6 +1,6 @@
 # DELTA.md — Écarts doc/code actifs HSE V3
 
-> Mis à jour : 2026-05-16 18:17 CEST
+> Mis à jour : 2026-05-16 18:21 CEST
 >
 > **Règle** : aucun patch ne doit contredire un écart EN_DISCUSSION.
 > Fermer un écart = écrire la solution ici avant de commiter.
@@ -8,39 +8,6 @@
 ---
 
 ## Écarts actifs
-
-### DELTA-060 — `HseMigrationView` importé dans `__init__.py` mais n'existe pas dans `migration.py`
-- **Statut** : `BLOQUANT`
-- **Priorité** : 🔴 Critique — empêche le démarrage de HA (ImportError)
-- **Contexte** : `__init__.py` ligne 28 importe `HseMigrationView` depuis `migration.py`. Ce symbole n'existe pas — `migration.py` n'exporte que `HseMigrationExportView` et `HseMigrationApplyView`.
-- **Symptôme** : `ImportError: cannot import name 'HseMigrationView'` → intégration HSE ne démarre pas.
-- **Solution** : Supprimer `HseMigrationView` de l'import dans `__init__.py`. La liste `register_view` ne la contient pas déjà — seul l'import est à corriger.
-- **Fichier à modifier** : `custom_components/hse/__init__.py` ligne 28
-  ```python
-  # AVANT (cassé)
-  from .api.views.migration import HseMigrationView, HseMigrationExportView, HseMigrationApplyView
-  # APRÈS (correct)
-  from .api.views.migration import HseMigrationExportView, HseMigrationApplyView
-  ```
-- **Décision** : ⏳ En attente de feu vert pour commit.
-
----
-
-### DELTA-061 — `HseMetaSyncPreviewView` et `HseMetaSyncApplyView` non enregistrées dans `register_view`
-- **Statut** : `EN_DISCUSSION`
-- **Priorité** : 🟡 Moyenne — les routes `/api/hse/meta/sync/preview` et `/api/hse/meta/sync/apply` sont définies dans `meta.py` et exportées dans `api/views/__init__.py`, mais **ne sont pas passées à `hass.http.register_view`** dans `__init__.py`.
-- **Symptôme** : appels à `/api/hse/meta/sync/preview` ou `/api/hse/meta/sync/apply` retournent 404.
-- **Impact front** : `config_view.js` sous-section B (sync pièces/types) ne fonctionnera pas sans ce correctif.
-- **Solution** : Ajouter dans la liste `register_view` de `__init__.py` :
-  ```python
-  from .api.views.meta import HseMetaView, HseMetaSyncPreviewView, HseMetaSyncApplyView
-  # ...
-  HseMetaSyncPreviewView(hass),
-  HseMetaSyncApplyView(hass),
-  ```
-- **Décision** : ⏳ En attente — peut être commité en même temps que DELTA-060.
-
----
 
 ### DELTA-058 — `PATCH/DELETE /api/hse/catalogue/{entity_id}` manquants
 - **Statut** : `EN_DISCUSSION`
@@ -69,14 +36,16 @@
 | ID | Titre | Résolution | Date |
 |----|-------|------------|------|
 | DELTA-001 | … | … | … |
-| INC-07 | `history.py` supposément absent | **Faux positif** — `HseHistoryView` (`GET /api/hse/history`) existe dans `costs.py`, exportée dans `api/views/__init__.py` et enregistrée dans `register_view`. Aucune action requise. | 2026-05-16 |
-| DELTA-051 | hse_panel.js — bureau virtuel macOS iframe vide | Correctif `visibilitychange` appliqué dans `hse_panel.js` (`connectedCallback` + `disconnectedCallback`) | 2026-05-16 |
+| INC-07 | `history.py` supposément absent | **Faux positif** — `HseHistoryView` existe dans `costs.py`, enregistrée. Aucune action requise. | 2026-05-16 |
+| DELTA-060 | `HseMigrationView` importé mais inexistant — ImportError au démarrage | Import supprimé de `__init__.py` + retrait de `register_view`. Commit [`18c2d50`](https://github.com/silentiss-jean/hsev3/commit/18c2d50462ebe826ffe3a1f185066b4a283b0b53) | 2026-05-16 |
+| DELTA-061 | `HseMetaSyncPreviewView` + `HseMetaSyncApplyView` non enregistrées | Import ajouté + les deux vues passées à `register_view`. Commit [`18c2d50`](https://github.com/silentiss-jean/hsev3/commit/18c2d50462ebe826ffe3a1f185066b4a283b0b53) | 2026-05-16 |
+| DELTA-051 | hse_panel.js — bureau virtuel macOS iframe vide | Correctif `visibilitychange` appliqué | 2026-05-16 |
 | DELTA-052 | hse_shell.js — 8 onglets, navigation | Commité, validation humaine en attente | 2026-05-16 |
-| DELTA-053 | scan_view.js — groupement par `integration_domain` | F3 commité — groupement sur domain technique, `integration_label` en sous-titre | 2026-05-16 |
-| DELTA-054 | Onglet Détection — capteurs non affichés (1re occurrence) | Diagnostic : capteurs déjà catalogués (comportement correct). Seul Tuya restait dans l'inbox. | 2026-05-16 |
-| DELTA-055 | Groupe `"integration"` dans le catalogue (artefact pre-DELTA-053) | Patch backend `catalogue.py` + frontend libellés lisibles. | 2026-05-16 |
-| DELTA-056 | Onglet Détection — capteurs par intégration toujours non affichés | **2 bugs corrigés dans `scan_view.js`** : (1) `mount()` ne réinitialisait pas `_scanSig`/`_catSig` → R3 court-circuitait `_renderScan()` ; (2) `_triage()` appelait `CSS.escape()` sur la constante string CSS → TypeError silencieux. Fix : reset signatures + `_attrVal()`. | 2026-05-16 |
-| DELTA-057 | scan_view.js — `customElements.define('hse-panel', HsePanel)` parasite en bas du fichier | Ligne copiée par erreur lors d'un patch précédent → `ReferenceError: HsePanel is not defined` au chargement du module ES. Supprimée. Stubs ajoutés pour les 5 onglets manquants (overview, config, costs, diagnostic, migration) → élimine les `TypeError: Failed to fetch dynamically imported module`. | 2026-05-16 |
+| DELTA-053 | scan_view.js — groupement par `integration_domain` | F3 commité | 2026-05-16 |
+| DELTA-054 | Onglet Détection — capteurs non affichés (1re occurrence) | Diagnostic : capteurs déjà catalogués | 2026-05-16 |
+| DELTA-055 | Groupe `"integration"` dans le catalogue | Patch backend + frontend | 2026-05-16 |
+| DELTA-056 | Onglet Détection — capteurs par intégration toujours non affichés | 2 bugs corrigés dans `scan_view.js` | 2026-05-16 |
+| DELTA-057 | scan_view.js — `customElements.define` parasite | Ligne supprimée, stubs ajoutés | 2026-05-16 |
 
 ---
 
@@ -86,20 +55,21 @@
 
 | Fichier | Statut | Notes |
 |---------|--------|-------|
-| `__init__.py` | 🔴 | **DELTA-060** : ImportError `HseMigrationView` — **DELTA-061** : MetaSync views non enregistrées |
+| `__init__.py` | ✅ | DELTA-060 + DELTA-061 corrigés |
 | `const.py` | ✅ | Constantes |
 | `storage/manager.py` | ✅ | 4 stores HA natifs |
 | `catalogue/schema.py` | ✅ | Schéma items |
 | `catalogue/scan_engine.py` | ✅ | Détection entités énergie/puissance |
 | `sensors/quality_scorer.py` | ✅ | Score qualité |
 | `api/views/scan.py` | ✅ | GET/POST /api/hse/scan |
-| `api/views/catalogue.py` | ✅ | DELTA-055 appliqué — PATCH/DELETE manquants (DELTA-058) |
+| `api/views/catalogue.py` | ✅ | GET/POST — PATCH/DELETE manquants (DELTA-058) |
 | `api/views/meta.py` | ✅ | GET + sync/preview + sync/apply — POST création manquant (DELTA-059) |
 | `api/views/settings.py` | ✅ | GET/PUT /api/hse/settings/pricing |
-| `api/views/costs.py` | ✅ | GET /api/hse/costs + GET /api/hse/history + GET /api/hse/export |
+| `api/views/costs.py` | ✅ | GET /api/hse/costs + /history + /export |
 | `api/views/overview.py` | ✅ | Backend dispo |
 | `api/views/diagnostic.py` | ✅ | Backend dispo |
-| `api/views/migration.py` | ✅ | HseMigrationExportView + HseMigrationApplyView — pas de HseMigrationView (voir DELTA-060) |
+| `api/views/migration.py` | ✅ | HseMigrationExportView + HseMigrationApplyView |
+| `api/views/user_prefs.py` | ✅ | GET/PATCH /api/hse/user_prefs |
 
 ### Frontend JS
 
@@ -107,15 +77,14 @@
 |---------|--------|-------|
 | `hse_panel.js` | ✅ | Correctif bureau virtuel macOS inclus |
 | `hse_shell.js` | 🟡 | Commité — validation humaine en attente |
-| `scan_view.js` | ✅ | DELTA-057 : ligne parasite supprimée |
-| `overview_view.js` | 🟡 | Stub présent — à implémenter (étape 2) |
-| `config_view.js` | 🟡 | Stub présent — **en cours** (étape 3) — contraintes DELTA-058 + DELTA-059 |
-| `costs_view.js` | 🟡 | Stub présent — à implémenter (étape 4) |
-| `diagnostic_view.js` | 🟡 | Stub présent — à implémenter (étape 5) |
-| `migration_view.js` | 🟡 | Stub présent — à implémenter (étape 6) |
+| `scan_view.js` | ✅ | Opérationnel |
+| `overview_view.js` | 🟡 | Stub — à implémenter (étape 2) |
+| `config_view.js` | 🟡 | Stub — **étape suivante** — contraintes DELTA-058 + DELTA-059 |
+| `costs_view.js` | 🟡 | Stub — à implémenter (étape 4) |
+| `diagnostic_view.js` | 🟡 | Stub — à implémenter (étape 5) |
+| `migration_view.js` | 🟡 | Stub — à implémenter (étape 6) |
 | `cards_view.js` | ❌ | À coder (étape 7) |
 
 ### Prochaine action
 
-**Priorité absolue : corriger DELTA-060 + DELTA-061 dans `__init__.py`** avant tout autre commit frontend.
-Sans ce correctif, HA ne démarre pas l'intégration HSE → tous les onglets sont en erreur.
+Backend sain ✅ — implémenter `config_view.js` avec les contournements DELTA-058/059 documentés.
