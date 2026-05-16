@@ -1,6 +1,6 @@
 """
 HSE V3 — Endpoints catalogue
-GET  /api/hse/catalogue             — liste paginée
+GET  /api/hse/catalogue             — liste paginée (inclut integration_label)
 POST /api/hse/catalogue/triage      — triage unitaire
 POST /api/hse/catalogue/triage/bulk — triage en masse
 POST /api/hse/catalogue/refresh     — re-scan
@@ -20,6 +20,42 @@ from ...sensors.quality_scorer import score_item
 
 _VALID_ACTIONS = ("select", "ignore", "reset")
 _VALID_STATUS = ("all", "selected", "ignored", "pending")
+
+
+def _resolve_integration_label(hass: HomeAssistant, src: dict) -> str | None:
+    """
+    Résout le label lisible de l'intégration source pour un item du catalogue.
+
+    Stratégie :
+    1. integration_label stocké lors du scan (présent après le patch 2026-05-16)
+    2. Fallback live : config_entry_id → config_entries.async_get_entry().title
+    3. Fallback : integration_domain stocké
+    4. Fallback : platform stocké
+    5. None
+    """
+    # 1. Stocké directement
+    stored = src.get("integration_label")
+    if stored:
+        return stored
+
+    # 2. Fallback live via config_entry_id (pour les items antérieurs au patch)
+    config_entry_id = src.get("config_entry_id")
+    if config_entry_id:
+        entry = hass.config_entries.async_get_entry(config_entry_id)
+        if entry:
+            return entry.title or entry.domain
+
+    # 3. integration_domain stocké
+    domain = src.get("integration_domain")
+    if domain:
+        return domain
+
+    # 4. platform
+    platform = src.get("platform")
+    if platform:
+        return platform
+
+    return None
 
 
 class HseCatalogueView(HseBaseView):
@@ -58,6 +94,7 @@ class HseCatalogueView(HseBaseView):
                 (getattr(state_obj, "attributes", {}) or {}).get("friendly_name") or eid
             )
             ha_state_raw = getattr(state_obj, "state", None) if state_obj else None
+
             filtered.append({
                 "entity_id": eid,
                 "name": friendly_name,
@@ -66,6 +103,10 @@ class HseCatalogueView(HseBaseView):
                 "type": (item.get("enrichment") or {}).get("type_id"),
                 "status": policy,
                 "quality_score": score_item(item, ha_state_raw),
+                # Intégration source — stockée ou résolue live
+                "integration": _resolve_integration_label(self.hass, src),
+                "integration_domain": src.get("integration_domain"),
+                "platform": src.get("platform"),
             })
 
         total = len(filtered)
@@ -105,7 +146,6 @@ class HseCatalogueTriageView(HseBaseView):
         catalogue = await mgr.async_load_catalogue()
         items = catalogue.get("items") or {}
 
-        # Recherche de l'item par entity_id
         target_key = None
         for k, v in items.items():
             if isinstance(v, dict) and (v.get("source") or {}).get("entity_id") == entity_id:
@@ -143,7 +183,6 @@ class HseCatalogueTriageBulkView(HseBaseView):
         catalogue = await mgr.async_load_catalogue()
         items = catalogue.get("items") or {}
 
-        # Index entity_id -> catalogue_key
         eid_index: dict[str, str] = {}
         for k, v in items.items():
             if isinstance(v, dict):

@@ -87,10 +87,13 @@ def merge_scan_into_catalogue(
         existing = ensure_item_defaults(existing, base_entity_id=c.get("entity_id"))
 
         src = existing.setdefault("source", {})
+        # integration_label ajouté — titre lisible de la config entry HA
+        # (ex: "chambre radiateur P110", "tuya@ftoure.net")
         for k in (
             "entity_id", "kind", "unit", "device_class", "state_class",
             "unique_id", "device_id", "area_id", "integration_domain",
-            "platform", "config_entry_id", "disabled_by", "status", "status_reason",
+            "integration_label", "platform", "config_entry_id",
+            "disabled_by", "status", "status_reason",
         ):
             if k in c:
                 src[k] = c.get(k)
