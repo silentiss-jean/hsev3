@@ -1,78 +1,15 @@
 # DELTA.md — Écarts doc/code actifs HSE V3
 
-> Mis à jour : 2026-05-16 20:45 CEST
+> Mis à jour : 2026-05-16 21:00 CEST
 >
 > **Règle** : aucun patch ne doit contredire un écart EN_DISCUSSION.
 > Fermer un écart = écrire la solution ici avant de commiter.
+>
+> ⚠️ Ce fichier est tenu à jour exclusivement par l'IA. Toute désynchronisation est un bug doc à corriger immédiatement.
 
 ---
 
 ## Écarts actifs
-
-### DELTA-054 — Onglet Détection : capteurs non affichés par intégration
-- **Statut** : `EN_DISCUSSION` 🔴
-- **Priorité** : Haute (bloquante utilisateur)
-
-#### Diagnostic code lu (2026-05-16 20:45)
-
-**`hse_panel.html`** importe `hse_shell.js` depuis `/hse-static/shared/hse_shell.js`.  
-HA sert `/hse-static/` → `custom_components/hse/web_static/panel/` (mapping statique).  
-Le fichier est bien à `web_static/panel/shared/hse_shell.js` — **le chemin est correct**.
-
-**`hse_shell.js`** — `_activateTab('scan')` construit l'URL :
-```js
-const url = `/hse-static/features/${tabId}/${tabId}_view.js`;
-// → /hse-static/features/scan/scan_view.js
-```
-Correspondance disque : `web_static/panel/features/scan/scan_view.js` ✅ — **le fichier existe**.
-
-**`scan_view.js`** — `_groupByIntegration()` groupe sur `item.integration_domain || item.integration || 'unknown'`.  
-Si tous les items ont `integration_domain = null` ou absent, tout tombe dans le groupe `'unknown'` → affiché, mais sans label lisible.
-
-**`_loadScan()`** appelle `this._ctx.hseFetch(...)`.  
-**`_buildCtx()`** dans `hse_shell.js` expose `hseFetch` importé depuis `./hse_fetch.js`.  
-`ScanView` reçoit `ctx.hseFetch` et l'appelle correctement.
-
-#### Causes probables identifiées (par ordre de probabilité)
-
-| # | Cause | Probabilité | Preuve code |
-|---|-------|-------------|-------------|
-| **C1** | `scan_engine.py` ne remplit pas `integration_domain` → le champ est `null` / absent → groupe `"unknown"` affiché mais invisible (pas de label, pas de chip) | 🔴 **Très haute** | `_groupByIntegration()` fallback sur `'unknown'` silencieux |
-| **C2** | `/api/hse/scan` retourne `items: []` (total=0) — aucune entité éligible détectée | 🟡 Moyenne | `_renderScan()` affiche empty state si `!d.items?.length` |
-| **C3** | Erreur HTTP (`/api/hse/scan` → 401/404/500) | 🟡 Moyenne | Catch → affiche `hse-error` visible dans l'onglet |
-| **C4** | `hse_shell.js` `_bootstrap()` échoue (ping/manifest/user_prefs) → `_activateTab` jamais appelé | 🟢 Faible | Afficherait l'erreur dans `#hse-view` |
-
-#### Solution à implémenter selon C1 (la plus probable)
-
-Si `scan_engine.py` ne fournit pas `integration_domain`, ajouter dans le fallback de `_groupByIntegration()` une détection par préfixe d'`entity_id` :
-```js
-// Fallback : déduire l'intégration du préfixe de l'entity_id
-function guessDomain(item) {
-  if (item.integration_domain) return item.integration_domain;
-  if (item.integration) return item.integration;
-  // ex: "sensor.tuya_plug_1" → "tuya"
-  const id = item.entity_id || '';
-  const parts = id.split('.');
-  if (parts.length >= 2) {
-    const name = parts[1];
-    // Patterns courants
-    for (const known of ['tuya', 'tplink', 'shelly', 'esphome', 'zha', 'zwave', 'hue', 'tasmota']) {
-      if (name.startsWith(known)) return known;
-    }
-  }
-  return 'unknown';
-}
-```
-**Mais** : solution fragile — la vraie correction est dans `scan_engine.py` pour garantir `integration_domain` toujours rempli.
-
-#### Prochaine action (COMMIT)
-
-1. **Vérifier** `GET /api/hse/scan` en direct → regarder si `integration_domain` est présent dans les items  
-2. **Si absent** → patch `scan_engine.py` pour remplir le champ  
-3. **Si présent mais groupe vide** → ajouter un `console.log` temporaire dans `_groupByIntegration()` pour voir ce qui arrive  
-4. **Si total=0** → vérifier les filtres de `scan_engine.py` (critères `energy`/`power`)
-
----
 
 ### DELTA-058 — `PATCH/DELETE /api/hse/catalogue/{entity_id}` manquants
 - **Statut** : `EN_DISCUSSION`
@@ -92,17 +29,25 @@ function guessDomain(item) {
 - **Contexte** : `meta.py` n'expose qu'un `GET` + `sync/preview` + `sync/apply`. Pas de création manuelle.
 - **Impact front** : Sous-section B de `config_view.js` est en lecture seule. Bouton "Créer" grisé + note "Bientôt disponible" déjà intégré.
 - **Solution proposée** : Ajouter `POST /api/hse/meta` avec body `{action: "create_room"|"create_type", name: string}`.
-- **Décision** : ⏳ En attente — sera implémenté après DELTA-054.
+- **Décision** : ⏳ En attente.
 
 ---
 
-### DELTA-062 — `cards_view.js` : Failed to fetch dynamically imported module
+### DELTA-062 — `cards_view.js` absent — crash onglet
 - **Statut** : `EN_DISCUSSION` 🟠
-- **Priorité** : **Basse** (usage confort, non bloquant)
-- **Symptôme** : Onglet "Cartes YAML" affiche `Failed to fetch dynamically imported module: http://…/hse-static/features/cards/cards_view.js` — le fichier n'existe pas encore.
-- **Impact** : Onglet crashé à l'ouverture. Les autres onglets ne sont pas affectés.
-- **Solution proposée** : Créer un stub `cards_view.js` minimal (message "En développement") pour supprimer l'erreur, puis implémenter `yamlComposer.js` + vue complète.
-- **Décision** : ⏳ Basse priorité — à traiter après DELTA-054 + `overview_view.js` + `costs_view.js`.
+- **Priorité** : **Basse** (non bloquant, usage confort)
+- **Symptôme** : Onglet "Cartes YAML" → `Failed to fetch dynamically imported module: /hse-static/features/cards/cards_view.js` — fichier inexistant.
+- **Solution proposée** : Créer un stub minimal puis implémenter `yamlComposer.js` + vue complète.
+- **Décision** : ⏳ À traiter après `overview_view.js` + `costs_view.js`.
+
+---
+
+### DELTA-051-PANEL — `hse_panel.js` bureau virtuel macOS
+- **Statut** : `EN_DISCUSSION`
+- **Priorité** : **Basse** (edge case macOS uniquement, non bloquant)
+- **Symptôme** : Au retour d'un bureau virtuel macOS, l'iframe peut se retrouver vide.
+- **Correctif prévu** : `visibilitychange` + reload conditionnel de l'iframe dans `connectedCallback`/`disconnectedCallback`.
+- **Décision** : ⏳ Non prioritaire — à traiter après les onglets métier.
 
 ---
 
@@ -110,17 +55,17 @@ function guessDomain(item) {
 
 | ID | Titre | Résolution | Date |
 |----|-------|------------|------|
+| DELTA-054 | Onglet Détection : capteurs non affichés par intégration | **Faux positif** — vérifié sur capture d'écran : tplink / tuya / tapo / Helpers HA / Compteurs HA affichés correctement. 106 entités cataloguées. Résolu par DELTA-053/055/056. | 2026-05-16 |
 | DELTA-001 | … | … | … |
 | INC-07 | `history.py` supposément absent | **Faux positif** — `HseHistoryView` existe dans `costs.py`. | 2026-05-16 |
 | DELTA-060 | `HseMigrationView` importé mais inexistant — ImportError | Import supprimé de `__init__.py`. Commit [`18c2d50`](https://github.com/silentiss-jean/hsev3/commit/18c2d50462ebe826ffe3a1f185066b4a283b0b53) | 2026-05-16 |
 | DELTA-061 | `HseMetaSyncPreviewView` + `HseMetaSyncApplyView` non enregistrées | Import + `register_view` ajoutés. Commit [`18c2d50`](https://github.com/silentiss-jean/hsev3/commit/18c2d50462ebe826ffe3a1f185066b4a283b0b53) | 2026-05-16 |
-| DELTA-051 | `hse_panel.js` — bureau virtuel macOS iframe vide | Correctif `visibilitychange` appliqué | 2026-05-16 |
-| DELTA-052 | `hse_shell.js` — 8 onglets, navigation | Commité, validation humaine en attente | 2026-05-16 |
-| DELTA-053 | `scan_view.js` — groupement par `integration_domain` | F3 commité | 2026-05-16 |
-| DELTA-055 | Groupe `"integration"` dans le catalogue | Patch backend + frontend | 2026-05-16 |
-| DELTA-056 | Onglet Détection — 2 bugs dans `scan_view.js` | Corrigés | 2026-05-16 |
-| DELTA-057 | `scan_view.js` — `customElements.define` parasite | Ligne supprimée, stubs ajoutés | 2026-05-16 |
-| **DELTA-CONF-01** | `config_view.js` — onglet Configuration | **Implémenté** — 3 sous-onglets : Appareils / Pièces & Types / Tarification. Contournements DELTA-058/059 intégrés. | 2026-05-16 |
+| DELTA-052 | `hse_shell.js` — 8 onglets, navigation | Commité + validé. | 2026-05-16 |
+| DELTA-053 | `scan_view.js` — groupement par `integration_domain` | F3 commité. | 2026-05-16 |
+| DELTA-055 | Groupe `"integration"` dans le catalogue | Patch backend + frontend commité. | 2026-05-16 |
+| DELTA-056 | Onglet Détection — 2 bugs dans `scan_view.js` | Corrigés (reset `_scanSig`/`_catSig` + `_attrVal()`). | 2026-05-16 |
+| DELTA-057 | `scan_view.js` — `customElements.define` parasite | Ligne supprimée, stubs ajoutés. | 2026-05-16 |
+| DELTA-CONF-01 | `config_view.js` — onglet Configuration | Implémenté — 3 sous-onglets : Appareils / Pièces & Types / Tarification. Contournements DELTA-058/059 intégrés. | 2026-05-16 |
 
 ---
 
@@ -133,7 +78,7 @@ function guessDomain(item) {
 | `__init__.py` | ✅ | DELTA-060 + DELTA-061 corrigés |
 | `const.py` | ✅ | |
 | `storage/manager.py` | ✅ | |
-| `catalogue/scan_engine.py` | ⚠️ | Suspect DELTA-054 C1 — `integration_domain` peut-être absent |
+| `catalogue/scan_engine.py` | ✅ | `integration_domain` rempli — vérifié via JSON retourné |
 | `api/views/scan.py` | ✅ | GET/POST /api/hse/scan |
 | `api/views/catalogue.py` | ✅ | GET/POST — PATCH/DELETE ⏳ (DELTA-058) |
 | `api/views/meta.py` | ✅ | GET + sync — POST création ⏳ (DELTA-059) |
@@ -148,18 +93,18 @@ function guessDomain(item) {
 
 | Fichier | Statut | Notes |
 |---------|--------|-------|
-| `hse_panel.js` | ✅ | Correctif bureau virtuel macOS inclus |
-| `hse_shell.js` | 🟡 | Commité — flux `_activateTab` → `import()` → `mount()` vérifié ✅ |
-| `scan_view.js` | 🟡 | Commité — DELTA-054 ouvert : groupement fonctionnel si `integration_domain` rempli |
-| `config_view.js` | ✅ | Commité — 3 sous-onglets, R1-R5, contournements DELTA-058/059 |
-| `overview_view.js` | 🟡 | Stub — à implémenter (priorité 1 après DELTA-054) |
-| `costs_view.js` | 🟡 | Stub — à implémenter (priorité 2) |
-| `diagnostic_view.js` | 🟡 | Stub — à implémenter (priorité 3) |
-| `migration_view.js` | 🟡 | Stub — à implémenter (priorité 4) |
+| `hse_panel.js` | ✅ | Bureau virtuel macOS : DELTA-051-PANEL ouvert, priorité basse |
+| `hse_shell.js` | ✅ | 8 onglets, navigation, validé |
+| `scan_view.js` | ✅ | Groupement par intégration fonctionnel — validé capture d'écran |
+| `config_view.js` | ✅ | 3 sous-onglets, R1-R5, contournements DELTA-058/059 intégrés |
+| `overview_view.js` | 🟡 | Stub — **priorité 1** à implémenter |
+| `costs_view.js` | 🟡 | Stub — priorité 2 |
+| `diagnostic_view.js` | 🟡 | Stub — priorité 3 |
+| `migration_view.js` | 🟡 | Stub — priorité 4 |
 | `cards_view.js` | ❌ | Absent — crash onglet (DELTA-062, priorité basse) |
 
 ### Prochaine action
 
-1. 🔴 **DELTA-054** — Appeler `GET /api/hse/scan` en direct et regarder si `integration_domain` est rempli dans les items JSON
-2. 🔴 Si `integration_domain` absent → patch `scan_engine.py` → COMMIT
-3. 🟡 Implémenter `overview_view.js` (après DELTA-054 fermé)
+1. 🟡 **Implémenter `overview_view.js`** — GET /api/hse/overview, dashboard principal
+2. 🟡 **Implémenter `costs_view.js`** — GET /api/hse/costs, raison d'être du projet
+3. ⏳ DELTA-058/059 — endpoints backend manquants (config_view fonctionne avec contournement)
