@@ -31,7 +31,19 @@ class HseMetaView(HseBaseView):
         meta_store = await mgr.async_load_meta()
         meta = meta_store.get("meta") or {}
 
-        rooms = [r.get("name", r.get("id", "")) for r in (meta.get("rooms") or []) if isinstance(r, dict)]
+        # DELTA-064 Q3 : rooms retourné comme [{"id": str, "name": str}]
+        # (correction bug affichage "?" dans Pièces & Types — l'ancien format string[]
+        # rendait room.name indéfini côté frontend)
+        rooms_out = []
+        for r in (meta.get("rooms") or []):
+            if isinstance(r, dict):
+                room_id = r.get("id", "")
+                room_name = r.get("name") or room_id
+                rooms_out.append({"id": room_id, "name": room_name})
+            elif isinstance(r, str):
+                # Compatibilité ascendante : store ancien format string
+                rooms_out.append({"id": r, "name": r})
+
         types = list({a.get("type_id") for a in (meta.get("assignments") or {}).values() if isinstance(a, dict) and a.get("type_id")})
 
         assignments_out = []
@@ -46,7 +58,7 @@ class HseMetaView(HseBaseView):
             })
 
         return self.json_ok({
-            "rooms": rooms,
+            "rooms": rooms_out,
             "types": types,
             "assignments": assignments_out,
         })
