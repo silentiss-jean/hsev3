@@ -35,6 +35,8 @@ class HseSettingsPricingView(HseBaseView):
             "price_hc_ttc_kwh": settings.get("price_hc_ttc_kwh"),
             "subscription_eur_month": settings.get("subscription_eur_month", 0.0),
             "tax_rate_pct": settings.get("tax_rate_pct", 20.0),
+            # DELTA-064 Q2 : capteur de référence (DELTA-009)
+            "reference_entity_id": settings.get("reference_entity_id"),
         })
 
     async def put(self, request: web.Request) -> web.Response:
@@ -51,7 +53,9 @@ class HseSettingsPricingView(HseBaseView):
         settings = await mgr.async_load_settings()
 
         for field in ("mode", "price_ht_kwh", "price_ttc_kwh", "price_hp_ttc_kwh",
-                      "price_hc_ttc_kwh", "subscription_eur_month", "tax_rate_pct"):
+                      "price_hc_ttc_kwh", "subscription_eur_month", "tax_rate_pct",
+                      # DELTA-064 Q2 : capteur de référence (DELTA-009)
+                      "reference_entity_id"):
             if field in body:
                 settings[field] = body[field]
 
