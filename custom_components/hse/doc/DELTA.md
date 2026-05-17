@@ -1,6 +1,6 @@
 # DELTA.md — Écarts doc/code actifs HSE V3
 
-> Mis à jour : 2026-05-17 09:59 CEST
+> Mis à jour : 2026-05-17 14:17 CEST
 >
 > **Règle** : aucun patch ne doit contredire un écart EN_DISCUSSION.
 > Fermer un écart = écrire la solution ici avant de commiter.
@@ -10,37 +10,6 @@
 ---
 
 ## Écarts actifs
-
-### DELTA-063 — `config_view.js` — Refonte UI (screenshots V1 reçus)
-- **Statut** : `A_IMPLEMENTER` 🔴
-- **Priorité** : **Haute** — DELTA-064 résolu, débloqué
-- **Contexte** : Screenshots V1 reçus (9 captures, 2026-05-16 21:17). Audit DELTA-064 terminé (2026-05-17).
-- **Contrat frontend** (issu de l'audit DELTA-064) :
-
-  **Q1 — Sélection automatique ✨**
-  Pas de route backend dédiée. La logique est **100% frontend** :
-  - Lire `GET /api/hse/catalogue` (champ `quality_score` + `status` + `integration_domain`)
-  - Algorithme : prioriser Energy > Power, dédupliquer par device, privilégier physique > virtuel
-  - Envoyer `POST /api/hse/catalogue/triage/bulk` avec `action: "select"` sur les candidats retenus
-
-  **Q2 — Capteur de référence ⭐**
-  Champ `reference_entity_id` dans `hse.settings`.
-  Route : `GET /api/hse/settings/pricing` (lecture) + `PUT /api/hse/settings/pricing` (sauvegarde).
-  Commit : [`36cd1d1`](https://github.com/silentiss-jean/hsev3/commit/36cd1d171fa815558989df8469aa4811028ef264)
-
-  **Q3 — Bug Pièces & Types — `?`**
-  `GET /api/hse/meta` retourne désormais `rooms` comme `[{"id": str, "name": str}]`.
-  Le frontend doit lire `room.name` (et non traiter les rooms comme des strings).
-  Commit : [`830d00b`](https://github.com/silentiss-jean/hsev3/commit/830d00bb72c73612ce0fd69f926c728d9767d48d)
-
-- **Ce qui est prévu** :
-  - **Sous-onglet Appareils** : layout 2 colonnes (Sélectionnés | Ignorés/Alternatives), groupes par intégration collapse/expand avec compteur bubble, rows avec badge intégration + icône type ⚡/🔋 + qualité stars + badge Summary, bloc capteur de référence ⭐ (via `reference_entity_id`), bloc sélection automatique ✨ (logique frontend)
-  - **Sous-onglet Pièces & Types** : lire `room.name` (objet), afficher `entity_id` HA sous le nom
-  - **Sous-onglet Tarification** : labels en gras, bouton Enregistrer plus visible, layout conforme V1
-- **Contournements actifs** : DELTA-058 (triage via bulk), DELTA-059 (création pièce grisée)
-- **Décision** : ⏳ Prêt à implémenter — règles R1–R5 obligatoires.
-
----
 
 ### DELTA-058 — `PATCH/DELETE /api/hse/catalogue/{entity_id}` manquants
 - **Statut** : `EN_DISCUSSION`
@@ -86,6 +55,7 @@
 
 | ID | Titre | Résolution | Date |
 |----|-------|------------|------|
+| DELTA-063 | `config_view.js` — Refonte UI (screenshots V1 reçus) | **Résolu** — Sous-onglet A : layout groupes collapse par `integration_domain`, bloc ⭐ référence (`GET/PUT /api/hse/settings/pricing` → `reference_entity_id`), bloc ✨ sélection auto (logique frontend `quality_score` + `triage/bulk`), icônes type ⚡🔋, stars qualité. Sous-onglet B : fix `room.name` (objet `{id,name}`), `entity_id` affiché. Sous-onglet C : inchangé. Contournements DELTA-058/059 maintenus. Vérifié en place dans `config_view.js` (SHA `f00803d`). | 2026-05-17 |
 | DELTA-064 | Audit code avant refonte `config_view.js` — 3 questions bloquantes | **Résolu** — Q1 : sélection auto = logique frontend via `triage/bulk` + `quality_score`. Q2 : `reference_entity_id` exposé dans `settings.py` ([`36cd1d1`](https://github.com/silentiss-jean/hsev3/commit/36cd1d171fa815558989df8469aa4811028ef264)). Q3 : `rooms` retourné `[{id,name}]` dans `meta.py` ([`830d00b`](https://github.com/silentiss-jean/hsev3/commit/830d00bb72c73612ce0fd69f926c728d9767d48d)). | 2026-05-17 |
 | DELTA-054 | Onglet Détection : capteurs non affichés par intégration | **Faux positif** — vérifié sur capture d'écran : tplink / tuya / tapo / Helpers HA / Compteurs HA affichés correctement. 106 entités cataloguées. Résolu par DELTA-053/055/056. | 2026-05-16 |
 | DELTA-001 | … | … | … |
@@ -128,15 +98,15 @@
 | `hse_panel.js` | ✅ | Bureau virtuel macOS : DELTA-051-PANEL ouvert, priorité basse |
 | `hse_shell.js` | ✅ | 8 onglets, navigation, validé |
 | `scan_view.js` | ✅ | Groupement par intégration fonctionnel — validé capture d'écran |
-| `config_view.js` | 🔴 | **Prêt à refondre** — DELTA-063 débloqué, contrat défini |
-| `overview_view.js` | 🟡 | Stub — priorité 2 (après DELTA-063) |
-| `costs_view.js` | 🟡 | Stub — priorité 3 |
-| `diagnostic_view.js` | 🟡 | Stub — priorité 4 |
-| `migration_view.js` | 🟡 | Stub — priorité 5 |
+| `config_view.js` | ✅ | **DELTA-063 résolu** — A : groupes collapse + ⭐ référence + ✨ auto + icônes + stars. B : fix room.name + entity_id. C : inchangé. |
+| `overview_view.js` | 🟡 | Stub — priorité 1 (prochain) |
+| `costs_view.js` | 🟡 | Stub — priorité 2 |
+| `diagnostic_view.js` | 🟡 | Stub — priorité 3 |
+| `migration_view.js` | 🟡 | Stub — priorité 4 |
 | `cards_view.js` | ❌ | Absent — crash onglet (DELTA-062, priorité basse) |
 
 ### Prochaine action
 
-1. 🔴 **DELTA-063** — Refonte `config_view.js` (débloqué, contrat complet ci-dessus)
+1. 🟡 **Valider `config_view.js`** en prod (tester sous-onglets A + B)
 2. 🟡 **Implémenter `overview_view.js`** — GET /api/hse/overview
 3. 🟡 **Implémenter `costs_view.js`** — GET /api/hse/costs
