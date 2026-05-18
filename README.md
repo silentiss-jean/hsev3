@@ -67,15 +67,15 @@ hsev3/
         │   └── views/
         │       ├── __init__.py      ✅
         │       ├── ping.py          ← GET /api/hse/ping ✅
-        │       ├── catalogue.py     ← GET/PATCH /api/hse/catalogue ✅
+        │       ├── catalogue.py     ← GET/POST /api/hse/catalogue — PATCH/DELETE ⏳ (DELTA-058)
         │       ├── costs.py         ← GET /api/hse/costs + HseHistoryView + HseExportView ✅
         │       ├── diagnostic.py    ← GET /api/hse/diagnostic ✅
         │       ├── frontend_manifest.py ✅
-        │       ├── meta.py          ← GET/PATCH /api/hse/meta ✅
+        │       ├── meta.py          ← GET + sync — rooms [{id,name}] — POST création ⏳ (DELTA-059)
         │       ├── migration.py     ← GET/POST /api/hse/migration ✅
         │       ├── overview.py      ← GET /api/hse/overview ✅
         │       ├── scan.py          ← POST /api/hse/scan ✅
-        │       ├── settings.py      ← GET/PATCH /api/hse/settings ✅
+        │       ├── settings.py      ← GET/PUT incl. reference_entity_id ✅
         │       └── user_prefs.py    ← GET/PATCH /api/hse/user_prefs ✅
         │
         ├── catalogue/               ✅ (V2 conservé)
@@ -112,7 +112,7 @@ hsev3/
         ├── web_static/
         │   └── panel/
         │       ├── hse_panel.html       ✅
-        │       ├── hse_panel.js         ✅
+        │       ├── hse_panel.js         🟠 (DELTA-051-PANEL — bug iframe macOS, priorité basse)
         │       ├── style.hse.panel.css  ✅
         │       ├── shared/
         │       │   ├── hse_fetch.js     ✅
@@ -127,17 +127,17 @@ hsev3/
         │       │       ├── hse_alias.v2.css       ✅
         │       │       └── tokens.css             ✅
         │       └── features/
-        │           ├── overview/overview_view.js       ✅
-        │           ├── diagnostic/diagnostic_view.js   ✅
+        │           ├── overview/overview_view.js       🟡 stub — à implémenter
+        │           ├── diagnostic/diagnostic_view.js   🟡 stub — à implémenter
         │           ├── scan/scan_view.js               ✅
-        │           ├── config/config_view.js           ✅
+        │           ├── config/config_view.js           🟠 A✅ B✅ — C🔴 champs cassés (DELTA-065)
         │           ├── custom/custom_view.js           ✅
-        │           ├── cards/cards_view.js             ✅
-        │           ├── migration/migration_view.js     ✅
-        │           └── costs/costs_view.js             ✅
+        │           ├── cards/cards_view.js             ❌ ABSENT — crash onglet (DELTA-062)
+        │           ├── migration/migration_view.js     🟡 stub — à implémenter
+        │           └── costs/costs_view.js             🟡 stub — à implémenter
         │
         └── doc/                     ← 📚 Documentation IA
-            ├── DELTA.md             ← 🟠 1 écart actif (DELTA-021)
+            ├── DELTA.md             ← 🔴 5 écarts actifs (voir ci-dessous)
             ├── 00_methode_front_commune.md
             ├── 01_onglet_overview.md
             ├── 02_onglet_diagnostic.md
@@ -171,15 +171,27 @@ hsev3/
 | Tâche | Contenu | Statut |
 |---|---|---|
 | Shell | `hse_fetch.js` + `hse_store.js` + `hse_shell.js` | ✅ TERMINÉ — 2026-04-09 |
-| Views | 8 `features/<id>/<id>_view.js` | ✅ TERMINÉ — 2026-04-09 |
 | Panel | `hse_panel.html` + `hse_panel.js` + `style.hse.panel.css` | ✅ TERMINÉ — 2026-04-10 |
 | Shared UI | `shared/ui/dom.js` + `table.js` + 4 fichiers CSS | ✅ TERMINÉ — 2026-04-10 |
+| `scan_view.js` | Groupement par intégration | ✅ TERMINÉ — 2026-05-16 |
+| `config_view.js` | 3 sous-onglets — A✅ B✅ C🔴 | 🟠 EN COURS — DELTA-065 |
+| `overview_view.js` | GET /api/hse/overview | 🟡 STUB — priorité 2 |
+| `costs_view.js` | GET /api/hse/costs | 🟡 STUB — priorité 3 |
+| `diagnostic_view.js` | GET /api/hse/diagnostic | 🟡 STUB — priorité 4 |
+| `migration_view.js` | GET/POST /api/hse/migration | 🟡 STUB — priorité 5 |
+| `cards_view.js` | Cartes YAML | ❌ ABSENT — DELTA-062 |
 
 ### Écarts actifs
 
-> 🟠 **1 écart actif — DELTA-021 EN_DISCUSSION.**
-> Sujet : nature réelle du chantier API (phases 2–3) — modules V2 à réorganiser, pas à réécrire.
-> Voir `doc/DELTA.md` pour le détail complet.
+> Mis à jour : 2026-05-18 — source : `doc/DELTA.md`
+
+| ID | Statut | Sujet | Priorité |
+|---|---|---|---|
+| DELTA-065 | 🔴 `A_CORRIGER` | `config_view.js` sous-onglet C — désalignement noms champs frontend/backend | **Haute** |
+| DELTA-058 | 🟠 `EN_DISCUSSION` | `PATCH/DELETE /api/hse/catalogue/{entity_id}` manquants | Moyenne |
+| DELTA-059 | 🟠 `EN_DISCUSSION` | `POST /api/hse/meta` (création pièce/type) manquant | Faible |
+| DELTA-062 | 🟠 `EN_DISCUSSION` | `cards_view.js` absent — crash onglet | Basse |
+| DELTA-051-PANEL | 🟠 `EN_DISCUSSION` | Bug iframe macOS bureau virtuel | Basse |
 
 ---
 
