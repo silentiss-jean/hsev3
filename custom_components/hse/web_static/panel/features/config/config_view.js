@@ -1,6 +1,6 @@
 /**
  * config_view.js — Onglet Configuration HSE V3
- * CORRIGÉ DELTA-065 : champs tarification remappés sur clés backend réelles
+ * Onglet C : saisie libre HT + TTC, pas de champ TVA, pas de calcul auto
  */
 
 const CSS = `
@@ -75,10 +75,10 @@ const CSS = `
 .hse-cfg__diff-banner.visible { display:flex; }
 .hse-cfg__diff-msg { flex:1; }
 .hse-cfg__pricing-wrap { display:flex; flex-direction:column; gap:20px; max-width:860px; }
-.hse-cfg__pricing-info { display:flex; align-items:flex-start; gap:10px; padding:10px 14px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.2); border-radius:8px; font-size:0.82rem; color:rgba(255,255,255,0.7); }
 .hse-cfg__pricing-section { border:1px solid rgba(255,255,255,0.08); border-radius:10px; overflow:hidden; }
 .hse-cfg__pricing-section-title { display:flex; align-items:center; gap:8px; padding:10px 14px; background:rgba(255,255,255,0.04); font-size:0.82rem; font-weight:600; color:rgba(255,255,255,0.7); border-bottom:1px solid rgba(255,255,255,0.06); }
 .hse-cfg__pricing-body { padding:14px; display:flex; flex-direction:column; gap:14px; }
+.hse-cfg__pricing-subtitle { font-size:0.78rem; font-weight:600; color:rgba(255,255,255,0.5); padding:4px 0 2px; display:flex; align-items:center; gap:6px; }
 .hse-cfg__field { display:flex; flex-direction:column; gap:5px; }
 .hse-cfg__field-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 @media(max-width:560px){ .hse-cfg__field-row { grid-template-columns:1fr; } }
@@ -86,15 +86,8 @@ const CSS = `
 .hse-cfg__input, .hse-cfg__select { padding:7px 11px; border:1px solid rgba(255,255,255,0.1); border-radius:6px; background:rgba(255,255,255,0.05); color:rgba(255,255,255,0.9); font-size:0.875rem; font-family:inherit; outline:none; transition:border-color 150ms; width:100%; }
 .hse-cfg__input:focus, .hse-cfg__select:focus { border-color:#e879f9; }
 .hse-cfg__input::placeholder { color:rgba(255,255,255,0.2); }
-.hse-cfg__input-ttc { padding:7px 11px; border:1px solid rgba(255,255,255,0.06); border-radius:6px; background:rgba(255,255,255,0.02); color:rgba(255,255,255,0.5); font-size:0.875rem; font-family:inherit; width:100%; cursor:default; user-select:none; }
-.hse-cfg__input-ttc-label { font-size:0.8rem; font-weight:500; color:rgba(255,255,255,0.35); }
 .hse-cfg__hp-hc { display:none; flex-direction:column; gap:14px; }
 .hse-cfg__hp-hc.visible { display:flex; }
-.hse-cfg__time-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-@media(max-width:560px){ .hse-cfg__time-row { grid-template-columns:1fr; } }
-.hse-cfg__preview { padding:12px 16px; background:rgba(232,121,249,0.06); border:1px solid rgba(232,121,249,0.15); border-radius:10px; font-size:0.875rem; display:flex; align-items:center; gap:8px; }
-.hse-cfg__preview-label { flex:1; color:rgba(255,255,255,0.6); }
-.hse-cfg__preview-value { font-size:1.1rem; font-weight:700; color:#e879f9; }
 .hse-cfg__save-row { display:flex; align-items:center; gap:10px; }
 .hse-cfg__save-status { font-size:0.8rem; color:rgba(255,255,255,0.4); }
 .hse-cfg__grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
@@ -628,6 +621,8 @@ export class ConfigView {
 
   _setMetaBody(html) { const el = this._el?.querySelector('#hse-cfg-meta-body'); if (el) el.innerHTML = html; }
 
+  // ─── ONGLET C : TARIFICATION ───────────────────────────────────────────────
+
   async _loadPricing() {
     if (this._pricingFetching) return;
     this._pricingFetching = true;
@@ -649,78 +644,107 @@ export class ConfigView {
 
   _renderPricing() {
     const d = this._pricingData ?? {};
-    // DELTA-065 FIX : utiliser les clés backend réelles
     const mode = d.mode ?? 'flat';
     const isHphc = mode === 'hphc';
-    const taxRate = d.tax_rate_pct ?? 20;
-    const priceHtKwh = d.price_ht_kwh ?? 0;
-    const priceTtcKwh = d.price_ttc_kwh ?? 0.25;
-    const priceHpTtc = d.price_hp_ttc_kwh ?? 0;
-    const priceHcTtc = d.price_hc_ttc_kwh ?? 0;
-    const subscription = d.subscription_eur_month ?? 0;
+
+    // Valeurs par défaut issues des screenshots
+    const subHt  = d.subscription_ht_eur_month  ?? d.subscription_eur_month ?? 14.68;
+    const subTtc = d.subscription_ttc_eur_month ?? 19.834;
+    const flatHt  = d.price_ht_kwh  ?? 0.1297;
+    const flatTtc = d.price_ttc_kwh ?? 0.1927;
+    const hpHt  = d.price_hp_ht_kwh  ?? 0.1327;
+    const hpTtc = d.price_hp_ttc_kwh ?? 0.1952;
+    const hcHt  = d.price_hc_ht_kwh  ?? 0.1327;
+    const hcTtc = d.price_hc_ttc_kwh ?? 0.1952;
+    const hcStart = d.hc_start ?? '22:00';
+    const hcEnd   = d.hc_end   ?? '06:00';
 
     this._setPricingBody(`
       <div class="hse-cfg__pricing-wrap">
-        <div class="hse-cfg__pricing-info">📅 Les modifications seront appliquées après sauvegarde.</div>
         <form id="hse-cfg-pricing-form">
           <div class="hse-cfg__pricing-section">
             <div class="hse-cfg__pricing-section-title">⚙️ Configuration Tarifaire</div>
             <div class="hse-cfg__pricing-body">
+
               <div class="hse-cfg__field">
-                <label class="hse-cfg__label">Type de contrat</label>
+                <label class="hse-cfg__label">Type de contrat :</label>
                 <select id="hse-cfg-mode" name="mode" class="hse-cfg__select">
-                  <option value="flat" ${!isHphc ? 'selected' : ''}>Forfait simple (base)</option>
+                  <option value="flat" ${!isHphc ? 'selected' : ''}>Prix fixe</option>
                   <option value="hphc" ${isHphc ? 'selected' : ''}>Heures Pleines / Heures Creuses</option>
                 </select>
               </div>
+
               <div class="hse-cfg__field-row">
                 <div class="hse-cfg__field">
-                  <label class="hse-cfg__label">Abonnement mensuel (€ TTC)</label>
-                  <input id="hse-cfg-subscription" name="subscription_eur_month" type="number" step="0.01" class="hse-cfg__input" value="${subscription}" placeholder="0.00" />
+                  <label class="hse-cfg__label">Abonnement mensuel HT (€) :</label>
+                  <input id="hse-cfg-sub-ht" name="subscription_ht_eur_month" type="number" step="0.01" class="hse-cfg__input" value="${subHt}" placeholder="14.68" />
                 </div>
                 <div class="hse-cfg__field">
-                  <label class="hse-cfg__label">Taux de TVA (%)</label>
-                  <input id="hse-cfg-tax-rate" name="tax_rate_pct" type="number" step="0.1" class="hse-cfg__input" value="${taxRate}" placeholder="20.0" />
+                  <label class="hse-cfg__label">Abonnement mensuel TTC (€) :</label>
+                  <input id="hse-cfg-sub-ttc" name="subscription_ttc_eur_month" type="number" step="0.01" class="hse-cfg__input" value="${subTtc}" placeholder="19.834" />
                 </div>
               </div>
+
               <div id="hse-cfg-base-fields" style="${isHphc ? 'display:none' : ''}">
+                <div class="hse-cfg__pricing-subtitle">⚡ Tarif Fixe</div>
                 <div class="hse-cfg__field-row">
                   <div class="hse-cfg__field">
-                    <label class="hse-cfg__label">Prix HT kWh (€)</label>
-                    <input id="hse-cfg-price-ht" name="price_ht_kwh" type="number" step="0.0001" class="hse-cfg__input" value="${priceHtKwh}" placeholder="0.0000" />
+                    <label class="hse-cfg__label">Prix HT (€/kWh) :</label>
+                    <input id="hse-cfg-flat-ht" name="price_ht_kwh" type="number" step="0.0001" class="hse-cfg__input" value="${flatHt}" placeholder="0.1297" />
                   </div>
                   <div class="hse-cfg__field">
-                    <label class="hse-cfg__label">Prix TTC kWh (€)</label>
-                    <div class="hse-cfg__input-ttc" id="hse-cfg-price-ttc-display">${priceTtcKwh > 0 ? priceTtcKwh.toFixed(4) : '—'}</div>
+                    <label class="hse-cfg__label">Prix TTC (€/kWh) :</label>
+                    <input id="hse-cfg-flat-ttc" name="price_ttc_kwh" type="number" step="0.0001" class="hse-cfg__input" value="${flatTtc}" placeholder="0.1927" />
                   </div>
                 </div>
               </div>
+
               <div id="hse-cfg-hphc-fields" class="hse-cfg__hp-hc ${isHphc ? 'visible' : ''}">
+                <div class="hse-cfg__pricing-subtitle">🌟 Heures Pleines</div>
                 <div class="hse-cfg__field-row">
                   <div class="hse-cfg__field">
-                    <label class="hse-cfg__label">Prix HP TTC kWh (€)</label>
-                    <input id="hse-cfg-price-hp" name="price_hp_ttc_kwh" type="number" step="0.0001" class="hse-cfg__input" value="${priceHpTtc}" placeholder="0.0000" />
+                    <label class="hse-cfg__label">Prix HP HT (€/kWh) :</label>
+                    <input id="hse-cfg-hp-ht" name="price_hp_ht_kwh" type="number" step="0.0001" class="hse-cfg__input" value="${hpHt}" placeholder="0.1327" />
                   </div>
                   <div class="hse-cfg__field">
-                    <label class="hse-cfg__label">Prix HC TTC kWh (€)</label>
-                    <input id="hse-cfg-price-hc" name="price_hc_ttc_kwh" type="number" step="0.0001" class="hse-cfg__input" value="${priceHcTtc}" placeholder="0.0000" />
+                    <label class="hse-cfg__label">Prix HP TTC (€/kWh) :</label>
+                    <input id="hse-cfg-hp-ttc" name="price_hp_ttc_kwh" type="number" step="0.0001" class="hse-cfg__input" value="${hpTtc}" placeholder="0.1952" />
+                  </div>
+                </div>
+                <div class="hse-cfg__pricing-subtitle">🌙 Heures Creuses</div>
+                <div class="hse-cfg__field-row">
+                  <div class="hse-cfg__field">
+                    <label class="hse-cfg__label">Prix HC HT (€/kWh) :</label>
+                    <input id="hse-cfg-hc-ht" name="price_hc_ht_kwh" type="number" step="0.0001" class="hse-cfg__input" value="${hcHt}" placeholder="0.1327" />
+                  </div>
+                  <div class="hse-cfg__field">
+                    <label class="hse-cfg__label">Prix HC TTC (€/kWh) :</label>
+                    <input id="hse-cfg-hc-ttc" name="price_hc_ttc_kwh" type="number" step="0.0001" class="hse-cfg__input" value="${hcTtc}" placeholder="0.1952" />
+                  </div>
+                </div>
+                <div class="hse-cfg__pricing-subtitle">🕐 Plage Horaire HC</div>
+                <div class="hse-cfg__field-row">
+                  <div class="hse-cfg__field">
+                    <label class="hse-cfg__label">Début (HH:MM) :</label>
+                    <input id="hse-cfg-hc-start" name="hc_start" type="time" class="hse-cfg__input" value="${hcStart}" />
+                  </div>
+                  <div class="hse-cfg__field">
+                    <label class="hse-cfg__label">Fin (HH:MM) :</label>
+                    <input id="hse-cfg-hc-end" name="hc_end" type="time" class="hse-cfg__input" value="${hcEnd}" />
                   </div>
                 </div>
               </div>
-              <div class="hse-cfg__preview">
-                <span class="hse-cfg__preview-label">Estimation mensuelle (abonnement inclus)</span>
-                <span class="hse-cfg__preview-value" id="hse-cfg-preview-val">—</span>
-              </div>
+
               <div class="hse-cfg__save-row">
                 <button type="submit" id="hse-cfg-save-btn" class="hse-btn hse-btn--primary">Sauvegarder</button>
                 <span id="hse-cfg-save-status" class="hse-cfg__save-status"></span>
               </div>
+
             </div>
           </div>
         </form>
       </div>`);
     this._bindPricingForm();
-    this._updatePricingPreview();
   }
 
   _bindPricingForm() {
@@ -733,30 +757,8 @@ export class ConfigView {
       const hphc = modeSel.value === 'hphc';
       hphcFields?.classList.toggle('visible', hphc);
       if (baseFields) baseFields.style.display = hphc ? 'none' : '';
-      this._updatePricingPreview();
     });
-    form.querySelectorAll('input').forEach(inp => inp.addEventListener('input', () => this._updatePricingPreview()));
     form.addEventListener('submit', async e => { e.preventDefault(); await this._savePricing(form); });
-  }
-
-  _updatePricingPreview() {
-    const form = this._el?.querySelector('#hse-cfg-pricing-form');
-    if (!form) return;
-    const tax = parseFloat(form.querySelector('#hse-cfg-tax-rate')?.value) || 20;
-    const mult = 1 + tax / 100;
-    const sub = parseFloat(form.querySelector('#hse-cfg-subscription')?.value) || 0;
-    const mode = form.querySelector('#hse-cfg-mode')?.value ?? 'flat';
-    const priceHt = parseFloat(form.querySelector('#hse-cfg-price-ht')?.value) || 0;
-    const ttcDisplay = form.querySelector('#hse-cfg-price-ttc-display');
-    if (ttcDisplay) ttcDisplay.textContent = priceHt > 0 ? (priceHt * mult).toFixed(4) : '—';
-    const val = this._el?.querySelector('#hse-cfg-preview-val');
-    if (!val) return;
-    let priceKwh = 0;
-    if (mode === 'hphc') priceKwh = parseFloat(form.querySelector('#hse-cfg-price-hp')?.value) || 0;
-    else priceKwh = priceHt * mult;
-    const estimateKwh = 500;
-    const total = (estimateKwh * priceKwh) + sub;
-    val.textContent = total > 0 ? `${total.toFixed(2)} €/mois` : '—';
   }
 
   async _savePricing(form) {
@@ -766,18 +768,28 @@ export class ConfigView {
     const status = form.querySelector('#hse-cfg-save-status');
     if (btn) { btn.disabled = true; btn.textContent = '…'; }
     if (status) status.textContent = '';
+
+    const mode = form.querySelector('#hse-cfg-mode')?.value || 'flat';
     const payload = {
-      mode: form.querySelector('#hse-cfg-mode')?.value || 'flat',
-      subscription_eur_month: parseFloat(form.querySelector('#hse-cfg-subscription')?.value) || 0,
-      tax_rate_pct: parseFloat(form.querySelector('#hse-cfg-tax-rate')?.value) || 20,
+      mode,
+      subscription_ht_eur_month:  parseFloat(form.querySelector('#hse-cfg-sub-ht')?.value)  || 0,
+      subscription_ttc_eur_month: parseFloat(form.querySelector('#hse-cfg-sub-ttc')?.value) || 0,
+      // champ backend attendu = subscription_eur_month → on envoie le TTC comme valeur principale
+      subscription_eur_month: parseFloat(form.querySelector('#hse-cfg-sub-ttc')?.value) || 0,
     };
-    if (payload.mode === 'flat') {
-      payload.price_ht_kwh = parseFloat(form.querySelector('#hse-cfg-price-ht')?.value) || 0;
-      payload.price_ttc_kwh = payload.price_ht_kwh * (1 + payload.tax_rate_pct / 100);
+
+    if (mode === 'flat') {
+      payload.price_ht_kwh  = parseFloat(form.querySelector('#hse-cfg-flat-ht')?.value)  || 0;
+      payload.price_ttc_kwh = parseFloat(form.querySelector('#hse-cfg-flat-ttc')?.value) || 0;
     } else {
-      payload.price_hp_ttc_kwh = parseFloat(form.querySelector('#hse-cfg-price-hp')?.value) || 0;
-      payload.price_hc_ttc_kwh = parseFloat(form.querySelector('#hse-cfg-price-hc')?.value) || 0;
+      payload.price_hp_ht_kwh  = parseFloat(form.querySelector('#hse-cfg-hp-ht')?.value)  || 0;
+      payload.price_hp_ttc_kwh = parseFloat(form.querySelector('#hse-cfg-hp-ttc')?.value) || 0;
+      payload.price_hc_ht_kwh  = parseFloat(form.querySelector('#hse-cfg-hc-ht')?.value)  || 0;
+      payload.price_hc_ttc_kwh = parseFloat(form.querySelector('#hse-cfg-hc-ttc')?.value) || 0;
+      payload.hc_start = form.querySelector('#hse-cfg-hc-start')?.value || '22:00';
+      payload.hc_end   = form.querySelector('#hse-cfg-hc-end')?.value   || '06:00';
     }
+
     try {
       const r = await this._ctx.hseFetch('/api/hse/settings/pricing', {
         method:'PUT', headers:{'Content-Type':'application/json'},
