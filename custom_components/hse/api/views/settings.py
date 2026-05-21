@@ -29,10 +29,18 @@ class HseSettingsPricingView(HseBaseView):
         settings = await mgr.async_load_settings()
         return self.json_ok({
             "mode": settings.get("mode", "flat"),
+            # Tarif fixe (Base)
             "price_ht_kwh": settings.get("price_ht_kwh", 0.0),
             "price_ttc_kwh": settings.get("price_ttc_kwh", 0.25),
-            "price_hp_ttc_kwh": settings.get("price_hp_ttc_kwh"),
-            "price_hc_ttc_kwh": settings.get("price_hc_ttc_kwh"),
+            # Heures Pleines / Heures Creuses — DELTA-065
+            "price_hp_ht_kwh": settings.get("price_hp_ht_kwh", 0.0),
+            "price_hp_ttc_kwh": settings.get("price_hp_ttc_kwh", 0.0),
+            "price_hc_ht_kwh": settings.get("price_hc_ht_kwh", 0.0),
+            "price_hc_ttc_kwh": settings.get("price_hc_ttc_kwh", 0.0),
+            # Plage horaire HC — DELTA-065
+            "hc_start": settings.get("hc_start", "22:00"),
+            "hc_end": settings.get("hc_end", "06:00"),
+            # Abonnement & fiscalité
             "subscription_eur_month": settings.get("subscription_eur_month", 0.0),
             "tax_rate_pct": settings.get("tax_rate_pct", 20.0),
             # DELTA-064 Q2 : capteur de référence (DELTA-009)
@@ -52,10 +60,20 @@ class HseSettingsPricingView(HseBaseView):
         mgr = HseStorageManager(self.hass)
         settings = await mgr.async_load_settings()
 
-        for field in ("mode", "price_ht_kwh", "price_ttc_kwh", "price_hp_ttc_kwh",
-                      "price_hc_ttc_kwh", "subscription_eur_month", "tax_rate_pct",
-                      # DELTA-064 Q2 : capteur de référence (DELTA-009)
-                      "reference_entity_id"):
+        for field in (
+            "mode",
+            # Tarif fixe
+            "price_ht_kwh", "price_ttc_kwh",
+            # HP/HC — DELTA-065
+            "price_hp_ht_kwh", "price_hp_ttc_kwh",
+            "price_hc_ht_kwh", "price_hc_ttc_kwh",
+            # Plage horaire HC — DELTA-065
+            "hc_start", "hc_end",
+            # Abonnement & fiscalité
+            "subscription_eur_month", "tax_rate_pct",
+            # DELTA-064 Q2 : capteur de référence (DELTA-009)
+            "reference_entity_id",
+        ):
             if field in body:
                 settings[field] = body[field]
 
