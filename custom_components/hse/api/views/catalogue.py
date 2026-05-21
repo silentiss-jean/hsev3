@@ -1,9 +1,12 @@
 """
 HSE V3 — Endpoints catalogue
-GET  /api/hse/catalogue             — liste paginée (inclut integration_label)
-POST /api/hse/catalogue/triage      — triage unitaire
-POST /api/hse/catalogue/triage/bulk — triage en masse
-POST /api/hse/catalogue/refresh     — re-scan
+GET    /api/hse/catalogue                  — liste paginée
+PATCH  /api/hse/catalogue/{entity_id}      — activer/désactiver/renommer — DELTA-058
+DELETE /api/hse/catalogue/{entity_id}      — supprimer du catalogue — DELTA-058
+POST   /api/hse/catalogue/bulk             — actions en masse — DELTA-058
+POST   /api/hse/catalogue/triage           — triage unitaire (scan)
+POST   /api/hse/catalogue/triage/bulk      — triage en masse (scan)
+POST   /api/hse/catalogue/refresh          — re-scan
 """
 from __future__ import annotations
 
@@ -20,83 +23,52 @@ from ...sensors.quality_scorer import score_item
 
 _VALID_ACTIONS = ("select", "ignore", "reset")
 _VALID_STATUS = ("all", "selected", "ignored", "pending")
+_VALID_BULK_ACTIONS = ("activate", "deactivate", "delete")
 
 # Valeurs de platform/domain qui sont des artefacts HA internes
-# et ne correspondent pas à une vraie intégration réseau.
 _HA_INTERNAL_PLATFORMS = frozenset({"integration", "recorder", "homeassistant"})
 
 
 def _resolve_integration_domain(hass: HomeAssistant, src: dict) -> str:
-    """
-    Résout le domaine technique (clé de groupement) pour un item du catalogue.
-
-    Problème DELTA-055 : les items catalogués avant le patch 2026-05-16
-    ont integration_domain = "integration" (la platform HA des helpers).
-    Ce n'est pas un vrai domaine réseau → on résout via config_entry_id.
-
-    Ordre de résolution :
-    1. integration_domain stocké ET valide (≠ "integration" ou autre interne)
-    2. config_entry_id → config_entries.async_get_entry().domain (live)
-    3. platform stocké (si valide)
-    4. Fallback : "unknown"
-    """
     stored_domain = src.get("integration_domain")
     if stored_domain and stored_domain not in _HA_INTERNAL_PLATFORMS:
         return stored_domain
-
-    # Résolution live via config_entry_id
     config_entry_id = src.get("config_entry_id")
     if config_entry_id:
         entry = hass.config_entries.async_get_entry(config_entry_id)
         if entry and entry.domain and entry.domain not in _HA_INTERNAL_PLATFORMS:
             return entry.domain
-
-    # Fallback platform stockée
     platform = src.get("platform")
     if platform and platform not in _HA_INTERNAL_PLATFORMS:
         return platform
-
-    # Si c'était un artefact "integration", on retourne la valeur stockée
-    # telle quelle (utility_meter par exemple est correctement nommé).
     if stored_domain:
         return stored_domain
-
     return "unknown"
 
 
 def _resolve_integration_label(hass: HomeAssistant, src: dict) -> str | None:
-    """
-    Résout le label lisible de l'intégration source pour un item du catalogue.
-
-    Stratégie :
-    1. integration_label stocké lors du scan (présent après le patch 2026-05-16)
-    2. Fallback live : config_entry_id → config_entries.async_get_entry().title
-    3. Fallback : integration_domain résolu
-    4. Fallback : platform stocké
-    5. None
-    """
-    # 1. Stocké directement
     stored = src.get("integration_label")
     if stored:
         return stored
-
-    # 2. Fallback live via config_entry_id (pour les items antérieurs au patch)
     config_entry_id = src.get("config_entry_id")
     if config_entry_id:
         entry = hass.config_entries.async_get_entry(config_entry_id)
         if entry:
             return entry.title or entry.domain
-
-    # 3. integration_domain résolu
     domain = _resolve_integration_domain(hass, src)
     if domain and domain != "unknown":
         return domain
-
-    # 4. platform
     platform = src.get("platform")
     if platform:
         return platform
+    return None
 
+
+def _find_item_key(items: dict, entity_id: str) -> str | None:
+    """Retourne la clé interne du catalogue pour un entity_id donné."""
+    for k, v in items.items():
+        if isinstance(v, dict) and (v.get("source") or {}).get("entity_id") == entity_id:
+            return k
     return None
 
 
@@ -136,20 +108,17 @@ class HseCatalogueView(HseBaseView):
                 (getattr(state_obj, "attributes", {}) or {}).get("friendly_name") or eid
             )
             ha_state_raw = getattr(state_obj, "state", None) if state_obj else None
-
-            # DELTA-055 : résoudre integration_domain à la volée
-            # pour corriger les artefacts "integration" pre-DELTA-053
             resolved_domain = _resolve_integration_domain(self.hass, src)
 
             filtered.append({
                 "entity_id": eid,
-                "name": friendly_name,
-                "icon": (getattr(state_obj, "attributes", {}) or {}).get("icon"),
+                "name": (item.get("enrichment") or {}).get("display_name") or friendly_name,
+                "icon": (item.get("enrichment") or {}).get("icon") or (getattr(state_obj, "attributes", {}) or {}).get("icon"),
                 "room": (item.get("enrichment") or {}).get("room_id"),
                 "type": (item.get("enrichment") or {}).get("type_id"),
                 "status": policy,
+                "active": (item.get("enrichment") or {}).get("active", False),
                 "quality_score": score_item(item, ha_state_raw),
-                # Intégration source — domain résolu + label lisible
                 "integration": _resolve_integration_label(self.hass, src),
                 "integration_domain": resolved_domain,
                 "platform": src.get("platform"),
@@ -165,6 +134,108 @@ class HseCatalogueView(HseBaseView):
             "per_page": per_page,
             "items": page_items,
         })
+
+
+class HseCatalogueItemView(HseBaseView):
+    """PATCH + DELETE /api/hse/catalogue/{entity_id} — DELTA-058."""
+    url = "/api/hse/catalogue/{entity_id}"
+    name = "api:hse:catalogue:item"
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        super().__init__(hass)
+
+    async def patch(self, request: web.Request, entity_id: str) -> web.Response:
+        """Active/désactive un capteur, ou met à jour display_name/icon."""
+        try:
+            body: dict[str, Any] = await request.json()
+        except Exception:
+            return self.json_error("Body JSON invalide", HTTPStatus.UNPROCESSABLE_ENTITY)
+
+        mgr = HseStorageManager(self.hass)
+        catalogue = await mgr.async_load_catalogue()
+        items = catalogue.get("items") or {}
+
+        key = _find_item_key(items, entity_id)
+        if key is None:
+            return self.json_error(f"{entity_id} non trouvé dans le catalogue", HTTPStatus.NOT_FOUND)
+
+        enrichment = items[key].setdefault("enrichment", {})
+
+        if "active" in body:
+            enrichment["active"] = bool(body["active"])
+        if "display_name" in body and isinstance(body["display_name"], str):
+            enrichment["display_name"] = body["display_name"].strip()
+        if "icon" in body and isinstance(body["icon"], str):
+            enrichment["icon"] = body["icon"].strip()
+
+        await mgr.async_save_catalogue(catalogue)
+        return self.json_ok({"entity_id": entity_id, "updated": True})
+
+    async def delete(self, request: web.Request, entity_id: str) -> web.Response:
+        """Supprime un capteur du catalogue."""
+        mgr = HseStorageManager(self.hass)
+        catalogue = await mgr.async_load_catalogue()
+        items = catalogue.get("items") or {}
+
+        key = _find_item_key(items, entity_id)
+        if key is None:
+            return self.json_error(f"{entity_id} non trouvé dans le catalogue", HTTPStatus.NOT_FOUND)
+
+        del items[key]
+        await mgr.async_save_catalogue(catalogue)
+        return self.json_ok({"entity_id": entity_id, "deleted": True})
+
+
+class HseCatalogueBulkView(HseBaseView):
+    """POST /api/hse/catalogue/bulk — actions en masse — DELTA-058."""
+    url = "/api/hse/catalogue/bulk"
+    name = "api:hse:catalogue:bulk"
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        super().__init__(hass)
+
+    async def post(self, request: web.Request) -> web.Response:
+        try:
+            body: dict[str, Any] = await request.json()
+        except Exception:
+            return self.json_error("Body JSON invalide", HTTPStatus.UNPROCESSABLE_ENTITY)
+
+        action = body.get("action")
+        entity_ids = body.get("entity_ids")
+
+        if action not in _VALID_BULK_ACTIONS:
+            return self.json_error(f"action invalide. Valeurs: {_VALID_BULK_ACTIONS}", HTTPStatus.UNPROCESSABLE_ENTITY)
+        if not isinstance(entity_ids, list) or not entity_ids:
+            return self.json_error("entity_ids doit être une liste non vide", HTTPStatus.UNPROCESSABLE_ENTITY)
+
+        mgr = HseStorageManager(self.hass)
+        catalogue = await mgr.async_load_catalogue()
+        items = catalogue.get("items") or {}
+
+        processed = 0
+        errors: list[str] = []
+        keys_to_delete: list[str] = []
+
+        for eid in entity_ids:
+            key = _find_item_key(items, eid)
+            if key is None:
+                errors.append(f"{eid}: non trouvé")
+                continue
+            if action == "activate":
+                items[key].setdefault("enrichment", {})["active"] = True
+                processed += 1
+            elif action == "deactivate":
+                items[key].setdefault("enrichment", {})["active"] = False
+                processed += 1
+            elif action == "delete":
+                keys_to_delete.append(key)
+                processed += 1
+
+        for k in keys_to_delete:
+            del items[k]
+
+        await mgr.async_save_catalogue(catalogue)
+        return self.json_ok({"processed": processed, "errors": errors})
 
 
 class HseCatalogueTriageView(HseBaseView):
@@ -192,17 +263,12 @@ class HseCatalogueTriageView(HseBaseView):
         catalogue = await mgr.async_load_catalogue()
         items = catalogue.get("items") or {}
 
-        target_key = None
-        for k, v in items.items():
-            if isinstance(v, dict) and (v.get("source") or {}).get("entity_id") == entity_id:
-                target_key = k
-                break
-
-        if target_key is None:
+        key = _find_item_key(items, entity_id)
+        if key is None:
             return self.json_error(f"{entity_id} non trouvé dans le catalogue", HTTPStatus.NOT_FOUND)
 
         new_policy = {"select": "selected", "ignore": "ignored", "reset": "pending"}[action]
-        items[target_key].setdefault("triage", {})["policy"] = new_policy
+        items[key].setdefault("triage", {})["policy"] = new_policy
         await mgr.async_save_catalogue(catalogue)
 
         return self.json_ok({"entity_id": entity_id, "status": new_policy})
