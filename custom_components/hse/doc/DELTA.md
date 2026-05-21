@@ -1,6 +1,6 @@
 # DELTA.md — Écarts doc/code actifs HSE V3
 
-> Mis à jour : 2026-05-17 14:32 CEST
+> Mis à jour : 2026-05-21 17:32 CEST
 >
 > **Règle** : aucun patch ne doit contredire un écart EN_DISCUSSION.
 > Fermer un écart = écrire la solution ici avant de commiter.
@@ -10,31 +10,6 @@
 ---
 
 ## Écarts actifs
-
-### DELTA-065 — `config_view.js` sous-onglet C — Désalignement noms de champs backend/frontend
-- **Statut** : `A_CORRIGER` 🔴
-- **Priorité** : **Haute** — le sous-onglet C charge, sauvegarde, mais n'affiche rien et ne persiste rien
-- **Symptôme** : Tous les champs du formulaire Tarification apparaissent vides. La sauvegarde semble réussir (HTTP 200) mais n'écrit aucune valeur utile.
-- **Cause** : Le frontend lit et écrit des noms de champs qui n'existent pas dans le backend.
-
-  **Table de désalignement :**
-
-  | Frontend (actuel, cassé) | Backend réel (`settings.py`) |
-  |---|---|
-  | `d.contract_type` | `d.mode` (`"flat"` \| `"hphc"`) |
-  | `d.subscription_ht` / `d.subscription_monthly` | `d.subscription_eur_month` |
-  | `d.price_ht` | `d.price_ht_kwh` |
-  | `d.price_hp` | `d.price_hp_ttc_kwh` |
-  | `d.price_hc` | `d.price_hc_ttc_kwh` |
-  | `d.tax_rate` | `d.tax_rate_pct` |
-  | `d.hc_start` / `d.hc_end` | **absent du backend** (à ajouter ou ignorer) |
-  | `d.monthly_kwh_estimate` | **absent du backend** (calcul local uniquement) |
-
-- **Impact PUT** : Le payload envoyé contient les mauvaises clés → `settings.py` accepte sans erreur mais n'écrit rien d'utile.
-- **Solution** : Remapper tous les noms dans `_renderPricing()` + `_savePricing()` pour utiliser les clés backend réelles. `monthly_kwh_estimate` et `hc_start`/`hc_end` restent locaux (non persistés).
-- **Décision** : ⏳ Prêt à corriger — en attente de feu vert COMMIT.
-
----
 
 ### DELTA-058 — `PATCH/DELETE /api/hse/catalogue/{entity_id}` manquants
 - **Statut** : `EN_DISCUSSION`
@@ -80,6 +55,7 @@
 
 | ID | Titre | Résolution | Date |
 |----|-------|------------|------|
+| DELTA-065 | `config_view.js` sous-onglet C — Désalignement noms de champs backend/frontend | **Résolu** — `_renderPricing()` + `_savePricing()` remappés sur clés backend réelles : `mode`, `price_ht_kwh`, `price_ttc_kwh`, `price_hp_ttc_kwh`, `price_hc_ttc_kwh`, `subscription_eur_month`, `tax_rate_pct`. `monthly_kwh_estimate` et `hc_start`/`hc_end` restent locaux. | 2026-05-21 |
 | DELTA-063 | `config_view.js` — Refonte UI (screenshots V1 reçus) | **Résolu** — Sous-onglet A : layout groupes collapse par `integration_domain`, bloc ⭐ référence, bloc ✨ sélection auto, icônes type ⚡🔋, stars qualité. Sous-onglet B : fix `room.name` (objet `{id,name}`), `entity_id` affiché. Sous-onglet C : structure HTML en place (champs cassés → DELTA-065). | 2026-05-17 |
 | DELTA-064 | Audit code avant refonte `config_view.js` — 3 questions bloquantes | **Résolu** — Q1 : sélection auto = logique frontend via `triage/bulk` + `quality_score`. Q2 : `reference_entity_id` exposé dans `settings.py` ([`36cd1d1`](https://github.com/silentiss-jean/hsev3/commit/36cd1d171fa815558989df8469aa4811028ef264)). Q3 : `rooms` retourné `[{id,name}]` dans `meta.py` ([`830d00b`](https://github.com/silentiss-jean/hsev3/commit/830d00bb72c73612ce0fd69f926c728d9767d48d)). | 2026-05-17 |
 | DELTA-054 | Onglet Détection : capteurs non affichés par intégration | **Faux positif** — vérifié sur capture d'écran : tplink / tuya / tapo / Helpers HA / Compteurs HA affichés correctement. 106 entités cataloguées. Résolu par DELTA-053/055/056. | 2026-05-16 |
@@ -123,15 +99,15 @@
 | `hse_panel.js` | ✅ | Bureau virtuel macOS : DELTA-051-PANEL ouvert, priorité basse |
 | `hse_shell.js` | ✅ | 8 onglets, navigation, validé |
 | `scan_view.js` | ✅ | Groupement par intégration fonctionnel — validé capture d'écran |
-| `config_view.js` | 🟠 | A ✅ B ✅ — C 🔴 champs cassés (DELTA-065) |
-| `overview_view.js` | 🟡 | Stub — priorité 2 (après DELTA-065) |
-| `costs_view.js` | 🟡 | Stub — priorité 3 |
-| `diagnostic_view.js` | 🟡 | Stub — priorité 4 |
-| `migration_view.js` | 🟡 | Stub — priorité 5 |
+| `config_view.js` | ✅ | A ✅ B ✅ C ✅ — DELTA-065 fermé 2026-05-21 |
+| `overview_view.js` | 🟡 | Stub — **priorité 1** |
+| `costs_view.js` | 🟡 | Stub — priorité 2 |
+| `diagnostic_view.js` | 🟡 | Stub — priorité 3 |
+| `migration_view.js` | 🟡 | Stub — priorité 4 |
 | `cards_view.js` | ❌ | Absent — crash onglet (DELTA-062, priorité basse) |
 
 ### Prochaine action
 
-1. 🔴 **DELTA-065** — Fix sous-onglet C : remapper les noms de champs
-2. 🟡 **Implémenter `overview_view.js`** — GET /api/hse/overview
+1. ✅ ~~DELTA-065 — Fix sous-onglet C~~ — **Fermé 2026-05-21**
+2. 🟡 **Implémenter `overview_view.js`** — GET /api/hse/overview — **PRIORITÉ 1**
 3. 🟡 **Implémenter `costs_view.js`** — GET /api/hse/costs
