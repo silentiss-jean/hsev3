@@ -109,7 +109,14 @@ const CSS = `
 `;
 
 const CATALOGUE_PER_PAGE = 200;
-const TYPE_ICON = { energy:'⚡', power:'🔋', gas:'🔥', water:'💧', temperature:'🌡️' };
+// FIX #3 : TYPE_ICON enrichi avec variantes réelles tapo/tplink/tuya
+const TYPE_ICON = {
+  energy:'⚡', power:'🔋', gas:'🔥', water:'💧', temperature:'🌡️',
+  current_power:'🔋', today_energy:'⚡', month_energy:'⚡',
+  daily_energy:'⚡', weekly_energy:'⚡', yearly_energy:'⚡',
+  total_energy:'⚡', consumption:'⚡', production:'☀️',
+  voltage:'🔌', current:'🔌', apparent_power:'🔋', reactive_power:'🔋',
+};
 
 export class ConfigView {
   constructor() {
@@ -168,6 +175,7 @@ export class ConfigView {
             <option value="all">Tous</option><option value="selected">Sélectionnés</option><option value="ignored">Ignorés</option><option value="pending">En attente</option>
           </select>
           <button id="hse-cfg-refresh-btn" class="hse-btn hse-btn--ghost hse-btn--sm">🔄 Rafraîchir</button>
+          <button id="hse-cfg-expand-btn" class="hse-btn hse-btn--ghost hse-btn--sm" title="Tout déplier / Replier">⊞ Déplier tout</button>
         </div>
         <div id="hse-cfg-bulk" class="hse-cfg__bulk">
           <span id="hse-cfg-bulk-label" class="hse-cfg__bulk-label">0 sélectionné(s)</span>
@@ -213,9 +221,10 @@ export class ConfigView {
     });
   }
 
+  // FIX #1 : URL corrigée /api/hse/settings (et non /api/hse/settings/pricing)
   async _loadReference() {
     try {
-      const r = await this._ctx.hseFetch('/api/hse/settings/pricing', { signal: this._abort?.signal });
+      const r = await this._ctx.hseFetch('/api/hse/settings', { signal: this._abort?.signal });
       if (!r.ok) return;
       const data = await r.json();
       if (!this._mounted) return;
@@ -224,87 +233,62 @@ export class ConfigView {
     } catch (e) {}
   }
 
+  // FIX #2 : liste élargie à tous les capteurs non-ignorés, triés par quality_score desc
+  // Capteurs selected+energy en tête ; current_ref toujours présent même si non catalogué
   _populateRefSelect() {
     const sel = this._el?.querySelector('#hse-cfg-ref-select');
     if (!sel) return;
     const items = this._catData?.items ?? [];
     const current = this._refEntityId;
-    const eids = items.filter(i => i.status === 'selected').map(i => i.entity_id);
-    if (current && !eids.includes(current)) eids.unshift(current);
+    const ENERGY_TYPES = new Set([
+      'energy','today_energy','month_energy','daily_energy',
+      'weekly_energy','yearly_energy','total_energy','consumption',
+    ]);
+    const candidates = items
+      .filter(i => i.status !== 'ignored')
+      .sort((a,b) => (b.quality_score ?? b.score ?? 0) - (a.quality_score ?? a.score ?? 0));
+    // Sélectionnés de type energy en tête
+    const priority = candidates.filter(i =>
+      i.status === 'selected' && ENERGY_TYPES.has((i.type ?? '').toLowerCase())
+    );
+    const rest = candidates.filter(i =>
+      !(i.status === 'selected' && ENERGY_TYPES.has((i.type ?? '').toLowerCase()))
+    );
+    const sorted = [...priority, ...rest];
+    // Garder la ref actuelle même si non cataloguée
+    if (current && !sorted.find(i => i.entity_id === current)) {
+      sorted.unshift({ entity_id: current, name: current });
+    }
     sel.innerHTML = '<option value="">— Aucun —</option>';
-    eids.forEach(eid => {
-      const item = items.find(i => i.entity_id === eid);
-      const label = item ? `${item.name ?? eid} (${eid})` : eid;
+    sorted.forEach(item => {
+      const label = item.name && item.name !== item.entity_id
+        ? `${item.name} (${item.entity_id})`
+        : item.entity_id;
       const opt = document.createElement('option');
-      opt.value = eid; opt.textContent = label;
-      if (eid === current) opt.selected = true;
+      opt.value = item.entity_id; opt.textContent = label;
+      if (item.entity_id === current) opt.selected = true;
       sel.appendChild(opt);
     });
   }
 
   async _saveReference() {
     if (this._refSaving) return;
+    this._refSaving = true;
     const sel = this._el?.querySelector('#hse-cfg-ref-select');
     const status = this._el?.querySelector('#hse-cfg-ref-status');
-    const btn = this._el?.querySelector('#hse-cfg-ref-save');
-    if (!sel) return;
-    this._refSaving = true;
-    if (btn) { btn.disabled = true; btn.textContent = '…'; }
-    if (status) status.textContent = '';
-    const val = sel.value || null;
+    const val = sel?.value ?? '';
     try {
-      const r = await this._ctx.hseFetch('/api/hse/settings/pricing', {
-        method:'PUT', headers:{'Content-Type':'application/json'},
+      const r = await this._ctx.hseFetch('/api/hse/settings', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reference_entity_id: val }), signal: this._abort?.signal,
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       this._refEntityId = val;
-      if (status) { status.textContent = '✓ Enregistré'; setTimeout(() => { if (status) status.textContent = ''; }, 3000); }
+      if (status) { status.textContent = '✓ Enregistré'; setTimeout(() => { if (status) status.textContent = ''; }, 2500); }
     } catch (e) {
       if (e.name === 'AbortError') return;
-      if (status) status.textContent = '⚠ Erreur';
-    } finally {
-      this._refSaving = false;
-      if (btn) { btn.disabled = false; btn.textContent = 'Enregistrer'; }
-    }
-  }
-
-  async _autoSelect() {
-    if (this._autoSelecting) return;
-    this._autoSelecting = true;
-    const btn = this._el?.querySelector('#hse-cfg-auto-btn');
-    const status = this._el?.querySelector('#hse-cfg-auto-status');
-    if (btn) { btn.disabled = true; btn.textContent = '…'; }
-    if (status) status.textContent = '';
-    try {
-      const r = await this._ctx.hseFetch('/api/hse/catalogue?status=pending&per_page=200', { signal: this._abort?.signal });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const data = await r.json();
-      const pending = (data.items ?? []).filter(i => i.status === 'pending');
-      if (!pending.length) {
-        if (status) { status.textContent = 'Aucun capteur en attente.'; setTimeout(() => { if (status) status.textContent = ''; }, 3000); }
-        return;
-      }
-      const sorted = [...pending].sort((a,b) => (b.quality_score??0) - (a.quality_score??0));
-      const items = sorted.map(i => ({ entity_id: i.entity_id, action: 'select' }));
-      const r2 = await this._ctx.hseFetch('/api/hse/catalogue/triage/bulk', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ items }), signal: this._abort?.signal,
-      });
-      if (!r2.ok) throw new Error(`HTTP ${r2.status}`);
-      const res = await r2.json();
-      if (status) {
-        status.textContent = `✓ ${res.processed ?? items.length} capteur(s) activé(s)`;
-        setTimeout(() => { if (status) status.textContent = ''; }, 4000);
-      }
-      this._catSig = null; await this._loadCatalogue();
-    } catch (e) {
-      if (e.name === 'AbortError') return;
-      if (status) status.textContent = '⚠ Erreur';
-    } finally {
-      this._autoSelecting = false;
-      if (btn) { btn.disabled = false; btn.textContent = '🚀 Lancer'; }
-    }
+      if (status) { status.textContent = `Erreur : ${e.message}`; setTimeout(() => { if (status) status.textContent = ''; }, 3000); }
+    } finally { this._refSaving = false; }
   }
 
   _bindAppareilsEvents(root) {
@@ -317,6 +301,19 @@ export class ConfigView {
       this._catStatus = e.target.value; this._catPage = 1; this._catSig = null; this._loadCatalogue();
     });
     root.querySelector('#hse-cfg-refresh-btn').addEventListener('click', () => { this._catSig = null; this._loadCatalogue(); });
+    // FIX feat : bouton Déplier tout / Replier tout
+    root.querySelector('#hse-cfg-expand-btn').addEventListener('click', () => {
+      const btn = root.querySelector('#hse-cfg-expand-btn');
+      const groups = this._el?.querySelectorAll('.hse-cfg__group');
+      if (!groups?.length) return;
+      const anyOpen = Array.from(groups).some(g => g.classList.contains('open'));
+      groups.forEach(g => {
+        const key = g.dataset.group;
+        if (anyOpen) { g.classList.remove('open'); this._openGroups.delete(key); }
+        else { g.classList.add('open'); this._openGroups.add(key); }
+      });
+      btn.textContent = anyOpen ? '⊞ Déplier tout' : '⊟ Replier tout';
+    });
     root.querySelector('#hse-cfg-bulk-activate').addEventListener('click', () => this._bulkAction('select'));
     root.querySelector('#hse-cfg-bulk-ignore').addEventListener('click', () => this._bulkAction('ignore'));
     root.querySelector('#hse-cfg-bulk-cancel').addEventListener('click', () => { this._selected.clear(); this._updateBulkBar(); });
@@ -359,6 +356,12 @@ export class ConfigView {
       .map(([integ, gItems]) => this._renderGroup(integ, gItems)).join('');
     this._setCatBody(`<div class="hse-cfg__groups">${html}</div>`);
     this._bindGroupEvents(); this._renderCatPager(d);
+    // Sync label bouton expand après rendu
+    const btn = this._el?.querySelector('#hse-cfg-expand-btn');
+    if (btn) {
+      const anyOpen = Array.from(this._el?.querySelectorAll('.hse-cfg__group') ?? []).some(g => g.classList.contains('open'));
+      btn.textContent = anyOpen ? '⊟ Replier tout' : '⊞ Déplier tout';
+    }
   }
 
   _renderGroup(integ, items) {
@@ -430,6 +433,13 @@ export class ConfigView {
         const key = grp.dataset.group;
         const open = grp.classList.toggle('open');
         open ? this._openGroups.add(key) : this._openGroups.delete(key);
+        // Sync label bouton expand
+        const btn = this._el?.querySelector('#hse-cfg-expand-btn');
+        if (btn) {
+          const allGroups = Array.from(this._el?.querySelectorAll('.hse-cfg__group') ?? []);
+          const anyOpen = allGroups.some(g => g.classList.contains('open'));
+          btn.textContent = anyOpen ? '⊟ Replier tout' : '⊞ Déplier tout';
+        }
       });
     });
     body.querySelectorAll('[data-grp-sel]').forEach(btn => {
@@ -498,34 +508,79 @@ export class ConfigView {
         body: JSON.stringify({ items }), signal: this._abort?.signal,
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      this._selected.clear(); this._catSig = null;
+      this._catSig = null; this._selected.clear(); this._updateBulkBar();
       await this._loadCatalogue();
     } catch (e) {
       if (e.name === 'AbortError') return;
-    } finally { this._updateBulkBar(); }
+    }
   }
 
-  _renderCatPager(d) {
-    const pager = this._el?.querySelector('#hse-cfg-cat-pager');
-    if (!pager) return;
-    const total = d.total ?? 0;
-    const totalPages = Math.ceil(total / CATALOGUE_PER_PAGE);
-    if (totalPages <= 1) { pager.style.display = 'none'; return; }
-    pager.style.display = 'flex';
-    pager.innerHTML = `
-      <button id="hse-cfg-prev" class="hse-btn hse-btn--ghost hse-btn--sm" ${this._catPage <= 1 ? 'disabled' : ''}>← Précédent</button>
-      <span>Page ${this._catPage} / ${totalPages} — ${total} appareils</span>
-      <button id="hse-cfg-next" class="hse-btn hse-btn--ghost hse-btn--sm" ${this._catPage >= totalPages ? 'disabled' : ''}>Suivant →</button>`;
-    pager.querySelector('#hse-cfg-prev')?.addEventListener('click', () => { this._catPage--; this._catSig=null; this._loadCatalogue(); });
-    pager.querySelector('#hse-cfg-next')?.addEventListener('click', () => { this._catPage++; this._catSig=null; this._loadCatalogue(); });
+  async _autoSelect() {
+    if (this._autoSelecting) return;
+    this._autoSelecting = true;
+    const btn = this._el?.querySelector('#hse-cfg-auto-btn');
+    const status = this._el?.querySelector('#hse-cfg-auto-status');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ En cours…'; }
+    try {
+      const catR = await this._ctx.hseFetch('/api/hse/catalogue?status=all&per_page=500', { signal: this._abort?.signal });
+      if (!catR.ok) throw new Error(`HTTP ${catR.status}`);
+      const catData = await catR.json();
+      const all = catData.items ?? [];
+      const byDevice = {};
+      for (const item of all) {
+        const dev = item.device_id ?? item.entity_id;
+        if (!byDevice[dev]) byDevice[dev] = [];
+        byDevice[dev].push(item);
+      }
+      const toSelect = [];
+      for (const [, devItems] of Object.entries(byDevice)) {
+        const best = devItems.sort((a,b) => (b.quality_score ?? b.score ?? 0) - (a.quality_score ?? a.score ?? 0))[0];
+        if (best && best.status !== 'selected') toSelect.push({ entity_id: best.entity_id, action: 'select' });
+      }
+      if (!toSelect.length) {
+        if (status) { status.textContent = 'Aucun capteur en attente.'; setTimeout(() => { if (status) status.textContent = ''; }, 3000); }
+        return;
+      }
+      const r = await this._ctx.hseFetch('/api/hse/catalogue/triage/bulk', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ items: toSelect }), signal: this._abort?.signal,
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      if (status) { status.textContent = `✓ ${toSelect.length} capteur(s) activé(s)`; setTimeout(() => { if (status) status.textContent = ''; }, 3000); }
+      this._catSig = null; await this._loadCatalogue();
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      if (status) { status.textContent = `Erreur : ${e.message}`; setTimeout(() => { if (status) status.textContent = ''; }, 3000); }
+    } finally {
+      this._autoSelecting = false;
+      if (btn) { btn.disabled = false; btn.textContent = '🚀 Lancer'; }
+    }
   }
 
   _setCatBody(html) { const el = this._el?.querySelector('#hse-cfg-cat-body'); if (el) el.innerHTML = html; }
 
+  _renderCatPager(d) {
+    const pager = this._el?.querySelector('#hse-cfg-cat-pager');
+    if (!pager) return;
+    const total = d.total ?? 0; const page = d.page ?? 1; const perPage = d.per_page ?? CATALOGUE_PER_PAGE;
+    const pages = Math.ceil(total / perPage);
+    if (pages <= 1) { pager.style.display = 'none'; return; }
+    pager.style.display = 'flex';
+    pager.innerHTML = `
+      <button class="hse-btn hse-btn--ghost hse-btn--sm" ${page <= 1 ? 'disabled' : ''} data-pager="prev">◀ Précédent</button>
+      <span>Page ${page} / ${pages} — ${total} capteur(s)</span>
+      <button class="hse-btn hse-btn--ghost hse-btn--sm" ${page >= pages ? 'disabled' : ''} data-pager="next">Suivant ▶</button>`;
+    pager.querySelector('[data-pager="prev"]')?.addEventListener('click', () => { this._catPage--; this._catSig = null; this._loadCatalogue(); });
+    pager.querySelector('[data-pager="next"]')?.addEventListener('click', () => { this._catPage++; this._catSig = null; this._loadCatalogue(); });
+  }
+
+  // ── Meta (Pièces & Types) ──────────────────────────────────────────────────
+
   _bindMetaEvents(root) {
     root.querySelector('#hse-cfg-diff-apply')?.addEventListener('click', () => this._applyDiff());
     root.querySelector('#hse-cfg-diff-dismiss')?.addEventListener('click', () => {
-      this._el?.querySelector('#hse-cfg-diff-banner')?.classList.remove('visible');
+      const banner = this._el?.querySelector('#hse-cfg-diff-banner');
+      if (banner) banner.classList.remove('visible');
     });
   }
 
@@ -544,25 +599,23 @@ export class ConfigView {
       this._renderMeta();
     } catch (e) {
       if (e.name === 'AbortError') return;
-      this._setMetaBody(`<div class="hse-error">Erreur méta — ${e.message}</div>`);
+      this._setMetaBody(`<div class="hse-error">Erreur meta — ${e.message}</div>`);
     } finally { this._metaFetching = false; }
   }
 
   async _loadDiffPreview() {
     try {
-      const r = await this._ctx.hseFetch('/api/hse/meta/sync/preview', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({}), signal: this._abort?.signal,
-      });
+      const r = await this._ctx.hseFetch('/api/hse/meta/sync/preview', { signal: this._abort?.signal });
       if (!r.ok) return;
       const data = await r.json();
-      if (!this._mounted) return;
-      const count = (data.to_add?.length ?? 0) + (data.to_update?.length ?? 0);
+      const count = (data.to_add?.length ?? 0) + (data.to_remove?.length ?? 0);
+      if (!count) return;
       const banner = this._el?.querySelector('#hse-cfg-diff-banner');
       const msg = this._el?.querySelector('#hse-cfg-diff-msg');
-      if (!banner || !msg) return;
-      if (count > 0) { msg.textContent = `${count} changement${count>1?'s':''} détecté${count>1?'s':''} entre HA et le catalogue.`; banner.classList.add('visible'); }
-      else { banner.classList.remove('visible'); }
+      if (banner && msg) {
+        msg.textContent = `${count} changement(s) détecté(s) dans la config HA. Voulez-vous synchroniser ?`;
+        banner.classList.add('visible');
+      }
     } catch (e) {}
   }
 
@@ -570,58 +623,52 @@ export class ConfigView {
     if (this._diffApplying) return;
     this._diffApplying = true;
     const btn = this._el?.querySelector('#hse-cfg-diff-apply');
-    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    if (btn) { btn.disabled = true; btn.textContent = '⏳…'; }
     try {
       const r = await this._ctx.hseFetch('/api/hse/meta/sync/apply', {
-        method:'POST', headers:{'Content-Type':'application/json'},
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}), signal: this._abort?.signal,
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      this._el?.querySelector('#hse-cfg-diff-banner')?.classList.remove('visible');
+      const banner = this._el?.querySelector('#hse-cfg-diff-banner');
+      if (banner) banner.classList.remove('visible');
       this._metaSig = null; await this._loadMeta();
     } catch (e) {
       if (e.name === 'AbortError') return;
-      const msg = this._el?.querySelector('#hse-cfg-diff-msg');
-      if (msg) msg.textContent = `Erreur : ${e.message}`;
+    } finally {
+      this._diffApplying = false;
       if (btn) { btn.disabled = false; btn.textContent = 'Appliquer'; }
-    } finally { this._diffApplying = false; }
+    }
   }
 
   _renderMeta() {
     const d = this._metaData; if (!d) return;
     const rooms = d.rooms ?? [];
     const types = d.types ?? [];
-    const renderRooms = (items) => {
-      if (!items.length) return `<li>Aucune pièce.</li>`;
-      return items.map(r => {
-        const name = r.name ?? r.id ?? '?';
-        const id = r.id ?? '';
-        return `<li><span>${this._esc(name)}</span><span class="hse-cfg__list-eid">${this._esc(id)}</span></li>`;
+    const TYPE_ICON_META = TYPE_ICON;
+    const roomsHtml = !rooms.length ? `<li>Aucune pièce.</li>` :
+      rooms.map(r => `<li><span>${this._esc(r.name ?? r.id ?? r)}</span><span class="hse-cfg__list-eid">${this._esc(r.id ?? '')}</span></li>`).join('');
+    const typesHtml = !types.length ? `<li>Aucun type.</li>` :
+      types.map(t => {
+        const icon = TYPE_ICON_META[t?.toLowerCase()] ?? '';
+        return `<li><span>${icon ? icon + ' ' : ''}${this._esc(t)}</span></li>`;
       }).join('');
-    };
-    const renderTypes = (items) => {
-      if (!items.length) return `<li>Aucun type.</li>`;
-      return items.map(t => {
-        const icon = TYPE_ICON[t?.toLowerCase()] ?? '';
-        return `<li><span>${icon} ${this._esc(t ?? '?')}</span></li>`;
-      }).join('');
-    };
     this._setMetaBody(`
       <div class="hse-cfg__grid">
         <div class="hse-cfg__card">
-          <div class="hse-cfg__card-head">Pièces (${rooms.length})</div>
-          <ul class="hse-cfg__list">${renderRooms(rooms)}</ul>
+          <div class="hse-cfg__card-head"><span>🏠 Pièces (${rooms.length})</span></div>
+          <ul class="hse-cfg__list">${roomsHtml}</ul>
         </div>
         <div class="hse-cfg__card">
-          <div class="hse-cfg__card-head">Types d'appareils (${types.length})</div>
-          <ul class="hse-cfg__list">${renderTypes(types)}</ul>
+          <div class="hse-cfg__card-head"><span>🏷️ Types (${types.length})</span></div>
+          <ul class="hse-cfg__list">${typesHtml}</ul>
         </div>
       </div>`);
   }
 
   _setMetaBody(html) { const el = this._el?.querySelector('#hse-cfg-meta-body'); if (el) el.innerHTML = html; }
 
-  // ─── ONGLET C : TARIFICATION ───────────────────────────────────────────────
+  // ── Tarification (Onglet C) ────────────────────────────────────────────────
 
   async _loadPricing() {
     if (this._pricingFetching) return;
@@ -647,15 +694,16 @@ export class ConfigView {
     const mode = d.mode ?? 'flat';
     const isHphc = mode === 'hphc';
 
-    // Valeurs par défaut issues des screenshots
-    const subHt  = d.subscription_ht_eur_month  ?? d.subscription_eur_month ?? 14.68;
-    const subTtc = d.subscription_ttc_eur_month ?? 19.834;
+    const sub   = d.subscription_eur_month ?? 9.47;
+    const taxPct = d.tax_rate_pct ?? 20;
+
     const flatHt  = d.price_ht_kwh  ?? 0.1297;
     const flatTtc = d.price_ttc_kwh ?? 0.1927;
     const hpHt  = d.price_hp_ht_kwh  ?? 0.1327;
     const hpTtc = d.price_hp_ttc_kwh ?? 0.1952;
     const hcHt  = d.price_hc_ht_kwh  ?? 0.1327;
     const hcTtc = d.price_hc_ttc_kwh ?? 0.1952;
+
     const hcStart = d.hc_start ?? '22:00';
     const hcEnd   = d.hc_end   ?? '06:00';
 
@@ -665,81 +713,68 @@ export class ConfigView {
           <div class="hse-cfg__pricing-section">
             <div class="hse-cfg__pricing-section-title">⚙️ Configuration Tarifaire</div>
             <div class="hse-cfg__pricing-body">
-
               <div class="hse-cfg__field">
-                <label class="hse-cfg__label">Type de contrat :</label>
+                <label class="hse-cfg__label">Mode tarifaire</label>
                 <select id="hse-cfg-mode" name="mode" class="hse-cfg__select">
-                  <option value="flat" ${!isHphc ? 'selected' : ''}>Prix fixe</option>
-                  <option value="hphc" ${isHphc ? 'selected' : ''}>Heures Pleines / Heures Creuses</option>
+                  <option value="flat" ${mode === 'flat' ? 'selected' : ''}>Tarif fixe (Base)</option>
+                  <option value="hphc" ${mode === 'hphc' ? 'selected' : ''}>Heures Pleines / Heures Creuses</option>
                 </select>
               </div>
-
-              <div class="hse-cfg__field-row">
-                <div class="hse-cfg__field">
-                  <label class="hse-cfg__label">Abonnement mensuel HT (€) :</label>
-                  <input id="hse-cfg-sub-ht" name="subscription_ht_eur_month" type="number" step="0.01" class="hse-cfg__input" value="${subHt}" placeholder="14.68" />
-                </div>
-                <div class="hse-cfg__field">
-                  <label class="hse-cfg__label">Abonnement mensuel TTC (€) :</label>
-                  <input id="hse-cfg-sub-ttc" name="subscription_ttc_eur_month" type="number" step="0.01" class="hse-cfg__input" value="${subTtc}" placeholder="19.834" />
-                </div>
-              </div>
-
-              <div id="hse-cfg-base-fields" style="${isHphc ? 'display:none' : ''}">
+              <div id="hse-cfg-flat-wrap">
                 <div class="hse-cfg__pricing-subtitle">⚡ Tarif Fixe</div>
                 <div class="hse-cfg__field-row">
-                  <div class="hse-cfg__field">
-                    <label class="hse-cfg__label">Prix HT (€/kWh) :</label>
+                  <div class="hse-cfg__field"><label class="hse-cfg__label">Prix HT (€/kWh)</label>
                     <input id="hse-cfg-flat-ht" name="price_ht_kwh" type="number" step="0.0001" class="hse-cfg__input" value="${flatHt}" placeholder="0.1297" />
                   </div>
-                  <div class="hse-cfg__field">
-                    <label class="hse-cfg__label">Prix TTC (€/kWh) :</label>
+                  <div class="hse-cfg__field"><label class="hse-cfg__label">Prix TTC (€/kWh)</label>
                     <input id="hse-cfg-flat-ttc" name="price_ttc_kwh" type="number" step="0.0001" class="hse-cfg__input" value="${flatTtc}" placeholder="0.1927" />
                   </div>
                 </div>
               </div>
-
-              <div id="hse-cfg-hphc-fields" class="hse-cfg__hp-hc ${isHphc ? 'visible' : ''}">
+              <div id="hse-cfg-hphc-wrap" class="hse-cfg__hp-hc ${isHphc ? 'visible' : ''}">
                 <div class="hse-cfg__pricing-subtitle">🌟 Heures Pleines</div>
                 <div class="hse-cfg__field-row">
-                  <div class="hse-cfg__field">
-                    <label class="hse-cfg__label">Prix HP HT (€/kWh) :</label>
+                  <div class="hse-cfg__field"><label class="hse-cfg__label">HP HT (€/kWh)</label>
                     <input id="hse-cfg-hp-ht" name="price_hp_ht_kwh" type="number" step="0.0001" class="hse-cfg__input" value="${hpHt}" placeholder="0.1327" />
                   </div>
-                  <div class="hse-cfg__field">
-                    <label class="hse-cfg__label">Prix HP TTC (€/kWh) :</label>
+                  <div class="hse-cfg__field"><label class="hse-cfg__label">HP TTC (€/kWh)</label>
                     <input id="hse-cfg-hp-ttc" name="price_hp_ttc_kwh" type="number" step="0.0001" class="hse-cfg__input" value="${hpTtc}" placeholder="0.1952" />
                   </div>
                 </div>
                 <div class="hse-cfg__pricing-subtitle">🌙 Heures Creuses</div>
                 <div class="hse-cfg__field-row">
-                  <div class="hse-cfg__field">
-                    <label class="hse-cfg__label">Prix HC HT (€/kWh) :</label>
+                  <div class="hse-cfg__field"><label class="hse-cfg__label">HC HT (€/kWh)</label>
                     <input id="hse-cfg-hc-ht" name="price_hc_ht_kwh" type="number" step="0.0001" class="hse-cfg__input" value="${hcHt}" placeholder="0.1327" />
                   </div>
-                  <div class="hse-cfg__field">
-                    <label class="hse-cfg__label">Prix HC TTC (€/kWh) :</label>
+                  <div class="hse-cfg__field"><label class="hse-cfg__label">HC TTC (€/kWh)</label>
                     <input id="hse-cfg-hc-ttc" name="price_hc_ttc_kwh" type="number" step="0.0001" class="hse-cfg__input" value="${hcTtc}" placeholder="0.1952" />
                   </div>
                 </div>
                 <div class="hse-cfg__pricing-subtitle">🕐 Plage Horaire HC</div>
                 <div class="hse-cfg__field-row">
-                  <div class="hse-cfg__field">
-                    <label class="hse-cfg__label">Début (HH:MM) :</label>
+                  <div class="hse-cfg__field"><label class="hse-cfg__label">Début HC</label>
                     <input id="hse-cfg-hc-start" name="hc_start" type="time" class="hse-cfg__input" value="${hcStart}" />
                   </div>
-                  <div class="hse-cfg__field">
-                    <label class="hse-cfg__label">Fin (HH:MM) :</label>
+                  <div class="hse-cfg__field"><label class="hse-cfg__label">Fin HC</label>
                     <input id="hse-cfg-hc-end" name="hc_end" type="time" class="hse-cfg__input" value="${hcEnd}" />
                   </div>
                 </div>
               </div>
-
-              <div class="hse-cfg__save-row">
-                <button type="submit" id="hse-cfg-save-btn" class="hse-btn hse-btn--primary">Sauvegarder</button>
-                <span id="hse-cfg-save-status" class="hse-cfg__save-status"></span>
+              <div class="hse-cfg__pricing-section-title" style="margin-top:8px;">💶 Abonnement &amp; Fiscalité</div>
+              <div class="hse-cfg__pricing-body" style="padding:0;">
+                <div class="hse-cfg__field-row">
+                  <div class="hse-cfg__field"><label class="hse-cfg__label">Abonnement (€/mois HT)</label>
+                    <input id="hse-cfg-sub" name="subscription_eur_month" type="number" step="0.01" class="hse-cfg__input" value="${sub}" placeholder="9.47" />
+                  </div>
+                  <div class="hse-cfg__field"><label class="hse-cfg__label">Taux TVA (%)</label>
+                    <input id="hse-cfg-tax" name="tax_rate_pct" type="number" step="0.1" class="hse-cfg__input" value="${taxPct}" placeholder="20" />
+                  </div>
+                </div>
               </div>
-
+              <div class="hse-cfg__save-row">
+                <button type="submit" class="hse-btn hse-btn--primary">💾 Enregistrer</button>
+                <span id="hse-cfg-pricing-status" class="hse-cfg__save-status"></span>
+              </div>
             </div>
           </div>
         </form>
@@ -751,12 +786,12 @@ export class ConfigView {
     const form = this._el?.querySelector('#hse-cfg-pricing-form');
     if (!form) return;
     const modeSel = form.querySelector('#hse-cfg-mode');
-    const hphcFields = form.querySelector('#hse-cfg-hphc-fields');
-    const baseFields = form.querySelector('#hse-cfg-base-fields');
+    const hphcWrap = form.querySelector('#hse-cfg-hphc-wrap');
+    const flatWrap = form.querySelector('#hse-cfg-flat-wrap');
     modeSel?.addEventListener('change', () => {
       const hphc = modeSel.value === 'hphc';
-      hphcFields?.classList.toggle('visible', hphc);
-      if (baseFields) baseFields.style.display = hphc ? 'none' : '';
+      if (hphcWrap) hphcWrap.classList.toggle('visible', hphc);
+      if (flatWrap) flatWrap.style.display = hphc ? 'none' : '';
     });
     form.addEventListener('submit', async e => { e.preventDefault(); await this._savePricing(form); });
   }
@@ -764,20 +799,14 @@ export class ConfigView {
   async _savePricing(form) {
     if (this._pricingSaving) return;
     this._pricingSaving = true;
-    const btn = form.querySelector('#hse-cfg-save-btn');
-    const status = form.querySelector('#hse-cfg-save-status');
-    if (btn) { btn.disabled = true; btn.textContent = '…'; }
-    if (status) status.textContent = '';
-
+    const status = this._el?.querySelector('#hse-cfg-pricing-status');
+    if (status) status.textContent = '⏳ Enregistrement…';
     const mode = form.querySelector('#hse-cfg-mode')?.value || 'flat';
     const payload = {
       mode,
-      subscription_ht_eur_month:  parseFloat(form.querySelector('#hse-cfg-sub-ht')?.value)  || 0,
-      subscription_ttc_eur_month: parseFloat(form.querySelector('#hse-cfg-sub-ttc')?.value) || 0,
-      // champ backend attendu = subscription_eur_month → on envoie le TTC comme valeur principale
-      subscription_eur_month: parseFloat(form.querySelector('#hse-cfg-sub-ttc')?.value) || 0,
+      subscription_eur_month: parseFloat(form.querySelector('#hse-cfg-sub')?.value) || 0,
+      tax_rate_pct: parseFloat(form.querySelector('#hse-cfg-tax')?.value) || 0,
     };
-
     if (mode === 'flat') {
       payload.price_ht_kwh  = parseFloat(form.querySelector('#hse-cfg-flat-ht')?.value)  || 0;
       payload.price_ttc_kwh = parseFloat(form.querySelector('#hse-cfg-flat-ttc')?.value) || 0;
@@ -789,26 +818,24 @@ export class ConfigView {
       payload.hc_start = form.querySelector('#hse-cfg-hc-start')?.value || '22:00';
       payload.hc_end   = form.querySelector('#hse-cfg-hc-end')?.value   || '06:00';
     }
-
     try {
       const r = await this._ctx.hseFetch('/api/hse/settings/pricing', {
-        method:'PUT', headers:{'Content-Type':'application/json'},
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload), signal: this._abort?.signal,
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       this._pricingSig = null;
-      if (status) { status.textContent = '✓ Enregistré'; setTimeout(() => { if (status) status.textContent = ''; }, 3000); }
+      if (status) { status.textContent = '✓ Enregistré'; setTimeout(() => { if (status) status.textContent = ''; }, 2500); }
     } catch (e) {
       if (e.name === 'AbortError') return;
-      if (status) status.textContent = `⚠ Erreur : ${e.message}`;
-    } finally {
-      this._pricingSaving = false;
-      if (btn) { btn.disabled = false; btn.textContent = 'Sauvegarder'; }
-    }
+      if (status) { status.textContent = `Erreur : ${e.message}`; setTimeout(() => { if (status) status.textContent = ''; }, 3000); }
+    } finally { this._pricingSaving = false; }
   }
 
   _setPricingBody(html) { const el = this._el?.querySelector('#hse-cfg-pricing-body'); if (el) el.innerHTML = html; }
 
-  _attrVal(str) { if (str == null) return ''; return String(str).replace(/\\/g, '\\\\').replace(/"/g, '\\"'); }
-  _esc(str) { if (str == null) return ''; return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;'); }
+  // ── Utilitaires ───────────────────────────────────────────────────────────
+
+  _esc(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
+  _attrVal(s) { return String(s ?? '').replace(/"/g, '&quot;'); }
 }
