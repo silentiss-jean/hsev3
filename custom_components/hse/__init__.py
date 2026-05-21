@@ -20,7 +20,11 @@ from homeassistant.config_entries import ConfigEntry
 
 from .const import DOMAIN, VERSION
 from .api.views.ping import HsePingView
-from .api.views.catalogue import HseCatalogueView
+from .api.views.catalogue import (
+    HseCatalogueView,
+    HseCatalogueItemView,   # DELTA-058
+    HseCatalogueBulkView,   # DELTA-058
+)
 from .api.views.costs import HseCostsView, HseHistoryView, HseExportView, _build_costs_data
 from .api.views.diagnostic import HseDiagnosticView
 from .api.views.frontend_manifest import HseFrontendManifestView
@@ -92,6 +96,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     for view in [
         HsePingView(hass),
         HseCatalogueView(hass),
+        HseCatalogueItemView(hass),     # DELTA-058
+        HseCatalogueBulkView(hass),     # DELTA-058
         HseCostsView(hass),
         HseHistoryView(hass),
         HseExportView(hass),
@@ -233,19 +239,18 @@ def _register_services(hass: HomeAssistant) -> None:
         ("set_entity_assignment", _svc_set_entity_assignment),
         ("set_triage_policy", _svc_set_triage_policy),
     ]
+    _VALID_SVC = (
+        "catalogue_refresh", "meta_sync", "export_data", "migrate_cleanup",
+        "reset_catalogue", "reset_settings", "reset_meta",
+        "set_entity_assignment", "set_triage_policy",
+    )
     for name, handler in _SVC:
-        if not hass.services.has_service(DOMAIN, name):
+        if name in _VALID_SVC:
             hass.services.async_register(DOMAIN, name, handler)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    async_remove_panel(hass, DOMAIN)
-    for svc in (
-        "catalogue_refresh", "meta_sync", "export_data", "migrate_cleanup",
-        "reset_catalogue", "reset_settings", "reset_meta",
-        "set_entity_assignment", "set_triage_policy",
-    ):
-        hass.services.async_remove(DOMAIN, svc)
     hass.data[DOMAIN].pop(entry.entry_id, None)
+    async_remove_panel(hass, DOMAIN)
     _LOGGER.info("HSE V3 déchargé (entry: %s)", entry.entry_id)
     return True
