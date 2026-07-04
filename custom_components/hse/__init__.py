@@ -22,8 +22,11 @@ from .const import DOMAIN, VERSION
 from .api.views.ping import HsePingView
 from .api.views.catalogue import (
     HseCatalogueView,
-    HseCatalogueItemView,   # DELTA-058
-    HseCatalogueBulkView,   # DELTA-058
+    HseCatalogueItemView,            # DELTA-058
+    HseCatalogueBulkView,            # DELTA-058
+    HseCatalogueTriageView,          # FIX-2026-07-04 : 404 sur /triage
+    HseCatalogueTriageBulkView,      # FIX-2026-07-04 : 404 sur /triage/bulk
+    HseCatalogueRefreshView,         # FIX-2026-07-04 : route /refresh non enregistrée
 )
 from .api.views.costs import HseCostsView, HseHistoryView, HseExportView, _build_costs_data
 from .api.views.diagnostic import HseDiagnosticView
@@ -96,8 +99,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     for view in [
         HsePingView(hass),
         HseCatalogueView(hass),
-        HseCatalogueItemView(hass),     # DELTA-058
-        HseCatalogueBulkView(hass),     # DELTA-058
+        HseCatalogueItemView(hass),            # DELTA-058
+        HseCatalogueBulkView(hass),            # DELTA-058
+        HseCatalogueTriageView(hass),          # FIX-2026-07-04
+        HseCatalogueTriageBulkView(hass),      # FIX-2026-07-04
+        HseCatalogueRefreshView(hass),         # FIX-2026-07-04
         HseCostsView(hass),
         HseHistoryView(hass),
         HseExportView(hass),

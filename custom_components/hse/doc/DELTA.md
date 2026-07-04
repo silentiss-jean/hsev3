@@ -1,6 +1,6 @@
 # DELTA.md — Écarts doc/code actifs HSE V3
 
-> Mis à jour : 2026-05-21 17:32 CEST
+> Mis à jour : 2026-07-04 17:35 CEST
 >
 > **Règle** : aucun patch ne doit contredire un écart EN_DISCUSSION.
 > Fermer un écart = écrire la solution ici avant de commiter.
@@ -10,6 +10,17 @@
 ---
 
 ## Écarts actifs
+
+### DELTA-066 — `POST /api/hse/catalogue/triage/bulk` → 404 (vue non enregistrée)
+- **Statut** : `FERMÉ` ✅
+- **Priorité** : **Haute** (bloquant onglet Configuration → Sélection automatique)
+- **Contexte** : `HseCatalogueTriageBulkView` (et `HseCatalogueTriageView`, `HseCatalogueRefreshView`) existent dans `api/views/catalogue.py` et sont exportées par `api/views/__init__.py`, mais **jamais importées ni enregistrées** dans `__init__.py` principal. Régression introduite par le commit `db9fd86` (DELTA-058) qui n'a enregistré que `HseCatalogueItemView` + `HseCatalogueBulkView`.
+- **Symptôme** : `POST /api/hse/catalogue/triage/bulk` → `404 Not Found` lors du clic sur "Sélection automatique intelligente" dans `config_view.js`.
+- **Impact front** : Bouton "✨ Sélection auto" de l'onglet Configuration cassé. `scan_view.js` (l.619) également impacté.
+- **Résolution** : Patch `custom_components/hse/__init__.py` :
+  - Ajout des 3 imports : `HseCatalogueTriageView`, `HseCatalogueTriageBulkView`, `HseCatalogueRefreshView`
+  - Ajout des 3 enregistrements dans la boucle `register_view`
+- **Date de fermeture** : 2026-07-04
 
 ### DELTA-058 — `PATCH/DELETE /api/hse/catalogue/{entity_id}` manquants
 - **Statut** : `FERMÉ` ✅
