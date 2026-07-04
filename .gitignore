@@ -1,2 +1,6 @@
 .DS_Store
 **/.DS_Store
+
+# OpenCode local config (IDE-specific, not part of the project)
+.opencode/
+opencode.json
