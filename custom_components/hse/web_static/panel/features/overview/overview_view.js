@@ -105,7 +105,6 @@ export class OverviewView {
     this._fetching = true;
     try {
       const r = await this._ctx.hseFetch('/api/hse/overview', { signal: this._abort?.signal });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = await r.json();
       if (!this._mounted) return;
       const sig = JSON.stringify(data);
@@ -125,14 +124,18 @@ export class OverviewView {
     const byRoom = data.by_room ?? [];
     const byType = data.by_type ?? [];
     const refSensor = data.reference_sensor;
-    const status = data.status ?? { level: 'warning', message: 'Aucune donnée' };
+    const status = data.status ?? { level: 'warning', message: null };
     const statusClass = `hse-overview__status--${status.level}`;
     const statusIcon = status.level === 'ok' ? '✓' : status.level === 'warning' ? '⚠' : '✕';
+    // Le backend retourne message=null quand ok. On fournit un fallback
+    // contextuel plutôt que "Statut inconnu" trompeur.
+    const statusMsg = status.message
+      ?? (status.level === 'ok' ? 'Tous les capteurs sont actifs' : 'Aucun capteur actif');
 
     this._el.innerHTML = `
       <div class="hse-overview">
         <div class="hse-overview__status ${statusClass}">
-          <span>${statusIcon}</span><span>${status.message ?? 'Statut inconnu'}</span>
+          <span>${statusIcon}</span><span>${statusMsg}</span>
         </div>
         <div class="hse-overview__header">
           <div class="hse-overview__card">

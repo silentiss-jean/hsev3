@@ -525,7 +525,6 @@ export class ScanView {
     if (this._scanDomain) params.set('domain', this._scanDomain);
     try {
       const r = await this._ctx.hseFetch(`/api/hse/scan?${params}`, { signal: this._abort?.signal });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = await r.json();
       const sig = JSON.stringify(data);
       if (sig === this._scanSig) return;
@@ -547,7 +546,6 @@ export class ScanView {
     const params = new URLSearchParams({ status: this._catStatus, page: this._catPage, per_page: CATALOGUE_PER_PAGE });
     try {
       const r = await this._ctx.hseFetch(`/api/hse/catalogue?${params}`, { signal: this._abort?.signal });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = await r.json();
       const sig = JSON.stringify(data);
       if (sig === this._catSig) return;
@@ -569,12 +567,6 @@ export class ScanView {
     btn.textContent = '\u27f3 Scan en cours\u2026';
     try {
       const r = await this._ctx.hseFetch('/api/hse/scan', { method: 'POST', signal: this._abort?.signal });
-      if (r.status === 409) {
-        btn.textContent = '\u26a0 Scan d\u00e9j\u00e0 en cours';
-        setTimeout(() => { btn.disabled = false; btn.textContent = '\u21bb Re-scanner'; }, 3000);
-        return;
-      }
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = await r.json();
       this._scanSig  = JSON.stringify(data);
       this._scanData = data;
@@ -588,6 +580,12 @@ export class ScanView {
       setTimeout(() => { btn.disabled = false; btn.textContent = '\u21bb Re-scanner'; }, 2500);
     } catch (e) {
       if (e.name === 'AbortError') return;
+      // hseFetch lève HseFetchError avec .status — on intercepte le 409 (scan déjà en cours)
+      if (e.status === 409) {
+        btn.textContent = '\u26a0 Scan d\u00e9j\u00e0 en cours';
+        setTimeout(() => { btn.disabled = false; btn.textContent = '\u21bb Re-scanner'; }, 3000);
+        return;
+      }
       btn.textContent = '\u26a0 Erreur';
       setTimeout(() => { btn.disabled = false; btn.textContent = '\u21bb Re-scanner'; }, 3000);
     }
@@ -601,7 +599,6 @@ export class ScanView {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ entity_id: entityId, action }), signal: this._abort?.signal,
       });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       this._scanSig = null;
       this._catSig  = null;
       this._selected.delete(entityId);
@@ -623,7 +620,6 @@ export class ScanView {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items }), signal: this._abort?.signal,
       });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       this._selected.clear();
       this._scanSig = null;
       this._catSig  = null;

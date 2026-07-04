@@ -94,7 +94,6 @@ export class CostsView {
     this._fetching = true;
     try {
       const r = await this._ctx.hseFetch(`/api/hse/costs?period=${this._period}`, { signal: this._abort?.signal });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = await r.json();
       if (!this._mounted) return;
       const sig = JSON.stringify(data);
@@ -200,7 +199,6 @@ export class CostsView {
   async _export(format) {
     try {
       const r = await this._ctx.hseFetch(`/api/hse/export?period=${this._period}&format=${format}`, { signal: this._abort?.signal });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

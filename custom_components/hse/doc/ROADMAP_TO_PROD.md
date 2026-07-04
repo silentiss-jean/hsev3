@@ -210,7 +210,7 @@ config_view.js (C) ──► /api/hse/settings/pricing ──► DELTA-065 doit 
 | `tax_rate_pct` | `tax_rate_pct` | Taux TVA % |
 | `reference_entity_id` | `reference_entity_id` | Capteur référence (ex: Linky) |
 
-**⚠️ Anciennes clés frontend cassées (DELTA-065)** : `contract_type`, `subscription_ht`, `subscription_monthly`, `price_ht`, `price_hp`, `price_hc`, `tax_rate` → **ne plus jamais utiliser**.
+**⚠️ Anciennes clés frontend cassées (DELTA-065)** : `contract_type`, `subscription_ht`, `subscription_monthly`, `price_ht` (sans `_kwh`), `tax_rate` (sans `_pct`) → **ne plus jamais utiliser**. Les clés HP/HC n'ont jamais existé en version courte : ce sont toujours `price_hp_ht_kwh`, `price_hp_ttc_kwh`, `price_hc_ht_kwh`, `price_hc_ttc_kwh`.
 
 ### Catalogue
 | Backend | Frontend | Description |

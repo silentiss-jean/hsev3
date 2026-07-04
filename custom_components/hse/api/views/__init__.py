@@ -9,7 +9,7 @@ from .diagnostic import HseDiagnosticView
 from .catalogue import HseCatalogueView, HseCatalogueTriageView, HseCatalogueTriageBulkView, HseCatalogueRefreshView
 from .scan import HseScanView
 from .meta import HseMetaView, HseMetaSyncPreviewView, HseMetaSyncApplyView
-from .settings import HseSettingsPricingView
+from .settings import HseSettingsView, HseSettingsPricingView
 from .costs import HseCostsView, HseHistoryView, HseExportView
 from .migration import HseMigrationExportView, HseMigrationApplyView
 from .user_prefs import HseUserPrefsView
@@ -27,6 +27,7 @@ __all__ = [
     "HseMetaView",
     "HseMetaSyncPreviewView",
     "HseMetaSyncApplyView",
+    "HseSettingsView",
     "HseSettingsPricingView",
     "HseCostsView",
     "HseHistoryView",

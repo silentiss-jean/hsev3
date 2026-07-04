@@ -282,7 +282,6 @@ export class ConfigView {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reference_entity_id: val }), signal: this._abort?.signal,
       });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       this._refEntityId = val;
       if (status) { status.textContent = '✓ Enregistré'; setTimeout(() => { if (status) status.textContent = ''; }, 2500); }
     } catch (e) {
@@ -328,7 +327,6 @@ export class ConfigView {
     if (this._catQ) params.set('q', this._catQ);
     try {
       const r = await this._ctx.hseFetch(`/api/hse/catalogue?${params}`, { signal: this._abort?.signal });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = await r.json();
       if (!this._mounted) return;
       const sig = JSON.stringify(data);
@@ -490,7 +488,6 @@ export class ConfigView {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ entity_id: entityId, action }), signal: this._abort?.signal,
       });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       this._catSig = null; this._selected.delete(entityId); this._updateBulkBar();
       await this._loadCatalogue();
     } catch (e) {
@@ -507,7 +504,6 @@ export class ConfigView {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ items }), signal: this._abort?.signal,
       });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       this._catSig = null; this._selected.clear(); this._updateBulkBar();
       await this._loadCatalogue();
     } catch (e) {
@@ -545,7 +541,6 @@ export class ConfigView {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ items: toSelect }), signal: this._abort?.signal,
       });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       if (status) { status.textContent = `✓ ${toSelect.length} capteur(s) activé(s)`; setTimeout(() => { if (status) status.textContent = ''; }, 3000); }
       this._catSig = null; await this._loadCatalogue();
     } catch (e) {
@@ -590,7 +585,6 @@ export class ConfigView {
     this._setMetaBody('<div class="hse-skeleton"></div>');
     try {
       const r = await this._ctx.hseFetch('/api/hse/meta', { signal: this._abort?.signal });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = await r.json();
       if (!this._mounted) return;
       const sig = JSON.stringify(data);
@@ -629,7 +623,6 @@ export class ConfigView {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}), signal: this._abort?.signal,
       });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const banner = this._el?.querySelector('#hse-cfg-diff-banner');
       if (banner) banner.classList.remove('visible');
       this._metaSig = null; await this._loadMeta();
@@ -676,7 +669,6 @@ export class ConfigView {
     this._setPricingBody('<div class="hse-skeleton"></div>');
     try {
       const r = await this._ctx.hseFetch('/api/hse/settings/pricing', { signal: this._abort?.signal });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = await r.json();
       if (!this._mounted) return;
       const sig = JSON.stringify(data);
@@ -823,7 +815,6 @@ export class ConfigView {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload), signal: this._abort?.signal,
       });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       this._pricingSig = null;
       if (status) { status.textContent = '✓ Enregistré'; setTimeout(() => { if (status) status.textContent = ''; }, 2500); }
     } catch (e) {

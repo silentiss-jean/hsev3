@@ -83,11 +83,17 @@ class HseMetaSyncPreviewView(HseBaseView):
         snapshot = await async_build_ha_snapshot(self.hass, catalogue)
         diff = compute_pending_diff(meta_store, snapshot)
 
+        # Expose ce que compute_pending_diff calcule réellement.
+        # NOTE : pas de "to_remove" — la suppression de pièces n'est pas gérée
+        # par le moteur de sync actuel (les pièces HSE sont créées/renommées
+        # depuis les areas HA, jamais supprimées automatiquement).
         return self.json_ok({
             "to_add": diff["rooms"]["create"],
             "to_update": diff["rooms"]["rename"],
             "to_remove": [],
-            "unchanged": 0,
+            "suggest_room": diff["assignments"]["suggest_room"],
+            "stats": diff["stats"],
+            "has_changes": diff["has_changes"],
         })
 
 

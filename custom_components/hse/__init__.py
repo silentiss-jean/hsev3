@@ -34,7 +34,7 @@ from .api.views.meta import HseMetaView, HseMetaSyncPreviewView, HseMetaSyncAppl
 from .api.views.migration import HseMigrationExportView, HseMigrationApplyView
 from .api.views.overview import HseOverviewView
 from .api.views.scan import HseScanView
-from .api.views.settings import HseSettingsPricingView
+from .api.views.settings import HseSettingsView, HseSettingsPricingView
 from .api.views.user_prefs import HseUserPrefsView
 from .repairs import async_sync_repairs
 
@@ -110,6 +110,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         HseMigrationApplyView(hass),    # DELTA-051
         HseOverviewView(hass),
         HseScanView(hass),
+        HseSettingsView(hass),
         HseSettingsPricingView(hass),
         HseUserPrefsView(hass),
     ]:
