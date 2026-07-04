@@ -21,6 +21,9 @@
  * DELTA-057 — suppression ligne parasite customElements.define('hse-panel', HsePanel)
  *   copiée par erreur en bas du fichier → ReferenceError au chargement du module
  *
+ * FIX-2026-07-04 — C5 audit : injection err.message échappée via escHtml()
+ * FIX-2026-07-04 — C8 audit : backend scan retourne maintenant `kind` (energy/power)
+ *
  * Endpoints :
  *   GET  /api/hse/scan                   → inbox entités non triées
  *   POST /api/hse/scan                   → re-scan (F1 — corrigé)
@@ -35,6 +38,8 @@
  *   R4 — zéro localStorage
  *   R5 — skeleton avant le premier fetch
  */
+
+import { escHtml, escAttr } from '../../shared/hse_esc.js';
 
 const CSS = `
 .hse-scan {
@@ -534,7 +539,7 @@ export class ScanView {
       this._populateDomainFilter(data.items);
     } catch (e) {
       if (e.name === 'AbortError') return;
-      this._setScanBody(`<div class="hse-error">Erreur chargement scan \u2014 ${e.message}</div>`);
+      this._setScanBody(`<div class="hse-error">Erreur chargement scan \u2014 ${escHtml(e.message)}</div>`);
     } finally {
       this._fetching = false;
     }
@@ -554,7 +559,7 @@ export class ScanView {
       this._renderCatalogue();
     } catch (e) {
       if (e.name === 'AbortError') return;
-      this._setCatBody(`<div class="hse-error">Erreur chargement catalogue \u2014 ${e.message}</div>`);
+      this._setCatBody(`<div class="hse-error">Erreur chargement catalogue \u2014 ${escHtml(e.message)}</div>`);
     } finally {
       this._catFetching = false;
     }
@@ -606,7 +611,7 @@ export class ScanView {
     } catch (e) {
       if (e.name === 'AbortError') return;
       if (btn) { btn.disabled = false; btn.textContent = action === 'select' ? '\u2713' : action === 'ignore' ? '\u2715' : '\u21ba'; }
-      this._setScanBody(`<div class="hse-error">Triage \u00e9chou\u00e9 \u2014 ${e.message}</div>`);
+      this._setScanBody(`<div class="hse-error">Triage \u00e9chou\u00e9 \u2014 ${escHtml(e.message)}</div>`);
     }
   }
 
@@ -627,7 +632,7 @@ export class ScanView {
     } catch (e) {
       if (e.name === 'AbortError') return;
       if (bar) bar.style.opacity = '1';
-      this._setScanBody(`<div class="hse-error">Triage group\u00e9 \u00e9chou\u00e9 \u2014 ${e.message}</div>`);
+      this._setScanBody(`<div class="hse-error">Triage group\u00e9 \u00e9chou\u00e9 \u2014 ${escHtml(e.message)}</div>`);
     } finally {
       this._updateBulkBar();
     }

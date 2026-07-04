@@ -103,6 +103,9 @@ class HseScanView(HseBaseView):
                 "name": attrs.get("friendly_name") or eid,
                 "domain": eid.split(".")[0] if "." in eid else "",
                 "device": c.get("device_id"),
+                # FIX-2026-07-04 C8 : ajouter `kind` pour permettre au frontend
+                # de compter correctement energy vs power (était toujours undefined)
+                "kind": c.get("kind"),
                 # Deux champs distincts — ne plus utiliser l'ancien "integration"
                 "integration_domain": integration_domain,
                 "integration_label": integration_label,

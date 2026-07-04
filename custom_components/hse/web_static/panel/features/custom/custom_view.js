@@ -337,6 +337,8 @@ export class CustomView {
     }
 
     this._fetching = true;
+    // FIX-2026-07-04 C6 : annuler l'ancien AbortController avant d'en créer un nouveau
+    if (this._abortCtl) this._abortCtl.abort();
     this._abortCtl = new AbortController();
     this._setStatus('Enregistrement…', null);
 

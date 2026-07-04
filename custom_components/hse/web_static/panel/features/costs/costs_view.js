@@ -182,7 +182,14 @@ export class CostsView {
   _bindEvents() {
     const periodSel = this._el?.querySelector('#hse-costs-period');
     periodSel?.addEventListener('change', () => {
-      this._period = periodSel.value; this._lastSig = null; this._fetchData();
+      this._period = periodSel.value;
+      // FIX-2026-07-04 C2 : annuler le fetch précédent avant de relancer
+      // (sinon _fetching=true bloque le nouveau fetch)
+      if (this._abort) this._abort.abort();
+      this._abort = new AbortController();
+      this._lastSig = null;
+      this._fetching = false;
+      this._fetchData();
     });
     this._el?.querySelectorAll('.hse-costs__sort').forEach(th => {
       th.addEventListener('click', () => {

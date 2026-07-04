@@ -335,7 +335,7 @@ export class ConfigView {
       this._renderCatalogue(); this._populateRefSelect();
     } catch (e) {
       if (e.name === 'AbortError') return;
-      this._setCatBody(`<div class="hse-error">Erreur catalogue — ${e.message}</div>`);
+      this._setCatBody(`<div class="hse-error">Erreur catalogue — ${this._esc(e.message)}</div>`);
     } finally { this._catFetching = false; }
   }
 
@@ -593,16 +593,22 @@ export class ConfigView {
       this._renderMeta();
     } catch (e) {
       if (e.name === 'AbortError') return;
-      this._setMetaBody(`<div class="hse-error">Erreur meta — ${e.message}</div>`);
+      this._setMetaBody(`<div class="hse-error">Erreur meta — ${this._esc(e.message)}</div>`);
     } finally { this._metaFetching = false; }
   }
 
   async _loadDiffPreview() {
     try {
-      const r = await this._ctx.hseFetch('/api/hse/meta/sync/preview', { signal: this._abort?.signal });
+      const r = await this._ctx.hseFetch('/api/hse/meta/sync/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+        signal: this._abort?.signal,
+      });
       if (!r.ok) return;
       const data = await r.json();
-      const count = (data.to_add?.length ?? 0) + (data.to_remove?.length ?? 0);
+      // FIX-2026-07-04 C7 : compter aussi to_update (to_remove toujours [] côté backend)
+      const count = (data.to_add?.length ?? 0) + (data.to_update?.length ?? 0);
       if (!count) return;
       const banner = this._el?.querySelector('#hse-cfg-diff-banner');
       const msg = this._el?.querySelector('#hse-cfg-diff-msg');
@@ -677,7 +683,7 @@ export class ConfigView {
       this._renderPricing();
     } catch (e) {
       if (e.name === 'AbortError') return;
-      this._setPricingBody(`<div class="hse-error">Erreur tarification — ${e.message}</div>`);
+      this._setPricingBody(`<div class="hse-error">Erreur tarification — ${this._esc(e.message)}</div>`);
     } finally { this._pricingFetching = false; }
   }
 

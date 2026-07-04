@@ -20,13 +20,11 @@ class HseFrontendManifestView(HseBaseView):
         super().__init__(hass)
 
     async def get(self, request: web.Request) -> web.Response:
-        # Import lazy pour éviter les cycles et respecter la règle DELTA-010
-        try:
-            from ...frontend_manifest import HSE_TABS, HSE_FEATURES, HSE_REQUIRE_ADMIN
-        except ImportError:
-            HSE_TABS = ["overview", "diagnostic", "scan", "config", "custom", "cards", "migration", "costs"]
-            HSE_FEATURES = {}
-            HSE_REQUIRE_ADMIN = True
+        # FIX-2026-07-04 C3 : import d'un module inexistant supprimé.
+        # Les valeurs sont maintenant définies localement (source unique de vérité).
+        HSE_TABS = ["overview", "diagnostic", "scan", "config", "custom", "cards", "migration", "costs"]
+        HSE_FEATURES = {}
+        HSE_REQUIRE_ADMIN = True
 
         return self.json_ok({
             "version": VERSION,

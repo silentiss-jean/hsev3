@@ -18,6 +18,7 @@
  */
 
 import { hseFetch } from './hse_fetch.js';
+import { escHtml } from './hse_esc.js';
 
 /* ── Onglets ─────────────────────────────────────────────────────────────── */
 const TABS = [
@@ -257,7 +258,7 @@ export class HseShell {
   }
 
   _showError(msg) {
-    this._view.innerHTML = `<div class="hse-error">${msg}</div>`;
+    this._view.innerHTML = `<div class="hse-error">${escHtml(msg)}</div>`;
   }
 
   _buildCtx() {

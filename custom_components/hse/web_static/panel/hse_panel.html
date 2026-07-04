@@ -131,6 +131,8 @@
 
     // Étape 2 : attendre le token HA
     window.addEventListener('message', async function onAuth(event) {
+      // Sécurité : on n'accepte que les messages de notre parent (hse_panel.js)
+      if (event.source !== window.parent) return;
       const msg = event.data;
       if (!msg || msg.type !== 'hse-auth' || !msg.token) return;
 
