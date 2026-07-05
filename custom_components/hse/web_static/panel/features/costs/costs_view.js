@@ -4,7 +4,11 @@
  * Affiche : tableau coûts par appareil, filtre période, export CSV/JSON
  * Endpoints : GET /api/hse/costs?period= (polling 60s), GET /api/hse/export
  * Règles V3 : R1-R5
+ * FIX-2026-07-04 M2 : DOM construit une fois dans mount(), mise à jour via textContent
+ * FIX-2026-07-04 C2 : annulation fetch précédent avant relance après changement période
  */
+
+import { escHtml, escAttr } from '../../shared/hse_esc.js';
 
 const CSS = `
 .hse-costs { display: flex; flex-direction: column; gap: 20px; }
@@ -57,6 +61,8 @@ export class CostsView {
     this._mounted = false; this._fetching = false;
     this._lastSig = null; this._timer = null; this._data = null;
     this._period = 'month'; this._sortCol = 'cost_ttc_eur'; this._sortDir = 'desc';
+    // M2: refs DOM pour patch textContent
+    this._els = {};
   }
 
   mount(el, ctx) {
@@ -111,53 +117,68 @@ export class CostsView {
     const totalKwh = data.total_kwh ?? 0;
     const totalTtc = data.total_ttc_eur ?? 0;
 
-    this._el.innerHTML = `
-      <div class="hse-costs">
-        <div class="hse-costs__toolbar">
-          <select id="hse-costs-period" class="hse-costs__period">
-            ${PERIODS.map(p => `<option value="${p.value}" ${p.value === this._period ? 'selected' : ''}>${p.label}</option>`).join('')}
-          </select>
-          <div class="hse-costs__export">
-            <button id="hse-costs-export-csv" class="hse-btn hse-btn--ghost hse-btn--sm">📥 CSV</button>
-            <button id="hse-costs-export-json" class="hse-btn hse-btn--ghost hse-btn--sm">📥 JSON</button>
+    // M2: première fois → construire le DOM complet et stocker les refs
+    if (!this._els.totalValue) {
+      this._el.innerHTML = `
+        <div class="hse-costs">
+          <div class="hse-costs__toolbar">
+            <select id="hse-costs-period" class="hse-costs__period">
+              ${PERIODS.map(p => `<option value="${p.value}" ${p.value === this._period ? 'selected' : ''}>${p.label}</option>`).join('')}
+            </select>
+            <div class="hse-costs__export">
+              <button id="hse-costs-export-csv" class="hse-btn hse-btn--ghost hse-btn--sm">📥 CSV</button>
+              <button id="hse-costs-export-json" class="hse-btn hse-btn--ghost hse-btn--sm">📥 JSON</button>
+            </div>
+            <div class="hse-costs__total-box">
+              <span class="hse-costs__total-label">Total période</span>
+              <span class="hse-costs__total-value" id="hse-total-value">${totalTtc.toFixed(2)} €</span>
+              <span class="hse-costs__total-sub" id="hse-total-kwh">${totalKwh.toFixed(2)} kWh</span>
+            </div>
           </div>
-          <div class="hse-costs__total-box">
-            <span class="hse-costs__total-label">Total période</span>
-            <span class="hse-costs__total-value">${totalTtc.toFixed(2)} €</span>
-            <span class="hse-costs__total-sub">${totalKwh.toFixed(2)} kWh</span>
+          <div class="hse-costs__table-wrap">
+            <table class="hse-costs__table">
+              <thead>
+                <tr>
+                  <th>Appareil</th>
+                  <th>Pièce</th>
+                  <th class="hse-costs__sort ${this._sortCol === 'power_w' ? this._sortDir : ''}" data-sort="power_w">Puissance</th>
+                  <th class="hse-costs__sort ${this._sortCol === 'energy_kwh' ? this._sortDir : ''}" data-sort="energy_kwh">Énergie</th>
+                  <th class="hse-costs__sort ${this._sortCol === 'cost_ht_eur' ? this._sortDir : ''}" data-sort="cost_ht_eur">Coût HT</th>
+                  <th class="hse-costs__sort ${this._sortCol === 'cost_ttc_eur' ? this._sortDir : ''}" data-sort="cost_ttc_eur">Coût TTC</th>
+                  <th>% Total</th>
+                </tr>
+              </thead>
+              <tbody id="hse-costs-tbody">
+                ${items.length ? items.map(item => this._renderRow(item, totalTtc)).join('') : '<tr><td colspan="7" class="hse-empty">Aucun appareil sélectionné</td></tr>'}
+              </tbody>
+            </table>
           </div>
-        </div>
-        <div class="hse-costs__table-wrap">
-          <table class="hse-costs__table">
-            <thead>
-              <tr>
-                <th>Appareil</th>
-                <th>Pièce</th>
-                <th class="hse-costs__sort ${this._sortCol === 'power_w' ? this._sortDir : ''}" data-sort="power_w">Puissance</th>
-                <th class="hse-costs__sort ${this._sortCol === 'energy_kwh' ? this._sortDir : ''}" data-sort="energy_kwh">Énergie</th>
-                <th class="hse-costs__sort ${this._sortCol === 'cost_ht_eur' ? this._sortDir : ''}" data-sort="cost_ht_eur">Coût HT</th>
-                <th class="hse-costs__sort ${this._sortCol === 'cost_ttc_eur' ? this._sortDir : ''}" data-sort="cost_ttc_eur">Coût TTC</th>
-                <th>% Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${items.length ? items.map(item => this._renderRow(item, totalTtc)).join('') : '<tr><td colspan="7" class="hse-empty">Aucun appareil sélectionné</td></tr>'}
-            </tbody>
-          </table>
-        </div>
-      </div>`;
-    this._bindEvents();
+        </div>`;
+      // Stocker les refs
+      this._els = {
+        totalValue: this._el.querySelector('#hse-total-value'),
+        totalKwh: this._el.querySelector('#hse-total-kwh'),
+        tbody: this._el.querySelector('#hse-costs-tbody'),
+      };
+      this._bindEvents();
+    } else {
+      // Mises à jour textContent uniquement
+      this._els.totalValue.textContent = totalTtc.toFixed(2) + ' €';
+      this._els.totalKwh.textContent = totalKwh.toFixed(2) + ' kWh';
+      // Rebuild tbody (peu de lignes, OK)
+      this._els.tbody.innerHTML = items.length ? items.map(item => this._renderRow(item, totalTtc)).join('') : '<tr><td colspan="7" class="hse-empty">Aucun appareil sélectionné</td></tr>';
+    }
   }
 
   _renderRow(item, totalTtc) {
     const pct = totalTtc > 0 ? Math.round((item.cost_ttc_eur / totalTtc) * 100) : 0;
     return `
-      <tr data-entity-id="${this._attrVal(item.entity_id)}">
+      <tr data-entity-id="${escAttr(item.entity_id)}">
         <td>
-          <div class="hse-costs__name">${this._esc(item.name ?? item.entity_id)}</div>
-          <div class="hse-costs__eid">${this._esc(item.entity_id)}</div>
+          <div class="hse-costs__name">${escHtml(item.name ?? item.entity_id)}</div>
+          <div class="hse-costs__eid">${escHtml(item.entity_id)}</div>
         </td>
-        <td><span class="hse-costs__room">${this._esc(item.room ?? '—')}</span></td>
+        <td><span class="hse-costs__room">${escHtml(item.room ?? '—')}</span></td>
         <td><span class="hse-costs__power">${item.power_w} W</span></td>
         <td><span class="hse-costs__energy">${item.energy_kwh.toFixed(3)} kWh</span></td>
         <td><span class="hse-costs__cost-ht">${item.cost_ht_eur.toFixed(2)} €</span></td>
@@ -184,7 +205,6 @@ export class CostsView {
     periodSel?.addEventListener('change', () => {
       this._period = periodSel.value;
       // FIX-2026-07-04 C2 : annuler le fetch précédent avant de relancer
-      // (sinon _fetching=true bloque le nouveau fetch)
       if (this._abort) this._abort.abort();
       this._abort = new AbortController();
       this._lastSig = null;
@@ -214,12 +234,10 @@ export class CostsView {
       a.click(); URL.revokeObjectURL(url);
     } catch (e) {
       if (e.name === 'AbortError') return;
-      alert(`Erreur export : ${e.message}`);
+      // FIX-2026-07-04 M12 : alert() → hse-error
+      this._el.innerHTML = `<div class="hse-error">Erreur export : ${escHtml(e.message)}</div>`;
     }
   }
 
-  _renderError(err) { this._el.innerHTML = `<div class="hse-error">Erreur : ${err.message}</div>`; }
-
-  _attrVal(str) { if (str == null) return ''; return String(str).replace(/\\/g, '\\\\').replace(/"/g, '\\"'); }
-  _esc(str) { if (str == null) return ''; return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;'); }
+  _renderError(err) { this._el.innerHTML = `<div class="hse-error">Erreur : ${escHtml(err.message)}</div>`; }
 }
