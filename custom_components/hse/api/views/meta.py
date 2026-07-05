@@ -1,6 +1,7 @@
 """
 HSE V3 — Endpoints meta
 GET  /api/hse/meta                — pièces, types, assignations
+POST /api/hse/meta                — création manuelle pièce/type (R1)
 POST /api/hse/meta/sync/preview   — diff avant application
 POST /api/hse/meta/sync/apply     — applique les assignations
 """
@@ -62,6 +63,98 @@ class HseMetaView(HseBaseView):
             "types": types,
             "assignments": assignments_out,
         })
+
+    async def post(self, request: web.Request) -> web.Response:
+        """R1 — Création manuelle de pièce ou type.
+
+        Body attendu :
+            {"action": "create_room", "name": "Garage"}
+            {"action": "create_type", "name": "Chauffe-eau"}
+            {"action": "rename_room", "id": "garage", "name": "Atelier"}
+            {"action": "delete_room", "id": "garage"}
+            {"action": "assign", "entity_id": "sensor.x", "room_id": "garage", "type_id": "Chauffe-eau"}
+        """
+        try:
+            body: dict[str, Any] = await request.json()
+        except Exception:
+            return self.json_error("Body JSON invalide", HTTPStatus.UNPROCESSABLE_ENTITY)
+
+        action = body.get("action")
+        if not action:
+            return self.json_error("action requis", HTTPStatus.UNPROCESSABLE_ENTITY)
+
+        mgr = HseStorageManager(self.hass)
+        meta_store = await mgr.async_load_meta()
+        meta = meta_store.setdefault("meta", {})
+        rooms = meta.setdefault("rooms", [])
+        assignments = meta.setdefault("assignments", {})
+
+        if action == "create_room":
+            name = (body.get("name") or "").strip()
+            if not name:
+                return self.json_error("name requis", HTTPStatus.UNPROCESSABLE_ENTITY)
+            room_id = name.lower().replace(" ", "_").replace("-", "_")
+            # Éviter les doublons
+            if any((r.get("id") if isinstance(r, dict) else r) == room_id for r in rooms):
+                return self.json_error(f"Pièce '{room_id}' existe déjà", HTTPStatus.CONFLICT)
+            rooms.append({"id": room_id, "name": name})
+            await mgr.async_save_meta(meta_store)
+            return self.json_ok({"id": room_id, "name": name})
+
+        if action == "create_type":
+            name = (body.get("name") or "").strip()
+            if not name:
+                return self.json_error("name requis", HTTPStatus.UNPROCESSABLE_ENTITY)
+            # Les types sont déduits des assignments ; on ne stocke pas de liste séparée.
+            # Pour créer un type, on l'ajoute à une liste "types" dans le store.
+            types_list = meta.setdefault("types", [])
+            if name in types_list:
+                return self.json_error(f"Type '{name}' existe déjà", HTTPStatus.CONFLICT)
+            types_list.append(name)
+            await mgr.async_save_meta(meta_store)
+            return self.json_ok({"name": name})
+
+        if action == "rename_room":
+            room_id = body.get("id")
+            name = (body.get("name") or "").strip()
+            if not room_id or not name:
+                return self.json_error("id et name requis", HTTPStatus.UNPROCESSABLE_ENTITY)
+            found = False
+            for r in rooms:
+                if isinstance(r, dict) and r.get("id") == room_id:
+                    r["name"] = name
+                    found = True
+                    break
+            if not found:
+                return self.json_error(f"Pièce '{room_id}' introuvable", HTTPStatus.NOT_FOUND)
+            await mgr.async_save_meta(meta_store)
+            return self.json_ok({"id": room_id, "name": name})
+
+        if action == "delete_room":
+            room_id = body.get("id")
+            if not room_id:
+                return self.json_error("id requis", HTTPStatus.UNPROCESSABLE_ENTITY)
+            meta["rooms"] = [r for r in rooms if (r.get("id") if isinstance(r, dict) else r) != room_id]
+            # Retirer les assignments qui référencent cette pièce
+            for asn in assignments.values():
+                if isinstance(asn, dict) and asn.get("room_id") == room_id:
+                    asn["room_id"] = None
+            await mgr.async_save_meta(meta_store)
+            return self.json_ok({"deleted": room_id})
+
+        if action == "assign":
+            entity_id = body.get("entity_id")
+            if not entity_id:
+                return self.json_error("entity_id requis", HTTPStatus.UNPROCESSABLE_ENTITY)
+            asn = assignments.setdefault(entity_id, {})
+            if "room_id" in body:
+                asn["room_id"] = body.get("room_id")
+            if "type_id" in body:
+                asn["type_id"] = body.get("type_id")
+            await mgr.async_save_meta(meta_store)
+            return self.json_ok({"entity_id": entity_id, "room_id": asn.get("room_id"), "type_id": asn.get("type_id")})
+
+        return self.json_error(f"action inconnue: {action}", HTTPStatus.UNPROCESSABLE_ENTITY)
 
 
 class HseMetaSyncPreviewView(HseBaseView):
