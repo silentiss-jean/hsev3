@@ -398,6 +398,8 @@ export class ScanView {
     this._scanQ       = '';
     this._scanDomain  = '';
     this._scanTimer   = null;
+    this._scanDebounce = null;
+    this._catDebounce  = null;
     this._selected    = new Set();
 
     this._catFetching = false;
@@ -405,6 +407,10 @@ export class ScanView {
     this._catSig      = null;
     this._catPage     = 1;
     this._catStatus   = 'all';
+
+    // FIX-2026-07-04 M5 : flags anti-spam
+    this._rescanning  = false;
+    this._triaging    = false;
   }
 
   mount(el, ctx) {
@@ -421,6 +427,8 @@ export class ScanView {
 
   unmount() {
     clearTimeout(this._scanTimer);
+    if (this._scanDebounce) clearTimeout(this._scanDebounce);
+    if (this._catDebounce) clearTimeout(this._catDebounce);
     if (this._abort) this._abort.abort();
     this._abort = null;
     this._el    = null;
@@ -487,10 +495,9 @@ export class ScanView {
 
   _bindEvents(root) {
     const search = root.querySelector('.hse-scan__search');
-    let debounce;
     search.addEventListener('input', () => {
-      clearTimeout(debounce);
-      debounce = setTimeout(() => {
+      if (this._scanDebounce) clearTimeout(this._scanDebounce);
+      this._scanDebounce = setTimeout(() => {
         this._scanQ    = search.value.trim();
         this._scanPage = 1;
         this._selected.clear();
@@ -565,9 +572,11 @@ export class ScanView {
     }
   }
 
-  async _triggerRescan() {
+async _triggerRescan() {
+    if (this._rescanning) return;
+    this._rescanning = true;
     const btn = this._el?.querySelector('#hse-rescan-btn');
-    if (!btn) return;
+    if (!btn) { this._rescanning = false; return; }
     btn.disabled = true;
     btn.textContent = '\u27f3 Scan en cours\u2026';
     try {
@@ -584,19 +593,26 @@ export class ScanView {
       btn.textContent = '\u2713 Scan termin\u00e9';
       setTimeout(() => { btn.disabled = false; btn.textContent = '\u21bb Re-scanner'; }, 2500);
     } catch (e) {
-      if (e.name === 'AbortError') return;
-      // hseFetch lève HseFetchError avec .status — on intercepte le 409 (scan déjà en cours)
+      if (e.name === 'AbortError') { this._rescanning = false; return; }
       if (e.status === 409) {
         btn.textContent = '\u26a0 Scan d\u00e9j\u00e0 en cours';
         setTimeout(() => { btn.disabled = false; btn.textContent = '\u21bb Re-scanner'; }, 3000);
-        return;
+      } else {
+        btn.textContent = '\u26a0 Erreur';
+        setTimeout(() => { btn.disabled = false; btn.textContent = '\u21bb Re-scanner'; }, 3000);
       }
+    } finally {
+      this._rescanning = false;
+    }
+  }
       btn.textContent = '\u26a0 Erreur';
       setTimeout(() => { btn.disabled = false; btn.textContent = '\u21bb Re-scanner'; }, 3000);
     }
   }
 
   async _triage(entityId, action) {
+    if (this._triaging) return;
+    this._triaging = true;
     const btn = this._el?.querySelector(`[data-triage-id="${this._attrVal(entityId)}"][data-triage-action="${action}"]`);
     if (btn) { btn.disabled = true; btn.textContent = '\u2026'; }
     try {
@@ -609,9 +625,11 @@ export class ScanView {
       this._selected.delete(entityId);
       await Promise.all([this._loadScan(), this._loadCatalogue()]);
     } catch (e) {
-      if (e.name === 'AbortError') return;
+      if (e.name === 'AbortError') { this._triaging = false; return; }
       if (btn) { btn.disabled = false; btn.textContent = action === 'select' ? '\u2713' : action === 'ignore' ? '\u2715' : '\u21ba'; }
       this._setScanBody(`<div class="hse-error">Triage \u00e9chou\u00e9 \u2014 ${escHtml(e.message)}</div>`);
+    } finally {
+      this._triaging = false;
     }
   }
 

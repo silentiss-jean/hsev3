@@ -32,6 +32,8 @@ class HsePanel extends HTMLElement {
     this._messageHandler = null;
     this._visibilityHandler = null;
     this._mounted = false;
+    // FIX-2026-07-04 M6 : rate-limit du visibilityHandler pour éviter reloads en rafale
+    this._lastVisibleReload = 0;
   }
 
   connectedCallback() {
@@ -70,19 +72,23 @@ class HsePanel extends HTMLElement {
     // Guard bureau virtuel macOS :
     // Au retour de bureau virtuel, l'iframe peut être vide (body sans enfants).
     // On détecte ce cas et on recharge l'iframe — elle re-enverra hse-ready → token re-transmis.
+    // FIX-2026-07-04 M6 : rate-limit à 1 reload/sec minimum pour éviter reloads en rafale.
     this._visibilityHandler = () => {
-      if (document.visibilityState === 'visible' && this._mounted) {
-        try {
-          const body = this._iframe?.contentDocument?.body;
-          if (body && body.children.length === 0) {
-            this._iframeReady = false;
-            this._iframe.src = '/hse-static/hse_panel.html';
-          }
-        } catch (e) {
-          // Cross-origin ou iframe non disponible — reload sécurisé
+      if (document.visibilityState !== 'visible' || !this._mounted) return;
+      const now = Date.now();
+      if (now - this._lastVisibleReload < 1000) return;
+      try {
+        const body = this._iframe?.contentDocument?.body;
+        if (body && body.children.length === 0) {
+          this._lastVisibleReload = now;
           this._iframeReady = false;
           this._iframe.src = '/hse-static/hse_panel.html';
         }
+      } catch (e) {
+        // Cross-origin ou iframe non disponible — reload sécurisé
+        this._lastVisibleReload = now;
+        this._iframeReady = false;
+        this._iframe.src = '/hse-static/hse_panel.html';
       }
     };
     document.addEventListener('visibilitychange', this._visibilityHandler);

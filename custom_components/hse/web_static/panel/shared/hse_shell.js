@@ -22,15 +22,18 @@ import { escHtml } from './hse_esc.js';
 
 /* ── Onglets ─────────────────────────────────────────────────────────────── */
 const TABS = [
-  { id: 'overview',    label: "Vue d'ensemble" },
-  { id: 'diagnostic',  label: 'Diagnostic'      },
-  { id: 'scan',        label: 'Détection'       },
-  { id: 'config',      label: 'Configuration'   },
-  { id: 'costs',       label: 'Coûts'           },
-  { id: 'migration',   label: 'Migration'       },
-  { id: 'cards',       label: 'Cartes YAML'     },
-  { id: 'custom',      label: 'Personnalisation'},
+  { id: 'overview',    label: "Vue d'ensemble", cls: 'OverviewView' },
+  { id: 'diagnostic',  label: 'Diagnostic',      cls: 'DiagnosticView' },
+  { id: 'scan',        label: 'Détection',       cls: 'ScanView'      },
+  { id: 'config',      label: 'Configuration',   cls: 'ConfigView'    },
+  { id: 'costs',       label: 'Coûts',           cls: 'CostsView'     },
+  { id: 'migration',   label: 'Migration',       cls: 'MigrationView' },
+  { id: 'cards',       label: 'Cartes YAML',     cls: 'CardsView'     },
+  { id: 'custom',      label: 'Personnalisation', cls: 'CustomView'  },
 ];
+
+// FIX-2026-07-04 m2 : whitelist des tabIds valides (anti injection URL)
+const VALID_TAB_IDS = new Set(TABS.map(t => t.id));
 
 /* ── CSS global (inliné — zéro fetch CSS au runtime) ─────────────────────── */
 const CSS = `
@@ -220,6 +223,11 @@ export class HseShell {
   }
 
   _switchTab(tabId) {
+    // FIX-2026-07-04 m2 : valider tabId contre la whitelist
+    if (!VALID_TAB_IDS.has(tabId)) {
+      console.warn('[HSE] tabId inconnu ignoré :', tabId);
+      return;
+    }
     this._activeTab = tabId;
     this._nav.querySelectorAll('[data-tab]').forEach(btn => {
       btn.setAttribute('aria-selected', btn.dataset.tab === tabId ? 'true' : 'false');
@@ -234,7 +242,10 @@ export class HseShell {
     try {
       const url = `/hse-static/features/${tabId}/${tabId}_view.js`;
       const mod = await import(url);
-      const ViewClass = mod.default ?? mod[Object.keys(mod)[0]];
+      // FIX-2026-07-04 m3 : préférer mod.default, puis export nommé explicite
+      const tabDef = TABS.find(t => t.id === tabId);
+      const ViewClass = mod.default
+        || (tabDef && typeof mod[tabDef.cls] === 'function' ? mod[tabDef.cls] : null);
       if (typeof ViewClass !== 'function') throw new Error(`${tabId}_view.js : pas de classe exportée`);
       if (this._activeTab !== tabId) return;
 
