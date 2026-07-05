@@ -4,7 +4,10 @@
  * Affiche : puissance live, conso 4 périodes, top5, by_room, by_type, référence
  * Endpoint : GET /api/hse/overview (polling 30s)
  * Règles V3 : R1-R5
+ * FIX-2026-07-04 M1 : DOM construit une fois dans mount(), mise à jour via textContent
  */
+
+import { escHtml } from '../../shared/hse_esc.js';
 
 const CSS = `
 .hse-overview { display: flex; flex-direction: column; gap: 20px; }
@@ -31,7 +34,7 @@ const CSS = `
 .hse-overview__top5-bar-fill { height: 100%; background: #e879f9; border-radius: 2px; transition: width 300ms ease; }
 .hse-overview__grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
 .hse-overview__list-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 14px; }
-.hse-overview__list-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.hse-overview__list-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,25,255,0.04); }
 .hse-overview__list-item:last-child { border-bottom: none; }
 .hse-overview__list-name { font-size: 0.875rem; color: rgba(255,255,255,0.8); }
 .hse-overview__list-value { font-size: 0.875rem; font-weight: 600; color: rgba(255,255,255,0.9); }
@@ -63,6 +66,8 @@ export class OverviewView {
     this._abort = null;
     this._mounted = false; this._fetching = false;
     this._lastSig = null; this._timer = null; this._data = null;
+    // M1: refs DOM pour patch textContent
+    this._els = {};
   }
 
   mount(el, ctx) {
@@ -127,88 +132,140 @@ export class OverviewView {
     const status = data.status ?? { level: 'warning', message: null };
     const statusClass = `hse-overview__status--${status.level}`;
     const statusIcon = status.level === 'ok' ? '✓' : status.level === 'warning' ? '⚠' : '✕';
-    // Le backend retourne message=null quand ok. On fournit un fallback
-    // contextuel plutôt que "Statut inconnu" trompeur.
     const statusMsg = status.message
       ?? (status.level === 'ok' ? 'Tous les capteurs sont actifs' : 'Aucun capteur actif');
 
-    this._el.innerHTML = `
-      <div class="hse-overview">
-        <div class="hse-overview__status ${statusClass}">
-          <span>${statusIcon}</span><span>${statusMsg}</span>
-        </div>
-        <div class="hse-overview__header">
-          <div class="hse-overview__card">
-            <span class="hse-overview__card-label">Puissance totale</span>
-            <span class="hse-overview__card-value">${powerNow.toLocaleString('fr-FR')}</span>
-            <span class="hse-overview__card-unit">watts</span>
+    // M1: première fois → construire le DOM complet et stocker les refs
+    if (!this._els.powerValue) {
+      this._el.innerHTML = `
+        <div class="hse-overview">
+          <div class="hse-overview__status ${statusClass}">
+            <span>${statusIcon}</span><span class="hse-overview__status-msg">${statusMsg}</span>
           </div>
-          <div class="hse-overview__card">
-            <span class="hse-overview__card-label">Aujourd'hui</span>
-            <span class="hse-overview__card-value">${(consumption.today_kwh ?? 0).toFixed(2)}</span>
-            <span class="hse-overview__card-unit">kWh</span>
-            <span class="hse-overview__card-sub">${(consumption.today_eur ?? 0).toFixed(2)} € TTC</span>
-          </div>
-          <div class="hse-overview__card">
-            <span class="hse-overview__card-label">Ce mois</span>
-            <span class="hse-overview__card-value">${(consumption.month_kwh ?? 0).toFixed(1)}</span>
-            <span class="hse-overview__card-unit">kWh</span>
-            <span class="hse-overview__card-sub">${(consumption.month_eur ?? 0).toFixed(2)} € TTC</span>
-          </div>
-        </div>
-        <div>
-          <div class="hse-overview__section-title">📊 Consommation</div>
-          <div class="hse-overview__consumption">
-            ${this._renderConsumptionCard("Aujourd'hui", consumption.today_kwh, consumption.today_eur)}
-            ${this._renderConsumptionCard('Cette semaine', consumption.week_kwh, consumption.week_eur)}
-            ${this._renderConsumptionCard('Ce mois', consumption.month_kwh, consumption.month_eur)}
-            ${this._renderConsumptionCard('Cette année', consumption.year_kwh, consumption.year_eur)}
-          </div>
-        </div>
-        ${refSensor ? `
-        <div class="hse-overview__ref-card">
-          <span class="hse-overview__ref-icon">⭐</span>
-          <div class="hse-overview__ref-info">
-            <div class="hse-overview__ref-title">Capteur de référence</div>
-            <div class="hse-overview__ref-value">${refSensor.power_w.toLocaleString('fr-FR')} W</div>
-            <div class="hse-overview__ref-delta ${refSensor.delta_w >= 0 ? 'positive' : 'negative'}">
-              Δ ${refSensor.delta_w >= 0 ? '+' : ''}${refSensor.delta_w.toFixed(1)} W (${refSensor.delta_pct >= 0 ? '+' : ''}${refSensor.delta_pct}%)
+          <div class="hse-overview__header">
+            <div class="hse-overview__card">
+              <span class="hse-overview__card-label">Puissance totale</span>
+              <span class="hse-overview__card-value" id="hse-power-value">${powerNow.toLocaleString('fr-FR')}</span>
+              <span class="hse-overview__card-unit">watts</span>
+            </div>
+            <div class="hse-overview__card">
+              <span class="hse-overview__card-label">Aujourd'hui</span>
+              <span class="hse-overview__card-value" id="hse-today-kwh">${(consumption.today_kwh ?? 0).toFixed(2)}</span>
+              <span class="hse-overview__card-unit">kWh</span>
+              <span class="hse-overview__card-sub" id="hse-today-eur">${(consumption.today_eur ?? 0).toFixed(2)} € TTC</span>
+            </div>
+            <div class="hse-overview__card">
+              <span class="hse-overview__card-label">Ce mois</span>
+              <span class="hse-overview__card-value" id="hse-month-kwh">${(consumption.month_kwh ?? 0).toFixed(1)}</span>
+              <span class="hse-overview__card-unit">kWh</span>
+              <span class="hse-overview__card-sub" id="hse-month-eur">${(consumption.month_eur ?? 0).toFixed(2)} € TTC</span>
             </div>
           </div>
-        </div>` : ''}
-        <div>
-          <div class="hse-overview__section-title">🔥 Top 5 consommateurs (live)</div>
-          <div class="hse-overview__top5">
-            ${top5.length ? top5.map((item, idx) => this._renderTop5Item(item, idx, top5[0]?.power_w ?? 1)).join('') : '<div class="hse-empty">Aucun capteur actif</div>'}
+          <div>
+            <div class="hse-overview__section-title">📊 Consommation</div>
+            <div class="hse-overview__consumption">
+              ${this._renderConsumptionCard("Aujourd'hui", consumption.today_kwh, consumption.today_eur, 'today')}
+              ${this._renderConsumptionCard('Cette semaine', consumption.week_kwh, consumption.week_eur, 'week')}
+              ${this._renderConsumptionCard('Ce mois', consumption.month_kwh, consumption.month_eur, 'month')}
+              ${this._renderConsumptionCard('Cette année', consumption.year_kwh, consumption.year_eur, 'year')}
+            </div>
           </div>
-        </div>
-        <div class="hse-overview__grid-2">
-          <div class="hse-overview__list-card">
-            <div class="hse-overview__section-title">🏠 Par pièce</div>
-            ${byRoom.length ? byRoom.map(r => `
-              <div class="hse-overview__list-item">
-                <span class="hse-overview__list-name">${this._esc(r.room)}</span>
-                <span><span class="hse-overview__list-value">${r.power_w.toFixed(1)} W</span><span class="hse-overview__list-pct">(${r.pct}%)</span></span>
-              </div>`).join('') : '<div class="hse-empty">Aucune pièce assignée</div>'}
+          ${refSensor ? `
+          <div class="hse-overview__ref-card">
+            <span class="hse-overview__ref-icon">⭐</span>
+            <div class="hse-overview__ref-info">
+              <div class="hse-overview__ref-title">Capteur de référence</div>
+              <div class="hse-overview__ref-value" id="hse-ref-power">${refSensor.power_w.toLocaleString('fr-FR')} W</div>
+              <div class="hse-overview__ref-delta ${refSensor.delta_w >= 0 ? 'positive' : 'negative'}" id="hse-ref-delta">
+                Δ ${refSensor.delta_w >= 0 ? '+' : ''}${refSensor.delta_w.toFixed(1)} W (${refSensor.delta_pct >= 0 ? '+' : ''}${refSensor.delta_pct}%)
+              </div>
+            </div>
+          </div>` : ''}
+          <div>
+            <div class="hse-overview__section-title">🔥 Top 5 consommateurs (live)</div>
+            <div class="hse-overview__top5" id="hse-top5-container">
+              ${top5.length ? top5.map((item, idx) => this._renderTop5Item(item, idx, top5[0]?.power_w ?? 1)).join('') : '<div class="hse-empty">Aucun capteur actif</div>'}
+            </div>
           </div>
-          <div class="hse-overview__list-card">
-            <div class="hse-overview__section-title">⚡ Par type</div>
-            ${byType.length ? byType.map(t => `
-              <div class="hse-overview__list-item">
-                <span class="hse-overview__list-name">${this._esc(t.type)}</span>
-                <span class="hse-overview__list-value">${t.power_w.toFixed(1)} W</span>
-              </div>`).join('') : '<div class="hse-empty">Aucun type assigné</div>'}
+          <div class="hse-overview__grid-2">
+            <div class="hse-overview__list-card">
+              <div class="hse-overview__section-title">🏠 Par pièce</div>
+              <div id="hse-by-room-container">
+                ${byRoom.length ? byRoom.map(r => `
+                  <div class="hse-overview__list-item">
+                    <span class="hse-overview__list-name">${escHtml(r.room)}</span>
+                    <span><span class="hse-overview__list-value" id="hse-room-${r.room.replace(/\s+/g,'-')}-power">${r.power_w.toFixed(1)} W</span><span class="hse-overview__list-pct">(${r.pct}%)</span></span>
+                  </div>`).join('') : '<div class="hse-empty">Aucune pièce assignée</div>'}
+              </div>
+            </div>
+            <div class="hse-overview__list-card">
+              <div class="hse-overview__section-title">⚡ Par type</div>
+              <div id="hse-by-type-container">
+                ${byType.length ? byType.map(t => `
+                  <div class="hse-overview__list-item">
+                    <span class="hse-overview__list-name">${escHtml(t.type)}</span>
+                    <span class="hse-overview__list-value" id="hse-type-${t.type.replace(/\s+/g,'-')}-power">${t.power_w.toFixed(1)} W</span>
+                  </div>`).join('') : '<div class="hse-empty">Aucun type assigné</div>'}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>`;
+        </div>`;
+      // Stocker les refs
+      this._els = {
+        statusMsg: this._el.querySelector('.hse-overview__status-msg'),
+        powerValue: this._el.querySelector('#hse-power-value'),
+        todayKwh: this._el.querySelector('#hse-today-kwh'),
+        todayEur: this._el.querySelector('#hse-today-eur'),
+        monthKwh: this._el.querySelector('#hse-month-kwh'),
+        monthEur: this._el.querySelector('#hse-month-eur'),
+        refPower: this._el.querySelector('#hse-ref-power'),
+        refDelta: this._el.querySelector('#hse-ref-delta'),
+        top5Container: this._el.querySelector('#hse-top5-container'),
+        byRoomContainer: this._el.querySelector('#hse-by-room-container'),
+        byTypeContainer: this._el.querySelector('#hse-by-type-container'),
+      };
+    } else {
+      // Mises à jour textContent uniquement
+      this._els.statusMsg.textContent = statusMsg;
+      this._els.statusMsg.parentElement.className = `hse-overview__status ${statusClass}`;
+      this._els.statusMsg.previousElementSibling.textContent = statusIcon;
+      this._els.powerValue.textContent = powerNow.toLocaleString('fr-FR');
+      this._els.todayKwh.textContent = (consumption.today_kwh ?? 0).toFixed(2);
+      this._els.todayEur.textContent = `${(consumption.today_eur ?? 0).toFixed(2)} € TTC`;
+      this._els.monthKwh.textContent = (consumption.month_kwh ?? 0).toFixed(1);
+      this._els.monthEur.textContent = `${(consumption.month_eur ?? 0).toFixed(2)} € TTC`;
+      if (refSensor && this._els.refPower) {
+        this._els.refPower.textContent = refSensor.power_w.toLocaleString('fr-FR') + ' W';
+        this._els.refDelta.textContent = `Δ ${refSensor.delta_w >= 0 ? '+' : ''}${refSensor.delta_w.toFixed(1)} W (${refSensor.delta_pct >= 0 ? '+' : ''}${refSensor.delta_pct}%)`;
+        this._els.refDelta.className = `hse-overview__ref-delta ${refSensor.delta_w >= 0 ? 'positive' : 'negative'}`;
+      }
+      // Top5: rebuild (peu d'items, OK)
+      if (this._els.top5Container) {
+        this._els.top5Container.innerHTML = top5.length ? top5.map((item, idx) => this._renderTop5Item(item, idx, top5[0]?.power_w ?? 1)).join('') : '<div class="hse-empty">Aucun capteur actif</div>';
+      }
+      // By room: patch textContent
+      if (this._els.byRoomContainer) {
+        byRoom.forEach(r => {
+          const el = this._els.byRoomContainer.querySelector(`#hse-room-${r.room.replace(/\s+/g,'-')}-power`);
+          if (el) el.textContent = r.power_w.toFixed(1) + ' W';
+        });
+      }
+      // By type: patch textContent
+      if (this._els.byTypeContainer) {
+        byType.forEach(t => {
+          const el = this._els.byTypeContainer.querySelector(`#hse-type-${t.type.replace(/\s+/g,'-')}-power`);
+          if (el) el.textContent = t.power_w.toFixed(1) + ' W';
+        });
+      }
+    }
   }
 
-  _renderConsumptionCard(label, kwh, eur) {
+  _renderConsumptionCard(label, kwh, eur, id) {
     return `
       <div class="hse-overview__consumption-card">
         <div class="hse-overview__consumption-title">${label}</div>
-        <div class="hse-overview__consumption-kwh">${(kwh ?? 0).toFixed(2)} kWh</div>
-        <div class="hse-overview__consumption-eur">${(eur ?? 0).toFixed(2)} €</div>
+        <div class="hse-overview__consumption-kwh" id="hse-${id}-kwh">${(kwh ?? 0).toFixed(2)} kWh</div>
+        <div class="hse-overview__consumption-eur" id="hse-${id}-eur">${(eur ?? 0).toFixed(2)} €</div>
       </div>`;
   }
 
@@ -218,15 +275,13 @@ export class OverviewView {
       <div class="hse-overview__top5-item">
         <span class="hse-overview__top5-rank">${idx + 1}</span>
         <div class="hse-overview__top5-info">
-          <div class="hse-overview__top5-name">${this._esc(item.name ?? item.entity_id)}</div>
-          <div class="hse-overview__top5-eid">${this._esc(item.entity_id)}</div>
+          <div class="hse-overview__top5-name">${escHtml(item.name ?? item.entity_id)}</div>
+          <div class="hse-overview__top5-eid">${escHtml(item.entity_id)}</div>
         </div>
         <div class="hse-overview__top5-bar"><div class="hse-overview__top5-bar-fill" style="width:${pct}%"></div></div>
         <span class="hse-overview__top5-power">${item.power_w.toFixed(1)} W</span>
       </div>`;
   }
 
-  _renderError(err) { this._el.innerHTML = `<div class="hse-error">Erreur : ${err.message}</div>`; }
-
-  _esc(str) { if (str == null) return ''; return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;'); }
+  _renderError(err) { this._el.innerHTML = `<div class="hse-error">Erreur : ${escHtml(err.message)}</div>`; }
 }
