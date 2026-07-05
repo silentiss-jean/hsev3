@@ -26,10 +26,13 @@ Outil de productivité pure — aucune donnée live, aucun calcul métier, aucun
 
 | Données | Source |
 |---|---|
-| Liste appareils | `hse.store.js` (synchrone, déjà chargé au boot) |
-| Génération YAML | `yamlComposer.js` (calcul local) |
+| Liste appareils | `GET /api/hse/catalogue` (fetch direct) |
+| Génération YAML | `cards_view.js` (calcul local, à implémenter) |
 
-Aucun fetch API. Si le store n'est pas prêt au `mount()`, attendre le signal `store:catalogue:ready`.
+> ⚠️ **Note (2026-07-04)** : `yamlComposer.js` n'existe pas dans le code actuel.
+> La génération YAML sera implémentée directement dans `cards_view.js` (Commit 4 / S3).
+
+Aucun fetch d'écriture. Le catalogue est lu via l'API au `mount()`.
 
 ---
 
@@ -46,7 +49,7 @@ Aucun fetch API. Si le store n'est pas prêt au `mount()`, attendre le signal `s
 ---
 
 ## Règles métier
-- `yamlComposer.js` V2 est conservé intact — ne pas réécrire
+- La génération YAML est implémentée dans `cards_view.js` (à faire en S3)
 - Les `entity_id` dans le YAML sont ceux du catalogue HSE (`sensor.hse_*`)
 - Appareil inactif : grisé mais sélectionnable
 - Option "coût" ajoute un `secondary_info` vers `sensor.hse_*_cost`
@@ -55,12 +58,7 @@ Aucun fetch API. Si le store n'est pas prêt au `mount()`, attendre le signal `s
 
 ## Fichiers concernés
 web_static/panel/features/cards/
-├── cards.view.js
-├── cards.html.js
-└── cards.css
-
-web_static/panel/shared/
-└── yamlComposer.js ← conservé intact V2
+└── cards_view.js
 
 
 ---

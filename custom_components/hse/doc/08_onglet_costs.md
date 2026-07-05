@@ -29,7 +29,7 @@ Onglet le plus complexe techniquement — les règles R1–R5 y sont particuliè
 |---|---|---|
 | Tableau coûts | `GET /api/hse/costs` | 60 s |
 | Historique 12 mois | `GET /api/hse/history` | Aucun (une fois) |
-| Export CSV | `GET /api/hse/costs/export?format=csv` | À la demande |
+| Export CSV | `GET /api/hse/export?format=csv` | À la demande |
 
 ### Forme de `/api/hse/costs`
 ```json
@@ -107,11 +107,7 @@ Aucun calcul de coût côté client. Jamais d'extrapolation ou de proratisation 
 
 ## Fichiers concernés
 web_static/panel/features/costs/
-├── costs.view.js
-├── costs.table.js
-├── costs.chart.js
-├── costs.html.js
-└── costs.css
+└── costs_view.js
 
 
 ---

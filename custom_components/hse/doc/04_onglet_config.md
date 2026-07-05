@@ -42,7 +42,7 @@ Onglet le plus riche fonctionnellement — découpé en 3 sous-sections.
 | Sync metadata | `POST /api/hse/catalogue/refresh` | POST |
 | Pièces & types | `GET /api/hse/meta` | GET |
 | Créer pièce/type | `POST /api/hse/meta` | POST |
-| Diff preview | `GET /api/hse/meta/sync/preview` | GET |
+| Diff preview | `POST /api/hse/meta/sync/preview` | POST |
 | Appliquer diff | `POST /api/hse/meta/sync/apply` | POST |
 | Tarif (lecture) | `GET /api/hse/settings/pricing` | GET |
 | Tarif (écriture) | `PUT /api/hse/settings/pricing` | PUT |
@@ -73,12 +73,7 @@ Onglet le plus riche fonctionnellement — découpé en 3 sous-sections.
 
 ## Fichiers concernés
 web_static/panel/features/config/
-├── config.view.js
-├── config.appareils.js
-├── config.rooms.js
-├── config.pricing.js
-├── config.html.js
-└── config.css
+└── config_view.js
 
 
 ---

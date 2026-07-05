@@ -27,10 +27,14 @@ vers les capteurs V3 `sensor.hse_*`. Wizard guidé, utilisé une seule fois par 
 |---|---|---|
 | Détection entités legacy | `GET /api/hse/migration/export` | GET |
 | Appliquer le mapping | `POST /api/hse/migration/apply` | POST |
-| Nettoyage legacy | `POST /api/hse/migration/cleanup` | POST |
+| Nettoyage legacy | `POST /api/hse/migration/apply` (body `cleanup_legacy: true`) | POST |
 
-Les données intermédiaires (étape 2) sont **persistées dans le store local en mémoire**.
-Si l'utilisateur quitte et revient, les données de l'étape en cours sont restaurées.
+> ⚠️ **Note (2026-07-04)** : Il n'existe pas d'endpoint `/api/hse/migration/cleanup` distinct.
+> Le nettoyage est un flag `cleanup_legacy` passé au `POST /api/hse/migration/apply`.
+
+Les données intermédiaires (étape 2) sont **conservées en mémoire dans l'instance
+de la view** (pas de localStorage — R4). Si l'utilisateur quitte et revient,
+l'état est réinitialisé et l'étape 1 est rechargée.
 
 ### Forme de `/api/hse/migration/export`
 ```json
@@ -74,29 +78,23 @@ Si l'utilisateur quitte et revient, les données de l'étape en cours sont resta
 - La migration modifie uniquement la config HSE — elle ne supprime pas les entités HA
 - `confidence: "high"` → pré-coché ; `"low"` ou `"none"` → action explicite requise
 - Le bouton "Appliquer" est conditionné à au moins un mapping avec action `migrate`
-- Le store local survit à l'`unmount()` (les données du wizard ne sont pas effacées)
+- L'état du wizard est conservé en mémoire dans l'instance de la view (R4 — pas de localStorage)
 
 ---
 
 ## Fichiers concernés
 web_static/panel/features/migration/
-├── migration.view.js
-├── migration.step1.js
-├── migration.step2.js
-├── migration.step3.js
-├── migration.html.js
-└── migration.css
+└── migration_view.js
 
 
 ---
 
 ## Definition of Done
 - [ ] Wizard 3 étapes avec navigation avant/arrière
-- [ ] Données préservées dans le store local entre les étapes
-- [ ] Données restaurées si l'utilisateur revient sur l'onglet
+- [ ] Données conservées en mémoire dans l'instance de la view entre les étapes
 - [ ] Confirmation modale avant application
 - [ ] Rapport post-migration avec compteurs et détails d'erreurs
-- [ ] Étape "Nettoyage" distincte et optionnelle
+- [ ] Étape "Nettoyage" distincte et optionnelle (flag `cleanup_legacy`)
 - [ ] État "Aucune entité legacy" géré
 - [ ] Skeleton étape 1 (R5)
-- [ ] Aucun localStorage (R4 — store en mémoire uniquement)
+- [ ] Aucun localStorage (R4)

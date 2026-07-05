@@ -1,5 +1,11 @@
 # HSE V3 — Squelette `hse_tab_base.js`
 
+> ⚠️ **Note (2026-07-04)** : Ce document décrit un design qui n'a pas été implémenté.
+> Le fichier `web_static/panel/shared/hse_tab_base.js` **n'existe pas** dans le code actuel.
+> Les views (OverviewView, ScanView, ConfigView, etc.) implémentent directement
+> les règles R1–R5 sans classe de base commune. Ce doc est conservé à titre de
+> référence architecturale pour une éventuelle refactor future.
+
 > Classe de base à étendre par tous les onglets.
 > Implémente les règles R1–R5 une seule fois pour ne pas les répéter dans chaque view.
 
