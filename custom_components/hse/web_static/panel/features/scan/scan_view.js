@@ -605,10 +605,6 @@ async _triggerRescan() {
       this._rescanning = false;
     }
   }
-      btn.textContent = '\u26a0 Erreur';
-      setTimeout(() => { btn.disabled = false; btn.textContent = '\u21bb Re-scanner'; }, 3000);
-    }
-  }
 
   async _triage(entityId, action) {
     if (this._triaging) return;
