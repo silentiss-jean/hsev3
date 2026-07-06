@@ -24,7 +24,7 @@ export function escHtml(str) {
     .replace(/</g, '<')
     .replace(/>/g, '>')
     .replace(/"/g, '"')
-    .replace(/'/g, ''');
+    .replace(/'/g, '&#39;');
 }
 
 /**
