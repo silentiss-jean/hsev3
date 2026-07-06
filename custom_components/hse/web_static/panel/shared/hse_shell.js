@@ -244,9 +244,16 @@ export class HseShell {
       const mod = await import(url);
       // FIX-2026-07-04 m3 : préférer mod.default, puis export nommé explicite
       const tabDef = TABS.find(t => t.id === tabId);
-      const ViewClass = mod.default
-        || (tabDef && typeof mod[tabDef.cls] === 'function' ? mod[tabDef.cls] : null);
-      if (typeof ViewClass !== 'function') throw new Error(`${tabId}_view.js : pas de classe exportée`);
+      let ViewClass = mod.default;
+      if (!ViewClass && tabDef) {
+        const namedExport = mod[tabDef.cls];
+        if (typeof namedExport === 'function') {
+          ViewClass = namedExport;
+        }
+      }
+      if (typeof ViewClass !== 'function') {
+        throw new Error(`${tabId}_view.js : pas de classe exportée`);
+      }
       if (this._activeTab !== tabId) return;
 
       this._view.innerHTML = '';
