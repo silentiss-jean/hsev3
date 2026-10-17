@@ -221,10 +221,9 @@ export class ConfigView {
     });
   }
 
-  // FIX #1 : URL corrigée /api/hse/settings (et non /api/hse/settings/pricing)
   async _loadReference() {
     try {
-      const r = await this._ctx.hseFetch('/api/hse/settings', { signal: this._abort?.signal });
+      const r = await this._ctx.hseFetch('/api/hse/settings/pricing', { signal: this._abort?.signal });
       if (!r.ok) return;
       const data = await r.json();
       if (!this._mounted) return;
@@ -278,7 +277,7 @@ export class ConfigView {
     const status = this._el?.querySelector('#hse-cfg-ref-status');
     const val = sel?.value ?? '';
     try {
-      const r = await this._ctx.hseFetch('/api/hse/settings', {
+      const r = await this._ctx.hseFetch('/api/hse/settings/pricing', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reference_entity_id: val }), signal: this._abort?.signal,
       });

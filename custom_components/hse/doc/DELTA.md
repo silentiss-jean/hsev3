@@ -1,6 +1,6 @@
 # DELTA.md — Écarts doc/code actifs HSE V3
 
-> Mis à jour : 2026-07-04 17:35 CEST
+> Mis à jour : 2026-05-21 17:32 CEST
 >
 > **Règle** : aucun patch ne doit contredire un écart EN_DISCUSSION.
 > Fermer un écart = écrire la solution ici avant de commiter.
@@ -11,27 +11,15 @@
 
 ## Écarts actifs
 
-### DELTA-066 — `POST /api/hse/catalogue/triage/bulk` → 404 (vue non enregistrée)
-- **Statut** : `FERMÉ` ✅
-- **Priorité** : **Haute** (bloquant onglet Configuration → Sélection automatique)
-- **Contexte** : `HseCatalogueTriageBulkView` (et `HseCatalogueTriageView`, `HseCatalogueRefreshView`) existent dans `api/views/catalogue.py` et sont exportées par `api/views/__init__.py`, mais **jamais importées ni enregistrées** dans `__init__.py` principal. Régression introduite par le commit `db9fd86` (DELTA-058) qui n'a enregistré que `HseCatalogueItemView` + `HseCatalogueBulkView`.
-- **Symptôme** : `POST /api/hse/catalogue/triage/bulk` → `404 Not Found` lors du clic sur "Sélection automatique intelligente" dans `config_view.js`.
-- **Impact front** : Bouton "✨ Sélection auto" de l'onglet Configuration cassé. `scan_view.js` (l.619) également impacté.
-- **Résolution** : Patch `custom_components/hse/__init__.py` :
-  - Ajout des 3 imports : `HseCatalogueTriageView`, `HseCatalogueTriageBulkView`, `HseCatalogueRefreshView`
-  - Ajout des 3 enregistrements dans la boucle `register_view`
-- **Date de fermeture** : 2026-07-04
-
 ### DELTA-058 — `PATCH/DELETE /api/hse/catalogue/{entity_id}` manquants
-- **Statut** : `FERMÉ` ✅
+- **Statut** : `EN_DISCUSSION`
 - **Priorité** : Moyenne
-- **Contexte** : `04_onglet_config.md` prévoit édition inline et suppression individuelle.
-- **Impact front** : `config_view.js` utilise le contournement `POST /api/hse/catalogue/triage` (acceptable V1).
-- **Résolution** : Routes backend implémentées dans `catalogue.py` :
-  - `HseCatalogueItemView` (PATCH/DELETE `/api/hse/catalogue/{entity_id}`) — modifie `display_name`, `icon`, `active` ; supprime l'item
-  - `HseCatalogueBulkView` (POST `/api/hse/catalogue/bulk`) — actions en masse `activate|deactivate|delete`
-  - Enregistrées dans `__init__.py` (l.99-100) et `api/views/__init__.py`
-- **Date de fermeture** : 2026-07-04 (audit code↔doc)
+- **Contexte** : `04_onglet_config.md` prévoit édition inline et suppression individuelle. Ces routes n'existent pas dans `catalogue.py`.
+- **Impact front** : `config_view.js` utilise le contournement `POST /api/hse/catalogue/triage` (sémantique différente, fonctionnellement acceptable V1).
+- **Solution proposée** : Ajouter dans `catalogue.py` :
+  - `PATCH /api/hse/catalogue/{entity_id}` → modifie `display_name`, `room`, `type`
+  - `DELETE /api/hse/catalogue/{entity_id}` → supprime l'item
+- **Décision** : ⏳ En attente — `config_view.js` commité avec contournement. Routes backend dans second commit.
 
 ---
 
@@ -46,28 +34,20 @@
 ---
 
 ### DELTA-062 — `cards_view.js` absent — crash onglet
-- **Statut** : `PARTIELLEMENT FERMÉ` 🟡 (stub créé, implémentation complète reste à faire)
+- **Statut** : `EN_DISCUSSION` 🟠
 - **Priorité** : **Basse** (non bloquant, usage confort)
 - **Symptôme** : Onglet "Cartes YAML" → `Failed to fetch dynamically imported module: /hse-static/features/cards/cards_view.js` — fichier inexistant.
-- **Résolution partielle** : Stub créé dans `web_static/panel/features/cards/cards_view.js` :
-  - Respecte R1-R5 (mount/update_hass/unmount, _fetching, signature, no localStorage, skeleton)
-  - Affiche un placeholder "Bientôt disponible — DELTA-062"
-  - Plus de crash d'import dynamique
-- **Reste à faire (Vague 3)** : `yamlComposer.js` + vue complète (checkboxes, preview YAML, copie, téléchargement).
-- **Date de fermeture partielle** : 2026-07-04
+- **Solution proposée** : Créer un stub minimal puis implémenter `yamlComposer.js` + vue complète.
+- **Décision** : ⏳ À traiter après `overview_view.js` + `costs_view.js`.
 
 ---
 
 ### DELTA-051-PANEL — `hse_panel.js` bureau virtuel macOS
-- **Statut** : `FERMÉ` ✅
+- **Statut** : `EN_DISCUSSION`
 - **Priorité** : **Basse** (edge case macOS uniquement, non bloquant)
 - **Symptôme** : Au retour d'un bureau virtuel macOS, l'iframe peut se retrouver vide.
-- **Résolution** : Correctif déjà implémenté dans `hse_panel.js` (l.73-88) :
-  - Listener `visibilitychange` sur `document`
-  - Si `document.visibilityState === 'visible'` ET `body.children.length === 0` → reload iframe
-  - Guard anti-double-mount conservé
-  - `disconnectedCallback` nettoie les listeners
-- **Date de fermeture** : 2026-07-04 (audit code↔doc)
+- **Correctif prévu** : `visibilitychange` + reload conditionnel de l'iframe dans `connectedCallback`/`disconnectedCallback`.
+- **Décision** : ⏳ Non prioritaire — à traiter après les onglets métier.
 
 ---
 
@@ -103,9 +83,9 @@
 | `storage/manager.py` | ✅ | |
 | `catalogue/scan_engine.py` | ✅ | `integration_domain` rempli — vérifié via JSON retourné |
 | `api/views/scan.py` | ✅ | GET/POST /api/hse/scan |
-| `api/views/catalogue.py` | ✅ | GET/POST + PATCH/DELETE (DELTA-058 fermé) + bulk |
+| `api/views/catalogue.py` | ✅ | GET/POST — PATCH/DELETE ⏳ (DELTA-058) |
 | `api/views/meta.py` | ✅ | GET + sync — rooms format `[{id,name}]` (DELTA-064 Q3) — POST création ⏳ (DELTA-059) |
-| `api/views/settings.py` | ✅ | GET/PUT `/api/hse/settings` (unifié) + `/api/hse/settings/pricing` (alias rétrocompat) — toutes clés settings |
+| `api/views/settings.py` | ✅ | GET/PUT incl. `reference_entity_id` — champs : `mode`, `price_ht_kwh`, `price_ttc_kwh`, `price_hp_ttc_kwh`, `price_hc_ttc_kwh`, `subscription_eur_month`, `tax_rate_pct` |
 | `api/views/costs.py` | ✅ | GET /api/hse/costs + /history + /export |
 | `api/views/overview.py` | ✅ | |
 | `api/views/diagnostic.py` | ✅ | |
@@ -116,19 +96,19 @@
 
 | Fichier | Statut | Notes |
 |---------|--------|-------|
-| `hse_panel.js` | ✅ | Bureau virtuel macOS : DELTA-051-PANEL **fermé** 2026-07-04 |
+| `hse_panel.js` | ✅ | Bureau virtuel macOS : DELTA-051-PANEL ouvert, priorité basse |
 | `hse_shell.js` | ✅ | 8 onglets, navigation, validé |
 | `scan_view.js` | ✅ | Groupement par intégration fonctionnel — validé capture d'écran |
 | `config_view.js` | ✅ | A ✅ B ✅ C ✅ — DELTA-065 fermé 2026-05-21 |
-| `overview_view.js` | ✅ | Implémenté (229 lignes) — polling 30s, R1-R5, status fallback |
-| `costs_view.js` | ✅ | Implémenté (220 lignes) — polling 60s, tri, export CSV/JSON |
+| `overview_view.js` | ✅ | Implémenté — GET /api/hse/overview, polling 30s, R1-R5 respectés |
+| `costs_view.js` | ✅ | Implémenté — GET /api/hse/costs + export, polling 60s, R1-R5 respectés |
 | `diagnostic_view.js` | 🟡 | Stub — priorité 3 |
 | `migration_view.js` | 🟡 | Stub — priorité 4 |
-| `custom_view.js` | 🟡 | Stub — priorité 5 |
-| `cards_view.js` | 🟡 | Stub créé (DELTA-062 partiellement fermé) — impl. complète Vague 3 |
+| `cards_view.js` | ❌ | Absent — crash onglet (DELTA-062, priorité basse) |
 
 ### Prochaine action
 
 1. ✅ ~~DELTA-065 — Fix sous-onglet C~~ — **Fermé 2026-05-21**
-2. 🟡 **Implémenter `overview_view.js`** — GET /api/hse/overview — **PRIORITÉ 1**
-3. 🟡 **Implémenter `costs_view.js`** — GET /api/hse/costs
+2. ✅ ~~`overview_view.js` implémenté~~ — validé cohérent avec backend `/api/hse/overview`
+3. ✅ ~~`costs_view.js` implémenté~~ — validé cohérent avec backend `/api/hse/costs` + `/api/hse/export`
+4. ⏳ **Release + déploiement preprod .67** — tag Git, push, mise à jour HACS sur http://192.168.3.67:8123
