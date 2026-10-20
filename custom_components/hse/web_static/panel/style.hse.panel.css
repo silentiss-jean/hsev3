@@ -22,7 +22,7 @@
 
 html, body {
   height: 100%;
-  overflow: hidden; /* HA gère le scroll dans son propre conteneur */
+  overflow: auto; /* Permet le scroll du contenu HSE */
   background: var(--primary-background-color, #fafafa);
   color: var(--primary-text-color, #212121);
   font-family: var(--paper-font-body1_-_font-family, 'Roboto', 'Noto', sans-serif);
