@@ -33,6 +33,8 @@ _SETTINGS_KEYS = (
     "subscription_eur_month", "tax_rate_pct",
     # Capteur de référence (DELTA-064 Q2)
     "reference_entity_id",
+    # Index kWh du compteur général (V3.1)
+    "reference_energy_entity_id",
 )
 
 
@@ -51,6 +53,7 @@ def _serialize_settings(settings: dict) -> dict:
         "subscription_eur_month": settings.get("subscription_eur_month", 0.0),
         "tax_rate_pct": settings.get("tax_rate_pct", 20.0),
         "reference_entity_id": settings.get("reference_entity_id"),
+        "reference_energy_entity_id": settings.get("reference_energy_entity_id"),
     }
 
 
@@ -118,7 +121,7 @@ class HseSettingsPricingView(HseBaseView):
             "price_hc_ht_kwh", "price_hc_ttc_kwh",
             "hc_start", "hc_end",
             "subscription_eur_month", "tax_rate_pct",
-            "reference_entity_id",
+            "reference_entity_id", "reference_energy_entity_id",
         )})
 
     async def put(self, request: web.Request) -> web.Response:

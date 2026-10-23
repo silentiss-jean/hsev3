@@ -18,7 +18,8 @@ from ..base import HseBaseView
 from ...storage.manager import HseStorageManager
 from ...engine.calculation import get_power_w
 from ...engine.cost import cost_summary, cost_eur
-from ...engine.period_stats import async_energy_for_period
+from ...engine.period_stats import async_energy_detail, async_energy_for_period
+from ...engine.sources import plan_sources
 from ...engine.analytics import async_history_12months
 from ...time_utils import utc_now_iso
 
@@ -55,16 +56,16 @@ async def _build_costs_data(
         and (item.get("triage") or {}).get("policy") == "selected"
     ]
 
-    selected_eids = [
-        (item.get("source") or {}).get("entity_id")
-        for item in selected
-        if (item.get("source") or {}).get("entity_id")
+    ref_ids = [
+        r for r in (settings.get("reference_entity_id"), settings.get("reference_energy_entity_id")) if r
     ]
-    energy_map = await async_energy_for_period(
-        hass=hass,
-        entity_ids=selected_eids,
-        period=period,
-    )
+    states = {
+        (it.get("source") or {}).get("entity_id"): hass.states.get((it.get("source") or {}).get("entity_id"))
+        for it in selected if (it.get("source") or {}).get("entity_id")
+    }
+    plan = plan_sources(selected, states, reference_entity_id=ref_ids)
+    detail = await async_energy_detail(hass, plan.energy_sources, period)
+    excluded = {x["entity_id"]: x["reason"] for x in plan.excluded}
 
     result_items = []
     total_kwh = 0.0
@@ -73,11 +74,12 @@ async def _build_costs_data(
     for item in selected:
         src = item.get("source") or {}
         eid = src.get("entity_id")
-        if not eid:
+        if not eid or eid in plan.reference_ids:
             continue
         state_obj = hass.states.get(eid)
         pw = get_power_w(state_obj) or 0.0
-        en = energy_map.get(eid, 0.0)
+        d = detail.get(eid)
+        en = d["kwh"] if d else 0.0
         cost = cost_summary(en, settings)
         asn = assignments.get(eid) or {}
         room_id = asn.get("room_id")
@@ -92,6 +94,9 @@ async def _build_costs_data(
             "cost_ht_eur": cost["cost_ht_eur"],
             "cost_ttc_eur": cost["cost_ttc_eur"],
             "pct_total": 0.0,
+            "method": d["method"] if d else "excluded",
+            "quality": d["quality"] if d else "excluded",
+            "excluded_reason": excluded.get(eid),
         })
         total_kwh += en
         total_ttc += cost["cost_ttc_eur"]

@@ -10,6 +10,7 @@ Toutes les fonctions retournent des datetime timezone-aware (UTC).
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -69,18 +70,38 @@ def start_of_year(now: datetime | None = None) -> datetime:
     return t.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
 
 
-def window_for_period(period: str, now: datetime | None = None) -> tuple[datetime, datetime]:
+def window_for_period(
+    period: str,
+    now: datetime | None = None,
+    tz: Any = None,
+) -> tuple[datetime, datetime]:
     """
-    Retourne (start, end) UTC pour la période demandée.
-    end = maintenant. start = début de la fenêtre.
+    Retourne (start, end) en UTC pour la période demandée.
+    end = maintenant. start = début de la fenêtre.
 
     period : "day" | "week" | "month" | "year"
+    tz     : fuseau local (ex. dt_util.DEFAULT_TIME_ZONE). Si fourni, les bornes
+             sont celles du calendrier LOCAL (minuit local, lundi local, 1er du
+             mois local…) puis converties en UTC. Sans tz : comportement V3.0 (UTC).
     """
     t = now or utc_now()
-    mapping = {
-        "day":   start_of_day(t),
-        "week":  start_of_week(t),
-        "month": start_of_month(t),
-        "year":  start_of_year(t),
-    }
-    return mapping.get(period, start_of_day(t)), t
+    if tz is None:
+        mapping = {
+            "day":   start_of_day(t),
+            "week":  start_of_week(t),
+            "month": start_of_month(t),
+            "year":  start_of_year(t),
+        }
+        return mapping.get(period, start_of_day(t)), t
+
+    local = t.astimezone(tz)
+    midnight = local.replace(hour=0, minute=0, second=0, microsecond=0)
+    if period == "week":
+        start_local = midnight - timedelta(days=local.weekday())
+    elif period == "month":
+        start_local = midnight.replace(day=1)
+    elif period == "year":
+        start_local = midnight.replace(month=1, day=1)
+    else:
+        start_local = midnight
+    return start_local.astimezone(timezone.utc), t.astimezone(timezone.utc)

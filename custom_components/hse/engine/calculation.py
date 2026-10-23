@@ -1,8 +1,13 @@
 """
 HSE V3 — engine/calculation.py
-Source : calculation_engine.py V1 (réintégré + épuré).
 
 Calcul temps réel de la puissance et de l'énergie depuis hass.states.
+
+V3.1 — mesures STRICTES (voir engine/measure.py) :
+  - un capteur d'énergie (kWh) n'est JAMAIS compté comme de la puissance (W) ;
+  - une unité inconnue est rejetée (plus de « on suppose W / kWh ») ;
+  - puissance négative ou aberrante : exclue, raison remontée ;
+  - chaque total dit combien de capteurs ont été retenus/rejetés et pourquoi.
 
 Règle : pas d'accès direct à hass — on reçoit les states en paramètre
         pour rester testable sans HomeAssistant instancié.
@@ -11,126 +16,78 @@ from __future__ import annotations
 
 from typing import Any
 
+from .measure import Reading, read_state
 
-# ────────────────────────────────────────────────────────────────────────────
-# Helpers
-# ────────────────────────────────────────────────────────────────────────────
 
 def _safe_float(value: Any) -> float | None:
-    """Retourne float ou None si non convertible."""
-    if value is None:
-        return None
-    try:
-        f = float(value)
-        # Filtre les valeurs impossibles (ex: unavailable converti en NaN)
-        if f != f:  # NaN check
-            return None
-        return f
-    except (TypeError, ValueError):
-        return None
+    """Compat V3.0 : float fini ou None."""
+    from .measure import parse_number
+    return parse_number(value)
 
 
-def _unit_to_watts(value: float, unit: str | None) -> float:
-    """Normalise une valeur de puissance en Watts."""
-    u = (unit or "").strip().lower()
-    if u == "kw":
-        return value * 1000.0
-    return value  # W ou unité inconnue — on suppose W
+def read_sensor(state_obj: Any) -> Reading:
+    """Lecture normalisée (W ou kWh) d'un State HA."""
+    return read_state(state_obj)
 
-
-def _unit_to_kwh(value: float, unit: str | None) -> float:
-    """Normalise une valeur d'énergie en kWh."""
-    u = (unit or "").strip().lower()
-    if u == "wh":
-        return value / 1000.0
-    return value  # kWh ou unité inconnue — on suppose kWh
-
-
-# ────────────────────────────────────────────────────────────────────────────
-# API publique
-# ────────────────────────────────────────────────────────────────────────────
 
 def get_power_w(state_obj: Any) -> float | None:
     """
-    Retourne la puissance en Watts depuis un objet State HA.
-    Supporte W et kW.
-    Retourne None si l'état est indisponible ou non numérique.
+    Puissance en W, ou None si le capteur n'est pas une puissance valide
+    (énergie, unité inconnue, indisponible, négative, aberrante).
     """
-    if state_obj is None:
-        return None
-    raw = getattr(state_obj, "state", None)
-    if str(raw or "").lower() in ("unavailable", "unknown", "", "none"):
-        return None
-    val = _safe_float(raw)
-    if val is None:
-        return None
-    attrs = getattr(state_obj, "attributes", {}) or {}
-    unit = attrs.get("unit_of_measurement")
-    return _unit_to_watts(val, unit)
+    r = read_state(state_obj)
+    return r.value if r.kind == "power" and r.value is not None else None
 
 
 def get_energy_kwh(state_obj: Any) -> float | None:
     """
-    Retourne l'énergie en kWh depuis un objet State HA.
-    Supporte kWh et Wh.
-    Retourne None si l'état est indisponible ou non numérique.
+    Énergie cumulée en kWh, ou None si le capteur n'est pas une énergie valide.
     """
-    if state_obj is None:
-        return None
-    raw = getattr(state_obj, "state", None)
-    if str(raw or "").lower() in ("unavailable", "unknown", "", "none"):
-        return None
-    val = _safe_float(raw)
-    if val is None:
-        return None
-    attrs = getattr(state_obj, "attributes", {}) or {}
-    unit = attrs.get("unit_of_measurement")
-    return _unit_to_kwh(val, unit)
+    r = read_state(state_obj)
+    return r.value if r.kind == "energy" and r.value is not None else None
 
 
 def compute_totals(
     entity_ids: list[str],
     states: dict[str, Any],
-) -> dict[str, float | None]:
+) -> dict[str, Any]:
     """
-    Calcule la puissance totale (W) et l'énergie totale (kWh)
-    pour une liste d'entity_ids.
-
-    Paramètres
-    ----------
-    entity_ids : list[str]
-        Liste des entity_id à sommer.
-    states : dict[str, State]
-        Snapshot de hass.states (ou sous-ensemble).
+    Puissance totale (W) et énergie cumulée (kWh) pour une liste d'entity_ids.
 
     Retourne
     --------
-    { power_w: float|None, energy_kwh: float|None, count_ok: int, count_total: int }
+    {
+      power_w, energy_kwh,          # None si aucun capteur valide du type
+      count_ok, count_total,        # compat V3.0
+      count_power, count_energy,
+      rejected: [{entity_id, reason}]
+    }
     """
-    total_w: float = 0.0
-    total_kwh: float = 0.0
-    count_ok = 0
-    has_power = False
-    has_energy = False
+    total_w = 0.0
+    total_kwh = 0.0
+    n_power = 0
+    n_energy = 0
+    rejected: list[dict[str, str]] = []
 
     for eid in entity_ids:
-        state = states.get(eid)
-        pw = get_power_w(state)
-        en = get_energy_kwh(state)
-        if pw is not None:
-            total_w += pw
-            has_power = True
-            count_ok += 1
-        elif en is not None:
-            total_kwh += en
-            has_energy = True
-            count_ok += 1
+        r = read_state(states.get(eid))
+        if r.ok and r.kind == "power":
+            total_w += r.value  # type: ignore[operator]
+            n_power += 1
+        elif r.ok and r.kind == "energy":
+            total_kwh += r.value  # type: ignore[operator]
+            n_energy += 1
+        else:
+            rejected.append({"entity_id": eid, "reason": r.reason or "unusable"})
 
     return {
-        "power_w": round(total_w, 1) if has_power else None,
-        "energy_kwh": round(total_kwh, 3) if has_energy else None,
-        "count_ok": count_ok,
+        "power_w": round(total_w, 1) if n_power else None,
+        "energy_kwh": round(total_kwh, 3) if n_energy else None,
+        "count_ok": n_power + n_energy,
         "count_total": len(entity_ids),
+        "count_power": n_power,
+        "count_energy": n_energy,
+        "rejected": rejected,
     }
 
 
@@ -140,11 +97,10 @@ def top_n_by_power(
     n: int = 5,
 ) -> list[dict[str, Any]]:
     """
-    Retourne les N capteurs les plus consommateurs (puissance en W).
+    N capteurs de PUISSANCE les plus consommateurs (W), tri décroissant.
+    Les capteurs d'énergie en sont exclus par construction.
 
-    Retourne
-    --------
-    list[{ entity_id, power_w, pct }]  — trié par power_w desc
+    Retourne list[{ entity_id, power_w, pct }]
     """
     items: list[tuple[str, float]] = []
     for eid in entity_ids:
@@ -153,11 +109,12 @@ def top_n_by_power(
             items.append((eid, pw))
 
     items.sort(key=lambda x: x[1], reverse=True)
-    top = items[:n]
-
     total_w = sum(w for _, w in items)
-    result = []
-    for eid, pw in top:
-        pct = round((pw / total_w * 100), 1) if total_w > 0 else 0.0
-        result.append({"entity_id": eid, "power_w": round(pw, 1), "pct": pct})
-    return result
+    return [
+        {
+            "entity_id": eid,
+            "power_w": round(pw, 1),
+            "pct": round((pw / total_w * 100), 1) if total_w > 0 else 0.0,
+        }
+        for eid, pw in items[:n]
+    ]
