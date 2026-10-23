@@ -44,6 +44,7 @@ _SETTINGS_DEFAULTS: dict[str, Any] = {
     "subscription_eur_month": 0.0,
     "tax_rate_pct": 20.0,
     "reference_entity_id": None,     # capteur de référence (DELTA-009)
+    "reference_energy_entity_id": None,  # index kWh du compteur général (V3.1)
 }
 
 

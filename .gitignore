@@ -4,3 +4,4 @@
 # OpenCode local config (IDE-specific, not part of the project)
 .opencode/
 opencode.json
+__pycache__/
