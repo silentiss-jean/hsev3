@@ -44,16 +44,19 @@ class HsePanel extends HTMLElement {
     // Styles plein écran sur l'hôte
     Object.assign(this.style, {
       display: 'block',
+      position: 'absolute',
+      inset: '0',
       width: '100%',
       height: '100%',
-      overflow: 'auto',
-      position: 'relative',
+      overflow: 'hidden',
     });
 
     // Création de l'iframe
     const iframe = document.createElement('iframe');
     iframe.src = '/hse-static/hse_panel.html';
     Object.assign(iframe.style, {
+      position: 'absolute',
+      inset: '0',
       width: '100%',
       height: '100%',
       border: 'none',

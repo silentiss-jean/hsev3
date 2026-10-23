@@ -21,13 +21,12 @@
 
 /* ════ PAGE ════ */
 .hse_page {
-  min-height: 100vh;
+  min-height: 100%;
   padding: 16px;
   color: var(--hse_fg);
   box-sizing: border-box;
   position: relative;
   isolation: isolate;
-  contain: paint;
   background-color: var(--hse-bg);
 }
 .hse_page::before {

@@ -44,8 +44,9 @@ body {
   font-size: 0.95rem;
   color: var(--hse-text, #1f2937);
   background: var(--hse-bg, #f7f9ff);
-  height: 100vh;
-  overflow: auto;
+  height: 100%;
+  min-height: 100dvh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
