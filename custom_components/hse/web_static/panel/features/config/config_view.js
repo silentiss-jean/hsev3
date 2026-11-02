@@ -176,6 +176,8 @@ export class ConfigView {
           </select>
           <button id="hse-cfg-refresh-btn" class="hse-btn hse-btn--ghost hse-btn--sm">🔄 Rafraîchir</button>
           <button id="hse-cfg-expand-btn" class="hse-btn hse-btn--ghost hse-btn--sm" title="Tout déplier / Replier">⊞ Déplier tout</button>
+          <button id="hse-cfg-select-all-btn" class="hse-btn hse-btn--ghost hse-btn--sm">✓ Tout sélectionner</button>
+          <button id="hse-cfg-select-none-btn" class="hse-btn hse-btn--ghost hse-btn--sm">✕ Tout désélectionner</button>
         </div>
         <div id="hse-cfg-bulk" class="hse-cfg__bulk">
           <span id="hse-cfg-bulk-label" class="hse-cfg__bulk-label">0 sélectionné(s)</span>
@@ -317,6 +319,14 @@ export class ConfigView {
     root.querySelector('#hse-cfg-bulk-cancel').addEventListener('click', () => { this._selected.clear(); this._updateBulkBar(); });
     root.querySelector('#hse-cfg-ref-save').addEventListener('click', () => this._saveReference());
     root.querySelector('#hse-cfg-auto-btn').addEventListener('click', () => this._autoSelect());
+    root.querySelector('#hse-cfg-select-all-btn').addEventListener('click', () => {
+      const cbs = this._el?.querySelectorAll('.hse-cfg__cb');
+      cbs.forEach(cb => { cb.checked = true; cb.dispatchEvent(new Event('change')); });
+    });
+    root.querySelector('#hse-cfg-select-none-btn').addEventListener('click', () => {
+      const cbs = this._el?.querySelectorAll('.hse-cfg__cb');
+      cbs.forEach(cb => { cb.checked = false; cb.dispatchEvent(new Event('change')); });
+    });
   }
 
   async _loadCatalogue() {
@@ -393,8 +403,8 @@ export class ConfigView {
         <input type="checkbox" class="hse-cfg__cb" data-cb-eid="${this._attrVal(item.entity_id)}" ${sel ? 'checked' : ''} />
         <span class="hse-cfg__type-icon">${typeIcon}</span>
         <div class="hse-cfg__sensor-info">
-          <div class="hse-cfg__sensor-name">${this._esc(item.name ?? item.entity_id)}</div>
-          <div class="hse-cfg__sensor-eid">${this._esc(item.entity_id)}</div>
+          <div class="hse-cfg__sensor-name" data-toggle-cb="${this._attrVal(item.entity_id)}">${this._esc(item.name ?? item.entity_id)}</div>
+          <div class="hse-cfg__sensor-eid" data-toggle-cb="${this._attrVal(item.entity_id)}">${this._esc(item.entity_id)}</div>
         </div>
         <div class="hse-cfg__sensor-meta">${quality}<span class="hse-cfg__badge ${statusCls}">${statusLbl}</span></div>
         <div class="hse-cfg__sensor-actions">
@@ -456,13 +466,37 @@ export class ConfigView {
       });
     });
     body.querySelectorAll('.hse-cfg__cb').forEach(cb => {
-      cb.addEventListener('change', () => {
+      cb.addEventListener('change', async () => {
         const eid = cb.dataset.cbEid;
         if (!eid) return;
+        const action = cb.checked ? 'select' : 'ignore';
         cb.checked ? this._selected.add(eid) : this._selected.delete(eid);
         const row = cb.closest('.hse-cfg__sensor-row');
         if (row) row.classList.toggle('selected', cb.checked);
         this._updateBulkBar();
+        try {
+          await this._ctx.hseFetch('/api/hse/catalogue/triage', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ entity_id: eid, action }), signal: this._abort?.signal,
+          });
+          this._catSig = null;
+          await this._loadCatalogue();
+        } catch (e) {
+          if (e.name === 'AbortError') return;
+          cb.checked = !cb.checked;
+          cb.dispatchEvent(new Event('change'));
+        }
+      });
+    });
+    body.querySelectorAll('[data-toggle-cb]').forEach(el => {
+      el.addEventListener('click', () => {
+        const eid = el.dataset.toggleCb;
+        const esc = CSS.escape ? CSS.escape(eid) : eid;
+        const cb = body.querySelector(`[data-cb-eid="${esc}"]`);
+        if (cb) {
+          cb.checked = !cb.checked;
+          cb.dispatchEvent(new Event('change'));
+        }
       });
     });
     body.querySelectorAll('[data-triage-id]').forEach(btn => {
