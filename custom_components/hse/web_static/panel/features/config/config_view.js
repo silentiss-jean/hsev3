@@ -106,6 +106,7 @@ const CSS = `
 .hse-empty-icon { font-size:2.5rem; margin-bottom:12px; }
 .hse-empty p { font-size:0.875rem; }
 .hse-cfg__note { font-size:0.78rem; color:rgba(255,255,255,0.35); padding:6px 10px; background:rgba(255,255,255,0.03); border-radius:6px; border:1px solid rgba(255,255,255,0.07); }
+.hse-cfg__modes { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; padding:8px 12px; background:rgba(255,255,255,0.03); border-radius:10px; border:1px solid rgba(255,255,255,0.06); }
 `;
 
 const CATALOGUE_PER_PAGE = 200;
@@ -168,6 +169,13 @@ export class ConfigView {
           <span class="hse-cfg__ref-label">Sélection automatique intelligente</span>
           <button id="hse-cfg-auto-btn" class="hse-btn hse-btn--primary hse-btn--sm">🚀 Lancer</button>
           <span id="hse-cfg-auto-status" class="hse-cfg__ref-status"></span>
+        </div>
+        <!-- Barre de modes d'usage -->
+        <div class="hse-cfg__modes">
+          <button id="hse-cfg-mode-auto" class="hse-btn hse-btn--ghost hse-btn--sm hse-mode-btn" data-mode="auto" title="Sélectionne automatiquement les 5 plus gros consommateurs">⚡ Auto</button>
+          <button id="hse-cfg-mode-conseiller" class="hse-btn hse-btn--ghost hse-btn--sm hse-mode-btn" data-mode="conseiller" title="Analyse et propose les meilleurs capteurs à surveiller">🎯 Conseiller</button>
+          <button id="hse-cfg-mode-custom" class="hse-btn hse-btn--primary hse-btn--sm hse-mode-btn hse-mode-active" data-mode="custom" title="Sélection manuelle appareil par appareil">✋ Customisation</button>
+          <button id="hse-cfg-mode-reflexion" class="hse-btn hse-btn--ghost hse-btn--sm hse-mode-btn" data-mode="reflexion" title="Analyse les économies potentielles et suggère des groupes">💡 Reflexion</button>
         </div>
         <div class="hse-cfg__toolbar">
           <input class="hse-cfg__search" placeholder="Rechercher un appareil…" />
@@ -318,7 +326,11 @@ export class ConfigView {
     root.querySelector('#hse-cfg-bulk-ignore').addEventListener('click', () => this._bulkAction('ignore'));
     root.querySelector('#hse-cfg-bulk-cancel').addEventListener('click', () => { this._selected.clear(); this._updateBulkBar(); });
     root.querySelector('#hse-cfg-ref-save').addEventListener('click', () => this._saveReference());
-    root.querySelector('#hse-cfg-auto-btn').addEventListener('click', () => this._autoSelect());
+    root.querySelector('#hse-cfg-auto-btn').addEventListener('click', () => this._modeAuto());
+    root.querySelector('#hse-cfg-mode-auto').addEventListener('click', () => this._setMode('auto'));
+    root.querySelector('#hse-cfg-mode-conseiller').addEventListener('click', () => this._setMode('conseiller'));
+    root.querySelector('#hse-cfg-mode-custom').addEventListener('click', () => this._setMode('custom'));
+    root.querySelector('#hse-cfg-mode-reflexion').addEventListener('click', () => this._setMode('reflexion'));
     root.querySelector('#hse-cfg-select-all-btn').addEventListener('click', () => {
       const cbs = this._el?.querySelectorAll('.hse-cfg__cb');
       cbs.forEach(cb => { cb.checked = true; cb.dispatchEvent(new Event('change')); });
@@ -359,10 +371,11 @@ export class ConfigView {
       groups[key].push(item);
     }
     if (this._openGroups.size === 0) Object.keys(groups).forEach(k => this._openGroups.add(k));
+    const modePanel = this._renderModePanel(this._activeMode || 'custom', d);
     const html = Object.entries(groups).sort(([a],[b]) => a.localeCompare(b))
       .map(([integ, gItems]) => this._renderGroup(integ, gItems)).join('');
-    this._setCatBody(`<div class="hse-cfg__groups">${html}</div>`);
-    this._bindGroupEvents(); this._renderCatPager(d);
+    this._setCatBody(`${modePanel}<div class="hse-cfg__groups">${html}</div>`);
+    this._bindGroupEvents(); this._bindModeEvents(); this._renderCatPager(d);
     // Sync label bouton expand après rendu
     const btn = this._el?.querySelector('#hse-cfg-expand-btn');
     if (btn) {
@@ -585,7 +598,219 @@ export class ConfigView {
     }
   }
 
+  // ── Modes d'usage ──────────────────────────────────────────────────
+  _setMode(mode) {
+    this._activeMode = mode;
+    // Mise à jour des boutons de mode
+    this._el?.querySelectorAll('.hse-mode-btn').forEach(b => {
+      b.classList.toggle('hse-mode-active', b.dataset.mode === mode);
+    });
+    // Re-render le catalogue avec le bon mode
+    this._renderCatalogue();
+  }
+
+  async _modeAuto() {
+    if (this._autoSelecting) return;
+    this._autoSelecting = true;
+    const btn = this._el?.querySelector('#hse-cfg-auto-btn');
+    const status = this._el?.querySelector('#hse-cfg-auto-status');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ En cours…'; }
+    try {
+      const catR = await this._ctx.hseFetch('/api/hse/catalogue?status=all&per_page=500', { signal: this._abort?.signal });
+      if (!catR.ok) throw new Error(`HTTP ${catR.status}`);
+      const catData = await catR.json();
+      const all = catData.items ?? [];
+      // Sélectionner les 5 plus gros consommateurs par qualité
+      const byDevice = {};
+      for (const item of all) {
+        const dev = item.device_id ?? item.entity_id;
+        if (!byDevice[dev]) byDevice[dev] = [];
+        byDevice[dev].push(item);
+      }
+      const toSelect = [];
+      for (const [, devItems] of Object.entries(byDevice)) {
+        const best = devItems.sort((a,b) => (b.quality_score ?? b.score ?? 0) - (a.quality_score ?? a.score ?? 0))[0];
+        if (best && best.status !== 'selected') toSelect.push({ entity_id: best.entity_id, action: 'select' });
+      }
+      if (!toSelect.length) {
+        if (status) { status.textContent = 'Aucun capteur en attente.'; setTimeout(() => { if (status) status.textContent = ''; }, 3000); }
+        return;
+      }
+      const r = await this._ctx.hseFetch('/api/hse/catalogue/triage/bulk', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ items: toSelect }), signal: this._abort?.signal,
+      });
+      if (status) { status.textContent = `✓ ${toSelect.length} capteur(s) activé(s)`; setTimeout(() => { if (status) status.textContent = ''; }, 3000); }
+      this._catSig = null; await this._loadCatalogue();
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      if (status) { status.textContent = `Erreur : ${e.message}`; setTimeout(() => { if (status) status.textContent = ''; }, 3000); }
+    } finally {
+      this._autoSelecting = false;
+      if (btn) { btn.disabled = false; btn.textContent = '🚀 Lancer'; }
+    }
+  }
+
+  async _modeConseiller() {
+    this._setMode('conseiller');
+    this._renderCatalogue();
+  }
+
+  async _modeReflexion() {
+    this._setMode('reflexion');
+    this._renderCatalogue();
+  }
+
+  _renderModePanel(mode, data) {
+    const panels = {
+      auto: this._renderModeAutoPanel(data),
+      conseiller: this._renderModeConseillerPanel(data),
+      reflexion: this._renderModeReflexionPanel(data),
+    };
+    return panels[mode] || this._renderModeCustomPanel(data);
+  }
+
+  _renderModeCustomPanel(data) {
+    const items = data.items ?? [];
+    const selected = items.filter(i => i.status === 'selected').length;
+    const total = items.length;
+    return `
+      <div class="hse-cfg__mode-panel">
+        <div class="hse-cfg__mode-title">✋ Customisation — Sélection manuelle</div>
+        <div class="hse-cfg__mode-desc">Cliquez sur un appareil ou sa case pour l'activer/ignorer. Sélectionnez ceux que vous souhaitez suivre dans HSE.</div>
+        <div class="hse-cfg__mode-stats">${selected} / ${total} appareils sélectionnés</div>
+        <div class="hse-cfg__mode-actions">
+          <button class="hse-btn hse-btn--ghost hse-btn--sm" id="hse-cfg-btn-toggle-all">✓ Tout activer</button>
+          <button class="hse-btn hse-btn--ghost hse-btn--sm" id="hse-cfg-btn-toggle-none">✕ Tout ignorer</button>
+        </div>
+      </div>`;
+  }
+
+  _renderModeAutoPanel(data) {
+    const items = data.items ?? [];
+    const selected = items.filter(i => i.status === 'selected').length;
+    const total = items.length;
+    return `
+      <div class="hse-cfg__mode-panel">
+        <div class="hse-cfg__mode-title">⚡ Mode Auto — Sélection intelligente</div>
+        <div class="hse-cfg__mode-desc">HSE sélectionne automatiquement les 5 plus gros consommateurs par qualité de détection.</div>
+        <div class="hse-cfg__mode-stats">${selected} / ${total} appareils sélectionnés</div>
+        <div class="hse-cfg__mode-actions">
+          <button class="hse-btn hse-btn--primary hse-btn--sm" id="hse-cfg-btn-auto-run">🚀 Lancer la sélection auto</button>
+        </div>
+      </div>`;
+  }
+
+  _renderModeConseillerPanel(data) {
+    const items = data.items ?? [];
+    const energyItems = items.filter(i => i.kind === 'energy' && i.status !== 'selected').sort((a,b) => (b.quality_score ?? 0) - (a.quality_score ?? 0)).slice(0, 5);
+    const html = energyItems.map(i => `
+      <div class="hse-cfg__mode-item hse-mode-selected">
+        <span class="hse-cfg__mode-icon">⭐</span>
+        <div class="hse-cfg__mode-info">
+          <div class="hse-cfg__mode-name">${this._esc(i.name ?? i.entity_id)}</div>
+          <div class="hse-cfg__mode-subtitle">${i.entity_id} • Score ${i.quality_score ?? 0}/150</div>
+        </div>
+        <div class="hse-cfg__mode-stats">+${((i.quality_score ?? 0) / 150 * 100).toFixed(0)}%</div>
+        <button class="hse-btn hse-btn--primary hse-btn--sm" data-conseiller-id="${this._attrVal(i.entity_id)}">Ajouter</button>
+      </div>`).join('');
+    return `
+      <div class="hse-cfg__mode-panel">
+        <div class="hse-cfg__mode-title">🎯 Mode Conseiller</div>
+        <div class="hse-cfg__mode-desc">HSE vous propose les capteurs les plus pertinents à surveiller en priorité.</div>
+        <div class="hse-cfg__mode-grid">${html || '<div style="padding:20px;text-align:center;color:rgba(255,255,255,0.5)">Aucun capteur à proposer.</div>'}</div>
+      </div>`;
+  }
+
+  _renderModeReflexionPanel(data) {
+    const items = data.items ?? [];
+    const selected = items.filter(i => i.status === 'selected').length;
+    const ignored = items.filter(i => i.status === 'ignored').length;
+    const pending = items.filter(i => i.status === 'pending').length;
+    const total = items.length;
+    const pctSelected = total > 0 ? Math.round(selected / total * 100) : 0;
+    return `
+      <div class="hse-cfg__mode-panel">
+        <div class="hse-cfg__mode-title">💡 Mode Reflexion</div>
+        <div class="hse-cfg__mode-desc">Analysez votre installation et voyez l'impact de vos choix sur le suivi HSE.</div>
+        <div class="hse-cfg__mode-grid">
+          <div class="hse-cfg__mode-item">
+            <span class="hse-cfg__mode-icon">📊</span>
+            <div class="hse-cfg__mode-info">
+              <div class="hse-cfg__mode-name">Capteurs totaux</div>
+              <div class="hse-cfg__mode-subtitle">${total} entités dans le catalogue</div>
+            </div>
+            <div class="hse-cfg__mode-stats">${total}</div>
+          </div>
+          <div class="hse-cfg__mode-item">
+            <span class="hse-cfg__mode-icon">✅</span>
+            <div class="hse-cfg__mode-info">
+              <div class="hse-cfg__mode-name">Surveillés</div>
+              <div class="hse-cfg__mode-subtitle">${selected} appareils actifs</div>
+            </div>
+            <div class="hse-cfg__mode-stats">${pctSelected}%</div>
+          </div>
+          <div class="hse-cfg__mode-item">
+            <span class="hse-cfg__mode-icon">⚠️</span>
+            <div class="hse-cfg__mode-info">
+              <div class="hse-cfg__mode-name">Ignorés</div>
+              <div class="hse-cfg__mode-subtitle">${ignored} appareils exclus</div>
+            </div>
+            <div class="hse-cfg__mode-stats">${ignored}</div>
+          </div>
+          <div class="hse-cfg__mode-item">
+            <span class="hse-cfg__mode-icon">⏳</span>
+            <div class="hse-cfg__mode-info">
+              <div class="hse-cfg__mode-name">En attente</div>
+              <div class="hse-cfg__mode-subtitle">${pending} non classés</div>
+            </div>
+            <div class="hse-cfg__mode-stats">${pending}</div>
+          </div>
+        </div>
+        <div class="hse-cfg__mode-actions">
+          <button class="hse-btn hse-btn--ghost hse-btn--sm" id="hse-cfg-btn-reflexion-help">💡 Voir les suggestions</button>
+        </div>
+      </div>`;
+  }
+
   _setCatBody(html) { const el = this._el?.querySelector('#hse-cfg-cat-body'); if (el) el.innerHTML = html; }
+
+  _bindModeEvents() {
+    const body = this._el?.querySelector('#hse-cfg-cat-body');
+    if (!body) return;
+    // Bouton lancer auto
+    const btnAuto = body.querySelector('#hse-cfg-btn-auto-run');
+    if (btnAuto) btnAuto.addEventListener('click', () => this._modeAuto());
+    // Boutons conseiller
+    body.querySelectorAll('[data-conseiller-id]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const eid = btn.dataset.conseillerId;
+        this._ctx.hseFetch('/api/hse/catalogue/triage', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ entity_id: eid, action: 'select' }), signal: this._abort?.signal,
+        }).then(() => { this._catSig = null; this._loadCatalogue(); });
+      });
+    });
+    // Bouton reflexion help
+    const btnReflexion = body.querySelector('#hse-cfg-btn-reflexion-help');
+    if (btnReflexion) btnReflexion.addEventListener('click', () => {
+      const items = this._catData?.items ?? [];
+      const pending = items.filter(i => i.status === 'pending').length;
+      const ignored = items.filter(i => i.status === 'ignored').length;
+      alert(`💡 Suggestions Reflexion :\n\n• ${pending} capteurs en attente de classification\n• ${ignored} capteurs ignorés peuvent être réévalués\n• Les capteurs avec un score > 100/150 sont recommandés pour le suivi\n\nActivez les capteurs à forte consommation pour optimiser vos coûts.`);
+    });
+    // Boutons toggle-all / toggle-none (mode custom)
+    const btnToggleAll = body.querySelector('#hse-cfg-btn-toggle-all');
+    if (btnToggleAll) btnToggleAll.addEventListener('click', () => {
+      const cbs = body.querySelectorAll('.hse-cfg__cb');
+      cbs.forEach(cb => { cb.checked = true; cb.dispatchEvent(new Event('change')); });
+    });
+    const btnToggleNone = body.querySelector('#hse-cfg-btn-toggle-none');
+    if (btnToggleNone) btnToggleNone.addEventListener('click', () => {
+      const cbs = body.querySelectorAll('.hse-cfg__cb');
+      cbs.forEach(cb => { cb.checked = false; cb.dispatchEvent(new Event('change')); });
+    });
+  }
 
   _renderCatPager(d) {
     const pager = this._el?.querySelector('#hse-cfg-cat-pager');
