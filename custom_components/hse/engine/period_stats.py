@@ -9,10 +9,14 @@ calculer l'énergie consommée.
 - Pour un capteur de puissance (state_class=measurement, unité W) :
   énergie = mean(W) × durée(heures) / 1000 → kWh
 - Pour un compteur d'énergie (state_class=total_increasing, unité kWh) :
-  énergie = sum(kWh) → kWh
+  énergie = sum(kWh) → kWh (déjà en kWh, pas de division)
 
 Quand l'entité donnée n'a pas de statistiques, on cherche une entité de
 puissance correspondante (ex: *_total_energy → *_power).
+
+Règle d'or : NE JAMAIS cumuler sum ET mean pour la même entité sur la même
+période. On préfère sum s'il est disponible et cohérent avec l'unité,
+sinon on tombe sur mean.
 
 Dépendances : sqlite3 sur home-assistant_v2.db (synchrone → executor)
 """
@@ -87,9 +91,21 @@ def _find_power_entity_id(all_statistic_ids: list[str], energy_eid: str) -> str 
     return None
 
 
+def _get_unit_of_measurement(conn: sqlite3.Connection, statistic_id: str) -> str | None:
+    """Retourne l'unité de mesure d'une entité depuis statistics_meta."""
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT unit_of_measurement FROM statistics_meta WHERE statistic_id = ?",
+        (statistic_id,),
+    )
+    row = cursor.fetchone()
+    return row[0] if row else None
+
+
 def _energy_from_table_sync(
     conn: sqlite3.Connection,
     meta_id: int,
+    statistic_id: str,
     table: str,
     period_h: float,
     start_ts: float,
@@ -97,12 +113,17 @@ def _energy_from_table_sync(
 ) -> float:
     """
     Calcule l'énergie kWh pour une entité sur une table statistique donnée.
-    Préfère sum (compteur d'énergie, déjà en kWh) ; si sum est 0 ou absent,
-    utilise mean (capteur de puissance, en W → /1000).
+
+    Règle : on NE cumule JAMAIS sum ET mean.
+    - Si sum est disponible (>0) et l'unité n'est pas W (déjà en kWh) : on utilise sum tel quel.
+    - Si sum est disponible mais l'unité est W (en Wh) : on divise par 1000.
+    - Sinon on utilise mean (W × durée / 1000 → kWh).
     """
     cursor = conn.cursor()
+    unit = _get_unit_of_measurement(conn, statistic_id)
+    is_watt = unit and unit.strip().upper() == "W"
 
-    # 1. Essayer sum (compteur d'énergie, déjà en kWh)
+    # 1. Essayer sum (compteur d'énergie, déjà en kWh, sauf si unité = W → Wh)
     cursor.execute(
         f"SELECT COALESCE(SUM(s.sum), 0) FROM {table} s "
         f"WHERE s.metadata_id = ? AND s.start_ts >= ? AND s.start_ts < ?",
@@ -110,6 +131,9 @@ def _energy_from_table_sync(
     )
     sum_val = cursor.fetchone()[0]
     if sum_val and sum_val > 0:
+        if is_watt:
+            # sum en Wh pour un capteur de puissance → convertir en kWh
+            return round(float(sum_val) / 1000.0, 3)
         return round(float(sum_val), 3)
 
     # 2. Essayer mean (capteur de puissance, en W → /1000)
@@ -166,9 +190,13 @@ async def async_energy_for_period(hass: HomeAssistant, entity_ids: list[str], pe
                 conn = sqlite3.connect(db_path)
                 cursor = conn.cursor()
 
-                energy = _energy_from_table_sync(conn, meta_id, "statistics", 1.0, start_ts, end_ts)
+                energy = _energy_from_table_sync(
+                    conn, meta_id, eid, "statistics", 1.0, start_ts, end_ts
+                )
                 if energy <= 0:
-                    energy = _energy_from_table_sync(conn, meta_id, "statistics_short_term", 5.0 / 60.0, start_ts, end_ts)
+                    energy = _energy_from_table_sync(
+                        conn, meta_id, eid, "statistics_short_term", 5.0 / 60.0, start_ts, end_ts
+                    )
 
                 conn.close()
             else:
@@ -181,6 +209,10 @@ async def async_energy_for_period(hass: HomeAssistant, entity_ids: list[str], pe
                 energy = _delta_from_states(state_list)
 
             result[eid] = round(energy, 3)
+            _LOGGER.debug(
+                "HSE period_stats: %s période=%s énergie=%.3f kWh",
+                eid, period, energy,
+            )
 
     except Exception:
         _LOGGER.exception("HSE period_stats: erreur pour période %s", period)
