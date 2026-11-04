@@ -152,7 +152,7 @@ async def async_energy_for_period(hass: HomeAssistant, entity_ids: list[str], pe
         # Charger toutes les statistics_meta une seule fois
         conn_meta = sqlite3.connect(db_path)
         cursor_meta = conn_meta.cursor()
-        cursor_meta.execute("SELECT statistic_id, metadata_id FROM statistics_meta")
+        cursor_meta.execute("SELECT statistic_id, id FROM statistics_meta")
         all_stats = {row[0]: row[1] for row in cursor_meta.fetchall()}
         conn_meta.close()
 
