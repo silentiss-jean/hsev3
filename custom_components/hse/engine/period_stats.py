@@ -8,20 +8,20 @@ calculer l'énergie consommée.
 
 Règles de calcul selon le type d'entité :
 
-1. Capteur de puissance (state_class=measurement, unité W) :
+1. Capteur de puissance (unit_class=power, unité W) :
    énergie = SUM(mean(W)) × durée(heures) / 1000 → kWh
    Chaque entrée représente la puissance moyenne sur l'intervalle.
 
-2. Compteur d'énergie cumulative (state_class=total_increasing, unité kWh) :
+2. Compteur d'énergie cumulative (unit_class=energy, unité kWh) :
    énergie = MAX(sum) - MIN(sum) sur la période → kWh
    Chaque entrée stocke la valeur cumulative ; on prend le delta entre
    le début et la fin de la fenêtre.
 
-3. Compteur d'énergie non cumulatif (unité kWh, state_class != total_increasing) :
+3. Compteur d'énergie non cumulatif (unité kWh, unit_class != energy) :
    énergie = SUM(sum) → kWh (déjà en kWh, pas de division)
 
 Règle d'or : on NE cumule JAMAIS sum ET mean pour la même entité sur la même
-période. On choisit la méthode selon l'unité et la state_class.
+période. On choisit la méthode selon l'unité et la unit_class.
 
 Dépendances : sqlite3 sur home-assistant_v2.db (synchrone → executor)
 """
@@ -100,7 +100,7 @@ def _get_entity_meta(conn: sqlite3.Connection, statistic_id: str) -> dict[str, A
     """Retourne les métadonnées d'une entité depuis statistics_meta."""
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT id, unit_of_measurement, state_class FROM statistics_meta WHERE statistic_id = ?",
+        "SELECT id, unit_of_measurement, unit_class FROM statistics_meta WHERE statistic_id = ?",
         (statistic_id,),
     )
     row = cursor.fetchone()
@@ -109,13 +109,18 @@ def _get_entity_meta(conn: sqlite3.Connection, statistic_id: str) -> dict[str, A
     return {
         "id": row[0],
         "unit_of_measurement": row[1],
-        "state_class": row[2],
+        "unit_class": row[2],
     }
 
 
-def _is_cumulative_energy(state_class: str | None) -> bool:
+def _is_cumulative_energy(unit_class: str | None, unit_of_measurement: str | None) -> bool:
     """Détermine si l'entité est un compteur d'énergie cumulative."""
-    return state_class and state_class.strip().lower() == "total_increasing"
+    if not unit_class or not unit_of_measurement:
+        return False
+    return (
+        unit_class.strip().lower() == "energy"
+        and unit_of_measurement.strip().upper() == "KWH"
+    )
 
 
 def _is_power_sensor(unit: str | None) -> bool:
@@ -128,7 +133,7 @@ def _energy_from_table_sync(
     meta_id: int,
     statistic_id: str,
     unit: str | None,
-    state_class: str | None,
+    unit_class: str | None,
     table: str,
     period_h: float,
     start_ts: float,
@@ -138,12 +143,12 @@ def _energy_from_table_sync(
     Calcule l'énergie kWh pour une entité sur une table statistique donnée.
 
     Règle : on NE cumule JAMAIS sum ET mean.
-    - Compteur d'énergie cumulative (total_increasing, kWh) : delta = MAX(sum) - MIN(sum)
+    - Compteur d'énergie cumulative (unit_class=energy, kWh) : delta = MAX(sum) - MIN(sum)
     - Capteur de puissance (W) : mean(W) × durée / 1000 → kWh
     - Autre compteur d'énergie (kWh, non cumulatif) : SUM(sum) → kWh
     """
     cursor = conn.cursor()
-    is_cumulative = _is_cumulative_energy(state_class)
+    is_cumulative = _is_cumulative_energy(unit_class, unit)
     is_power = _is_power_sensor(unit)
 
     # 1. Compteur d'énergie cumulative : delta entre max et min sur la période
@@ -211,12 +216,12 @@ async def async_energy_for_period(hass: HomeAssistant, entity_ids: list[str], pe
         # Charger toutes les statistics_meta une seule fois
         conn_meta = sqlite3.connect(db_path)
         cursor_meta = conn_meta.cursor()
-        cursor_meta.execute("SELECT statistic_id, id, unit_of_measurement, state_class FROM statistics_meta")
+        cursor_meta.execute("SELECT statistic_id, id, unit_of_measurement, unit_class FROM statistics_meta")
         all_stats = {
             row[0]: {
                 "id": row[1],
                 "unit_of_measurement": row[2],
-                "state_class": row[3],
+                "unit_class": row[3],
             }
             for row in cursor_meta.fetchall()
         }
@@ -229,19 +234,19 @@ async def async_energy_for_period(hass: HomeAssistant, entity_ids: list[str], pe
                 meta = all_stats[eid]
                 meta_id = meta["id"]
                 unit = meta["unit_of_measurement"]
-                state_class = meta["state_class"]
+                unit_class = meta["unit_class"]
 
                 # Calcul via les statistiques HA
                 conn = sqlite3.connect(db_path)
                 cursor = conn.cursor()
 
                 energy = _energy_from_table_sync(
-                    conn, meta_id, eid, unit, state_class,
+                    conn, meta_id, eid, unit, unit_class,
                     "statistics", 1.0, start_ts, end_ts,
                 )
                 if energy <= 0:
                     energy = _energy_from_table_sync(
-                        conn, meta_id, eid, unit, state_class,
+                        conn, meta_id, eid, unit, unit_class,
                         "statistics_short_term", 5.0 / 60.0, start_ts, end_ts,
                     )
 
