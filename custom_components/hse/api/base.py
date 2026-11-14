@@ -50,3 +50,18 @@ class HseBaseView(HomeAssistantView):
             status=status.value,
             content_type="application/json",
         )
+
+    # ── Contrôle administrateur explicite (A11) ─────────────────────────────
+
+    def _is_admin_request(self, request: web.Request) -> bool:
+        """
+        Vérifie si l'utilisateur de la requête est administrateur HA.
+
+        Retourne False si l'information utilisateur n'est pas disponible
+        ou si l'utilisateur n'est pas admin.
+        """
+        try:
+            user = request["hass_user"]
+            return bool(getattr(user, "is_admin", False))
+        except (KeyError, TypeError, AttributeError):
+            return False

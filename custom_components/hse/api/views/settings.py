@@ -159,6 +159,8 @@ class HseSettingsView(HseBaseView):
         return self.json_ok(_serialize_settings(settings))
 
     async def put(self, request: web.Request) -> web.Response:
+        if not self._is_admin_request(request):
+            return self.json_error("Accès réservé aux administrateurs", HTTPStatus.FORBIDDEN)
         try:
             body: dict[str, Any] = await request.json()
         except Exception:
@@ -195,6 +197,8 @@ class HseSettingsPricingView(HseBaseView):
         )})
 
     async def put(self, request: web.Request) -> web.Response:
+        if not self._is_admin_request(request):
+            return self.json_error("Accès réservé aux administrateurs", HTTPStatus.FORBIDDEN)
         try:
             body: dict[str, Any] = await request.json()
         except Exception:
