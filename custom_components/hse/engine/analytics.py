@@ -17,6 +17,8 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant
 
+from .period_stats import async_energy_detail
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -160,18 +162,16 @@ async def async_history_12months(
         total_kwh = 0.0
 
         try:
-            # get_significant_states est synchrone → executor
-            def _fetch(s=start, e=end, eids=energy_sources):
-                return rec_history.get_significant_states(
-                    hass, s, e, eids, minimal_response=True
-                )
-
-            states_map: dict[str, list[Any]] = await hass.async_add_executor_job(_fetch)
-
+            # A12 : utilise le moteur énergétique commun (async_energy_detail)
+            # qui lit les statistiques HA agrégées, au lieu du delta d'états
+            # du recorder (moins fiable pour les compteurs cumulatifs).
+            detail = await async_energy_detail(
+                hass, energy_sources, period="month", start=start, end=end
+            )
             for eid in energy_sources:
-                state_list = states_map.get(eid) or []
-                kwh = _delta_from_states(state_list)
-                total_kwh += kwh
+                d = detail.get(eid)
+                if d:
+                    total_kwh += d.get("kwh", 0.0)
 
         except Exception:
             _LOGGER.exception(

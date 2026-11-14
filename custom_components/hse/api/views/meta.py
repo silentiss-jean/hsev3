@@ -45,7 +45,9 @@ class HseMetaView(HseBaseView):
                 # Compatibilité ascendante : store ancien format string
                 rooms_out.append({"id": r, "name": r})
 
-        types = list({a.get("type_id") for a in (meta.get("assignments") or {}).values() if isinstance(a, dict) and a.get("type_id")})
+        types_set = {a.get("type_id") for a in (meta.get("assignments") or {}).values() if isinstance(a, dict) and a.get("type_id")}
+        types_set.update(meta.get("types") or [])
+        types = sorted(types_set)
 
         assignments_out = []
         for eid, asn in (meta.get("assignments") or {}).items():
@@ -119,6 +121,40 @@ class HseMetaView(HseBaseView):
             if not saved:
                 return self.json_error("Échec de sauvegarde des métadonnées", HTTPStatus.INTERNAL_SERVER_ERROR)
             return self.json_ok({"name": name})
+
+        if action == "delete_type":
+            name = (body.get("name") or "").strip()
+            if not name:
+                return self.json_error("name requis", HTTPStatus.UNPROCESSABLE_ENTITY)
+            types_list = meta.setdefault("types", [])
+            if name not in types_list:
+                return self.json_error(f"Type '{name}' introuvable", HTTPStatus.NOT_FOUND)
+            types_list.remove(name)
+            saved = await mgr.async_save_meta(meta_store)
+            if not saved:
+                return self.json_error("Échec de sauvegarde des métadonnées", HTTPStatus.INTERNAL_SERVER_ERROR)
+            return self.json_ok({"deleted": name})
+
+        if action == "rename_type":
+            old_name = (body.get("old_name") or "").strip()
+            new_name = (body.get("new_name") or "").strip()
+            if not old_name or not new_name:
+                return self.json_error("old_name et new_name requis", HTTPStatus.UNPROCESSABLE_ENTITY)
+            types_list = meta.setdefault("types", [])
+            if old_name not in types_list:
+                return self.json_error(f"Type '{old_name}' introuvable", HTTPStatus.NOT_FOUND)
+            if new_name in types_list:
+                return self.json_error(f"Type '{new_name}' existe déjà", HTTPStatus.CONFLICT)
+            idx = types_list.index(old_name)
+            types_list[idx] = new_name
+            # Renommer aussi dans tous les assignments qui référencent ce type
+            for asn in assignments.values():
+                if isinstance(asn, dict) and asn.get("type_id") == old_name:
+                    asn["type_id"] = new_name
+            saved = await mgr.async_save_meta(meta_store)
+            if not saved:
+                return self.json_error("Échec de sauvegarde des métadonnées", HTTPStatus.INTERNAL_SERVER_ERROR)
+            return self.json_ok({"old_name": old_name, "new_name": new_name})
 
         if action == "rename_room":
             room_id = body.get("id")

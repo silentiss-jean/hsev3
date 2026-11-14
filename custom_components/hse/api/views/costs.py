@@ -135,9 +135,16 @@ async def _build_costs_data(
     for it in result_items:
         it["pct_total"] = round(it["cost_ttc_eur"] / total_ttc * 100, 1) if total_ttc > 0 else 0.0
 
-    # Abonnement ajouté une seule fois (pas par appareil) — uniquement pour la période mensuelle
+    # Abonnement ajouté une seule fois (pas par appareil), proratisé selon la période
+    sub = subscription_eur_month(settings)
     if period == "month":
-        total_ttc += subscription_eur_month(settings)
+        total_ttc += sub
+    elif period == "day":
+        total_ttc += round(sub / 30.0, 2)
+    elif period == "week":
+        total_ttc += round(sub * 7.0 / 30.0, 2)
+    elif period == "year":
+        total_ttc += round(sub * 12.0, 2)
 
     result_items.sort(key=lambda x: -x["cost_ttc_eur"])
 

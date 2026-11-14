@@ -232,14 +232,14 @@ def _energy_from_table_sync(
     return 0.0
 
 
-def _table_has_rows(
+def _table_row_count(
     conn: sqlite3.Connection,
     meta_id: int,
     table: str,
     start_ts: float,
     end_ts: float,
-) -> bool:
-    """Vérifie si la table contient au moins une ligne pour cette entité dans la fenêtre."""
+) -> int:
+    """Nombre de lignes pour cette entité dans la fenêtre."""
     cursor = conn.cursor()
     cursor.execute(
         f"SELECT COUNT(*) FROM {table} "
@@ -247,7 +247,26 @@ def _table_has_rows(
         (meta_id, start_ts, end_ts),
     )
     row = cursor.fetchone()
-    return bool(row and row[0] > 0)
+    return int(row[0]) if row else 0
+
+
+def _table_coverage_ratio(
+    conn: sqlite3.Connection,
+    meta_id: int,
+    table: str,
+    start_ts: float,
+    end_ts: float,
+    period_h: float,
+) -> float:
+    """Ratio de couverture : lignes trouvées / lignes attendues (0.0 à 1.0+).
+
+    Pour statistics (1h/entrée) on attend ~ (end-start)/3600 lignes.
+    Pour statistics_short_term (5min/entrée) on attend ~ (end-start)/300 lignes.
+    Retourne 1.0 si la couverture est complète ou excédentaire.
+    """
+    expected = max(1, int((end_ts - start_ts) / (period_h * 3600.0)))
+    found = _table_row_count(conn, meta_id, table, start_ts, end_ts)
+    return min(1.0, found / expected)
 
 
 def _energy_from_table_sync_full(
@@ -280,7 +299,7 @@ def _energy_from_table_sync_full(
         if energy > 0:
             return energy, "stats_long_term", "ok", None
         # Consommation nulle réelle : des données existent mais énergie = 0
-        if _table_has_rows(conn, meta_id, table, start_ts, end_ts):
+        if _table_row_count(conn, meta_id, table, start_ts, end_ts) > 0:
             return 0.0, "stats_long_term", "ok", None
         return 0.0, "stats_long_term", "missing", None
     except Exception:
@@ -318,8 +337,34 @@ def _fetch_stats_sync_full(
                     "statistics", 1.0, start_ts, end_ts,
                 )
                 if quality == "ok":
-                    # Données présentes (même si kwh == 0.0) → qualité ok
-                    entry = {"kwh": energy, "method": "stats_long_term", "quality": "ok", "error": None}
+                    # Données présentes (même si kwh == 0.0) → qualité ok.
+                    # A04 : si la couverture long terme est partielle,
+                    # compléter par le court terme.
+                    coverage = _table_coverage_ratio(
+                        conn, meta_id, "statistics", start_ts, end_ts, 1.0
+                    )
+                    if coverage < 1.0:
+                        energy2, method2, quality2, error2 = _energy_from_table_sync_full(
+                            conn, meta_id, eid, unit, unit_class,
+                            "statistics_short_term", 5.0 / 60.0, start_ts, end_ts,
+                        )
+                        if quality2 == "ok" and energy2 > 0:
+                            entry = {
+                                "kwh": round(energy + energy2, 3),
+                                "method": "stats_long_term+short_term",
+                                "quality": "partial",
+                                "error": None,
+                            }
+                        else:
+                            entry = {
+                                "kwh": energy,
+                                "method": "stats_long_term",
+                                "quality": "partial",
+                                "error": None,
+                            }
+                    else:
+                        entry = {"kwh": energy, "method": "stats_long_term",
+                                 "quality": "ok", "error": None}
                 else:
                     # Pas de données long terme → essayer court terme
                     energy2, method2, quality2, error2 = _energy_from_table_sync_full(
@@ -553,6 +598,8 @@ async def async_energy_detail(
     hass: HomeAssistant,
     entity_ids: list[str],
     period: str = "month",
+    start: datetime | None = None,
+    end: datetime | None = None,
 ) -> dict[str, dict]:
     """Énergie par entité avec méthode et qualité (contrat API).
 
@@ -576,7 +623,8 @@ async def async_energy_detail(
             for eid in entity_ids
         }
 
-    start, end = window_for_period(period)
+    if start is None or end is None:
+        start, end = window_for_period(period)
     result: dict[str, dict] = {}
     start_ts = start.timestamp()
     end_ts = end.timestamp()

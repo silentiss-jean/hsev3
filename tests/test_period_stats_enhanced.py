@@ -202,6 +202,114 @@ class TestBorneTemporelle(unittest.TestCase):
         self.assertEqual(energie, 1.5, f"attendu 1.5 kWh, obtenu {energie}")
 
 
+# ════════════════════════════════════════════════════════════════════
+# A04 — Couverture des périodes : long terme partiel complété par court terme
+# ════════════════════════════════════════════════════════════════════
+
+class TestCouverturePartielle(unittest.TestCase):
+    """A04 : si le long terme couvre partiellement la période, le court terme complète."""
+
+    def _make_conn_full(self, rows_meta, rows_long, rows_short):
+        conn = sqlite3.connect(":memory:")
+        cur = conn.cursor()
+        cur.execute(
+            "CREATE TABLE statistics_meta (id INTEGER, statistic_id TEXT, unit_of_measurement TEXT, unit_class TEXT)"
+        )
+        cur.execute(
+            "CREATE TABLE statistics (id INTEGER, metadata_id INTEGER, start_ts REAL, sum REAL, mean REAL)"
+        )
+        cur.execute(
+            "CREATE TABLE statistics_short_term (id INTEGER, metadata_id INTEGER, start_ts REAL, sum REAL, mean REAL)"
+        )
+        for row in rows_meta:
+            cur.execute("INSERT INTO statistics_meta VALUES (?,?,?,?)", row)
+        for row in rows_long:
+            cur.execute("INSERT INTO statistics VALUES (?,?,?,?,?)", row)
+        for row in rows_short:
+            cur.execute("INSERT INTO statistics_short_term VALUES (?,?,?,?,?)", row)
+        conn.commit()
+        return conn
+
+    def test_long_terme_partiel_complete_par_court_terme(self):
+        """Periode de 24h. Long terme une seule ligne. Court terme complete."""
+        import tempfile
+        import os
+
+        tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        tmp.close()
+        try:
+            conn = sqlite3.connect(tmp.name)
+            cur = conn.cursor()
+            cur.execute(
+                "CREATE TABLE statistics_meta (id INTEGER, statistic_id TEXT, unit_of_measurement TEXT, unit_class TEXT)"
+            )
+            cur.execute(
+                "CREATE TABLE statistics (id INTEGER, metadata_id INTEGER, start_ts REAL, sum REAL, mean REAL)"
+            )
+            cur.execute(
+                "CREATE TABLE statistics_short_term (id INTEGER, metadata_id INTEGER, start_ts REAL, sum REAL, mean REAL)"
+            )
+            cur.execute(
+                "INSERT INTO statistics_meta VALUES (?,?,?,?)",
+                (1, "sensor.test", "kWh", "energy"),
+            )
+            # Une seule ligne long terme (couverture partielle)
+            cur.execute(
+                "INSERT INTO statistics VALUES (?,?,?,?,?)",
+                (1, 1, 1000.0, 100.0, None),
+            )
+            # Plusieurs lignes court terme dans la fenetre
+            cur.execute(
+                "INSERT INTO statistics_short_term VALUES (?,?,?,?,?)",
+                (1, 1, 1000.0, 0.0, None),
+            )
+            cur.execute(
+                "INSERT INTO statistics_short_term VALUES (?,?,?,?,?)",
+                (2, 1, 1300.0, 5.0, None),
+            )
+            cur.execute(
+                "INSERT INTO statistics_short_term VALUES (?,?,?,?,?)",
+                (3, 1, 1600.0, 10.0, None),
+            )
+            conn.commit()
+            conn.close()
+
+            all_stats = {
+                "sensor.test": {
+                    "id": 1,
+                    "unit_of_measurement": "kWh",
+                    "unit_class": "energy",
+                }
+            }
+            start_ts = 900.0
+            end_ts = 10000.0
+
+            # Verifier que la couverture long terme est bien partielle
+            conn2 = sqlite3.connect(tmp.name)
+            coverage = pstats._table_coverage_ratio(
+                conn2, 1, "statistics", start_ts, end_ts, 1.0
+            )
+            conn2.close()
+            self.assertLess(coverage, 1.0, "la couverture doit etre partielle")
+
+            result = pstats._fetch_stats_sync_full(
+                tmp.name, ["sensor.test"], all_stats, start_ts, end_ts
+            )
+            entry = result["sensor.test"]
+            self.assertIn(
+                "short_term", entry["method"],
+                f"methode attendue avec short_term, obtenu '{entry['method']}'",
+            )
+            self.assertEqual(
+                entry["quality"], "partial",
+                f"qualite attendue 'partial', obtenu '{entry['quality']}'",
+            )
+            self.assertGreater(entry["kwh"], 0.0, "l'energie doit etre > 0")
+            self.assertIsNone(entry["error"])
+        finally:
+            os.unlink(tmp.name)
+
+
 # ═════════════════════════════════════════════════════════════════════
 # A06 — Qualité « ok » même quand énergie = 0.0 (données présentes)
 # ═════════════════════════════════════════════════════════════════════

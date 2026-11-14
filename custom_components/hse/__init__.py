@@ -163,6 +163,12 @@ def _register_services(hass: HomeAssistant) -> None:
         period = call.data.get("period", "month")
         fmt = call.data.get("format", "csv")
         data = await _build_costs_data(hass, period)
+        # Stocke le résultat pour qu'il soit récupérable (A15)
+        hass.data.setdefault(DOMAIN, {})["last_export"] = {
+            "period": period,
+            "format": fmt,
+            "data": data,
+        }
         _LOGGER.info(
             "HSE service export_data : period=%s format=%s total_kwh=%s",
             period, fmt, data.get("total_kwh"),
@@ -259,5 +265,13 @@ def _register_services(hass: HomeAssistant) -> None:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN].pop(entry.entry_id, None)
     async_remove_panel(hass, DOMAIN)
+    # A15 : désenregistre tous les services HSE à la décharge
+    for name in (
+        "catalogue_refresh", "meta_sync", "export_data", "migrate_cleanup",
+        "reset_catalogue", "reset_settings", "reset_meta",
+        "set_entity_assignment", "set_triage_policy",
+    ):
+        if hass.services.has_service(DOMAIN, name):
+            hass.services.async_remove(DOMAIN, name)
     _LOGGER.info("HSE V3 déchargé (entry: %s)", entry.entry_id)
     return True
