@@ -21,8 +21,8 @@ from homeassistant.core import HomeAssistant
 from ..base import HseBaseView
 from ...storage.manager import HseStorageManager
 from ...engine.calculation import compute_totals, top_n_by_power, get_power_w, read_sensor
-from ...engine.cost import cost_summary
-from ...engine.period_stats import async_energy_detail
+from ...engine.cost import cost_summary, subscription_eur_month
+from ...engine.period_stats import async_energy_detail, async_energy_detail_hphc
 from ...engine.group_totals import totals_by_type
 from ...engine.reference import coverage, energy_coverage
 from ...engine.sources import plan_sources
@@ -75,18 +75,51 @@ class HseOverviewView(HseBaseView):
         method_count: dict[str, int] = {}
         missing_ids: set[str] = set()
         energy_cov: dict[str, dict] = {}
+        is_hphc = (settings.get("mode") or "flat").lower() == "hphc"
+        hc_start = settings.get("hc_start")
+        hc_end = settings.get("hc_end")
         for p in _PERIODS:
-            detail = await async_energy_detail(self.hass, plan.energy_sources, p)
-            total_kwh = round(sum(d["kwh"] for d in detail.values()), 3)
-            cost_data = cost_summary(total_kwh, settings, include_subscription=(p == "month"))
-            periods[p] = {"kwh": total_kwh, "eur": cost_data["cost_ttc_eur"]}
-            for eid, d in detail.items():
-                method_count[d["method"]] = method_count.get(d["method"], 0) + 1
-                if d["quality"] == "missing":
-                    missing_ids.add(eid)
+            if is_hphc and hc_start and hc_end:
+                detail = await async_energy_detail_hphc(
+                    self.hass, plan.energy_sources, p, hc_start=hc_start, hc_end=hc_end
+                )
+                total_kwh = round(sum(d["total_kwh"] for d in detail.values()), 3)
+                hp_kwh = round(sum(d["hp_kwh"] for d in detail.values()), 3)
+                hc_kwh = round(sum(d["hc_kwh"] for d in detail.values()), 3)
+                # Coût HP et HC séparés
+                cost_hp = cost_summary(hp_kwh, settings, is_hc=False)
+                cost_hc = cost_summary(hc_kwh, settings, is_hc=True)
+                cost_ttc_eur = round(cost_hp["cost_ttc_eur"] + cost_hc["cost_ttc_eur"], 2)
+                if p == "month":
+                    cost_ttc_eur = round(cost_ttc_eur + subscription_eur_month(settings), 2)
+                periods[p] = {
+                    "kwh": total_kwh,
+                    "eur": cost_ttc_eur,
+                    "hp_kwh": hp_kwh,
+                    "hc_kwh": hc_kwh,
+                }
+                for eid, d in detail.items():
+                    method_count[d["method"]] = method_count.get(d["method"], 0) + 1
+                    if d["quality"] == "missing":
+                        missing_ids.add(eid)
+            else:
+                detail = await async_energy_detail(self.hass, plan.energy_sources, p)
+                total_kwh = round(sum(d["kwh"] for d in detail.values()), 3)
+                cost_data = cost_summary(total_kwh, settings, include_subscription=(p == "month"))
+                periods[p] = {"kwh": total_kwh, "eur": cost_data["cost_ttc_eur"]}
+                for eid, d in detail.items():
+                    method_count[d["method"]] = method_count.get(d["method"], 0) + 1
+                    if d["quality"] == "missing":
+                        missing_ids.add(eid)
             if ref_energy_id:
-                rd = (await async_energy_detail(self.hass, [ref_energy_id], p)).get(ref_energy_id)
-                ref_kwh = rd["kwh"] if rd and rd["quality"] != "missing" else None
+                if is_hphc and hc_start and hc_end:
+                    rd = (await async_energy_detail_hphc(
+                        self.hass, [ref_energy_id], p, hc_start=hc_start, hc_end=hc_end
+                    )).get(ref_energy_id)
+                    ref_kwh = rd["total_kwh"] if rd and rd["quality"] != "missing" else None
+                else:
+                    rd = (await async_energy_detail(self.hass, [ref_energy_id], p)).get(ref_energy_id)
+                    ref_kwh = rd["kwh"] if rd and rd["quality"] != "missing" else None
                 energy_cov[p] = energy_coverage(ref_kwh, total_kwh)
                 periods[p]["reference_kwh"] = ref_kwh
                 periods[p]["reference_eur"] = (
@@ -143,8 +176,7 @@ class HseOverviewView(HseBaseView):
         notes: list[str] = []
         level = "ok"
         if (settings.get("mode") or "flat").lower() == "hphc":
-            notes.append("hphc_costs_at_hp_rate")  # le split HP/HC n'est pas encore calculé
-            level = "warning"
+            notes.append("hphc_mode_active")
         if not ref_ids:
             notes.append("no_reference_configured")
             level = "warning"

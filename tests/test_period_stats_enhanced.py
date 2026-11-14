@@ -196,5 +196,154 @@ class TestBorneTemporelle(unittest.TestCase):
         self.assertEqual(energie, 1.5, f"attendu 1.5 kWh, obtenu {energie}")
 
 
+# ═════════════════════════════════════════════════════════════════════
+# A06 — Qualité « ok » même quand énergie = 0.0 (données présentes)
+# ═════════════════════════════════════════════════════════════════════
+
+class TestQualiteZeroVsAbsence(unittest.TestCase):
+    """A06 : une consommation nulle réelle est « ok », pas « missing »."""
+
+    def _make_conn_zero(self, rows_meta, rows_stats):
+        conn = sqlite3.connect(":memory:")
+        cur = conn.cursor()
+        cur.execute(
+            "CREATE TABLE statistics_meta (id INTEGER, statistic_id TEXT, unit_of_measurement TEXT, unit_class TEXT)"
+        )
+        cur.execute(
+            "CREATE TABLE statistics (id INTEGER, metadata_id INTEGER, start_ts REAL, sum REAL, mean REAL)"
+        )
+        for row in rows_meta:
+            cur.execute("INSERT INTO statistics_meta VALUES (?,?,?,?)", row)
+        for row in rows_stats:
+            cur.execute("INSERT INTO statistics VALUES (?,?,?,?,?)", row)
+        conn.commit()
+        return conn
+
+    def test_qualite_ok_quand_energie_nulle_mais_donnees_presentes(self):
+        """Données présentes dans la fenêtre mais somme = 0 → quality « ok »."""
+        conn = self._make_conn_zero(
+            rows_meta=[(1, "sensor.test", "kWh", "energy")],
+            rows_stats=[
+                (1, 1, 1500.0, 0.0, None),   # dans la fenêtre, valeur 0
+            ],
+        )
+        start_ts = 1000.0
+        end_ts = 2000.0
+        kwh, method, quality, error = pstats._energy_from_table_sync_full(
+            conn, 1, "sensor.test", "kWh", "energy",
+            "statistics", 1.0, start_ts, end_ts,
+        )
+        self.assertEqual(quality, "ok", f"attendu 'ok', obtenu '{quality}'")
+        self.assertEqual(kwh, 0.0)
+        self.assertIsNone(error)
+
+    def test_qualite_missing_quand_aucune_donnee(self):
+        """Aucune ligne dans la fenêtre → quality « missing »."""
+        conn = self._make_conn_zero(
+            rows_meta=[(1, "sensor.test", "kWh", "energy")],
+            rows_stats=[],  # aucune donnée
+        )
+        start_ts = 1000.0
+        end_ts = 2000.0
+        kwh, method, quality, error = pstats._energy_from_table_sync_full(
+            conn, 1, "sensor.test", "kWh", "energy",
+            "statistics", 1.0, start_ts, end_ts,
+        )
+        self.assertEqual(quality, "missing", f"attendu 'missing', obtenu '{quality}'")
+        self.assertEqual(kwh, 0.0)
+
+
+# ═════════════════════════════════════════════════════════════════════
+# A07 — Split HP/HC (Heures Pleines / Heures Creuses)
+# ═════════════════════════════════════════════════════════════════════
+
+class TestSplitHPHC(unittest.TestCase):
+    """A07 : séparation de l'énergie en HP et HC selon la plage configurée."""
+
+    def _make_conn_hphc(self, rows_meta, rows_stats):
+        conn = sqlite3.connect(":memory:")
+        cur = conn.cursor()
+        cur.execute(
+            "CREATE TABLE statistics_meta (id INTEGER, statistic_id TEXT, unit_of_measurement TEXT, unit_class TEXT)"
+        )
+        cur.execute(
+            "CREATE TABLE statistics (id INTEGER, metadata_id INTEGER, start_ts REAL, sum REAL, mean REAL)"
+        )
+        for row in rows_meta:
+            cur.execute("INSERT INTO statistics_meta VALUES (?,?,?,?)", row)
+        for row in rows_stats:
+            cur.execute("INSERT INTO statistics VALUES (?,?,?,?,?)", row)
+        conn.commit()
+        return conn
+
+    def _ts(self, year, month, day, hour, minute=0):
+        return datetime(year, month, day, hour, minute, tzinfo=timezone.utc).timestamp()
+
+    def test_compteur_cumulatif_split_hphc(self):
+        """Compteur kWh cumulatif : delta classé HC ou HP selon l'heure."""
+        conn = self._make_conn_hphc(
+            rows_meta=[(1, "sensor.test", "kWh", "energy")],
+            rows_stats=[
+                (1, 1, self._ts(2026, 1, 1, 21, 0), 100.0, None),   # HP
+                (2, 1, self._ts(2026, 1, 1, 23, 0), 110.0, None),   # HC
+                (3, 1, self._ts(2026, 1, 2, 5, 0), 115.0, None),    # HC
+                (4, 1, self._ts(2026, 1, 2, 7, 0), 120.0, None),    # HP
+            ],
+        )
+        start_ts = self._ts(2026, 1, 1, 0, 0)
+        end_ts = self._ts(2026, 1, 2, 12, 0)
+        split = pstats._energy_hphc_split_sync(
+            conn, 1, "sensor.test", "kWh", "energy",
+            "statistics", start_ts, end_ts,
+            hc_start_min=22 * 60,   # 22:00
+            hc_end_min=6 * 60,      # 06:00
+        )
+        self.assertEqual(split["hc_kwh"], 15.0, f"attendu 15.0 kWh HC, obtenu {split['hc_kwh']}")
+        self.assertEqual(split["hp_kwh"], 5.0, f"attendu 5.0 kWh HP, obtenu {split['hp_kwh']}")
+        self.assertEqual(split["total_kwh"], 20.0)
+
+    def test_puissance_split_hphc(self):
+        """Capteur kW : chaque entrée mean classée HP/HC selon l'heure."""
+        conn = self._make_conn_hphc(
+            rows_meta=[(1, "sensor.test_power", "kW", "power")],
+            rows_stats=[
+                (1, 1, self._ts(2026, 1, 1, 10, 0), None, 2.0),   # HP, 2 kW → 2 kWh
+                (2, 1, self._ts(2026, 1, 1, 23, 0), None, 1.0),   # HC, 1 kW → 1 kWh
+            ],
+        )
+        start_ts = self._ts(2026, 1, 1, 0, 0)
+        end_ts = self._ts(2026, 1, 1, 23, 59)
+        split = pstats._energy_hphc_split_sync(
+            conn, 1, "sensor.test_power", "kW", "power",
+            "statistics", start_ts, end_ts,
+            hc_start_min=22 * 60,
+            hc_end_min=6 * 60,
+        )
+        self.assertEqual(split["hp_kwh"], 2.0, f"attendu 2.0 kWh HP, obtenu {split['hp_kwh']}")
+        self.assertEqual(split["hc_kwh"], 1.0, f"attendu 1.0 kWh HC, obtenu {split['hc_kwh']}")
+        self.assertEqual(split["total_kwh"], 3.0)
+
+    def test_pas_de_config_hc_retourne_tout_en_hp(self):
+        """Sans hc_start/hc_end, toute l'énergie est classée HP."""
+        conn = self._make_conn_hphc(
+            rows_meta=[(1, "sensor.test", "kWh", "energy")],
+            rows_stats=[
+                (1, 1, self._ts(2026, 1, 1, 23, 0), 100.0, None),
+                (2, 1, self._ts(2026, 1, 2, 1, 0), 110.0, None),
+            ],
+        )
+        start_ts = self._ts(2026, 1, 1, 0, 0)
+        end_ts = self._ts(2026, 1, 2, 12, 0)
+        split = pstats._energy_hphc_split_sync(
+            conn, 1, "sensor.test", "kWh", "energy",
+            "statistics", start_ts, end_ts,
+            hc_start_min=None,
+            hc_end_min=None,
+        )
+        self.assertEqual(split["hp_kwh"], 10.0)
+        self.assertEqual(split["hc_kwh"], 0.0)
+        self.assertEqual(split["total_kwh"], 10.0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

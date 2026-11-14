@@ -146,6 +146,8 @@ class HseCatalogueItemView(HseBaseView):
 
     async def patch(self, request: web.Request, entity_id: str) -> web.Response:
         """Active/désactive un capteur, ou met à jour display_name/icon."""
+        if not self._is_admin_request(request):
+            return self.json_error("Accès réservé aux administrateurs", HTTPStatus.FORBIDDEN)
         try:
             body: dict[str, Any] = await request.json()
         except Exception:
@@ -168,11 +170,15 @@ class HseCatalogueItemView(HseBaseView):
         if "icon" in body and isinstance(body["icon"], str):
             enrichment["icon"] = body["icon"].strip()
 
-        await mgr.async_save_catalogue(catalogue)
+        saved = await mgr.async_save_catalogue(catalogue)
+        if not saved:
+            return self.json_error("Échec de sauvegarde du catalogue", HTTPStatus.INTERNAL_SERVER_ERROR)
         return self.json_ok({"entity_id": entity_id, "updated": True})
 
     async def delete(self, request: web.Request, entity_id: str) -> web.Response:
         """Supprime un capteur du catalogue."""
+        if not self._is_admin_request(request):
+            return self.json_error("Accès réservé aux administrateurs", HTTPStatus.FORBIDDEN)
         mgr = HseStorageManager(self.hass)
         catalogue = await mgr.async_load_catalogue()
         items = catalogue.get("items") or {}
@@ -182,7 +188,9 @@ class HseCatalogueItemView(HseBaseView):
             return self.json_error(f"{entity_id} non trouvé dans le catalogue", HTTPStatus.NOT_FOUND)
 
         del items[key]
-        await mgr.async_save_catalogue(catalogue)
+        saved = await mgr.async_save_catalogue(catalogue)
+        if not saved:
+            return self.json_error("Échec de sauvegarde du catalogue", HTTPStatus.INTERNAL_SERVER_ERROR)
         return self.json_ok({"entity_id": entity_id, "deleted": True})
 
 
@@ -195,6 +203,8 @@ class HseCatalogueBulkView(HseBaseView):
         super().__init__(hass)
 
     async def post(self, request: web.Request) -> web.Response:
+        if not self._is_admin_request(request):
+            return self.json_error("Accès réservé aux administrateurs", HTTPStatus.FORBIDDEN)
         try:
             body: dict[str, Any] = await request.json()
         except Exception:
@@ -234,7 +244,9 @@ class HseCatalogueBulkView(HseBaseView):
         for k in keys_to_delete:
             del items[k]
 
-        await mgr.async_save_catalogue(catalogue)
+        saved = await mgr.async_save_catalogue(catalogue)
+        if not saved:
+            return self.json_error("Échec de sauvegarde du catalogue", HTTPStatus.INTERNAL_SERVER_ERROR)
         return self.json_ok({"processed": processed, "errors": errors})
 
 
@@ -246,6 +258,8 @@ class HseCatalogueTriageView(HseBaseView):
         super().__init__(hass)
 
     async def post(self, request: web.Request) -> web.Response:
+        if not self._is_admin_request(request):
+            return self.json_error("Accès réservé aux administrateurs", HTTPStatus.FORBIDDEN)
         try:
             body: dict[str, Any] = await request.json()
         except Exception:
@@ -269,7 +283,9 @@ class HseCatalogueTriageView(HseBaseView):
 
         new_policy = {"select": "selected", "ignore": "ignored", "reset": "pending"}[action]
         items[key].setdefault("triage", {})["policy"] = new_policy
-        await mgr.async_save_catalogue(catalogue)
+        saved = await mgr.async_save_catalogue(catalogue)
+        if not saved:
+            return self.json_error("Échec de sauvegarde du catalogue", HTTPStatus.INTERNAL_SERVER_ERROR)
 
         return self.json_ok({"entity_id": entity_id, "status": new_policy})
 
@@ -282,6 +298,8 @@ class HseCatalogueTriageBulkView(HseBaseView):
         super().__init__(hass)
 
     async def post(self, request: web.Request) -> web.Response:
+        if not self._is_admin_request(request):
+            return self.json_error("Accès réservé aux administrateurs", HTTPStatus.FORBIDDEN)
         try:
             body: dict[str, Any] = await request.json()
         except Exception:
@@ -321,7 +339,9 @@ class HseCatalogueTriageBulkView(HseBaseView):
             items[key].setdefault("triage", {})["policy"] = new_policy
             processed += 1
 
-        await mgr.async_save_catalogue(catalogue)
+        saved = await mgr.async_save_catalogue(catalogue)
+        if not saved:
+            return self.json_error("Échec de sauvegarde du catalogue", HTTPStatus.INTERNAL_SERVER_ERROR)
         return self.json_ok({"processed": processed, "errors": errors})
 
 

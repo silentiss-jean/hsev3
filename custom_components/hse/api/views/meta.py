@@ -74,6 +74,8 @@ class HseMetaView(HseBaseView):
             {"action": "delete_room", "id": "garage"}
             {"action": "assign", "entity_id": "sensor.x", "room_id": "garage", "type_id": "Chauffe-eau"}
         """
+        if not self._is_admin_request(request):
+            return self.json_error("Accès réservé aux administrateurs", HTTPStatus.FORBIDDEN)
         try:
             body: dict[str, Any] = await request.json()
         except Exception:
@@ -98,7 +100,9 @@ class HseMetaView(HseBaseView):
             if any((r.get("id") if isinstance(r, dict) else r) == room_id for r in rooms):
                 return self.json_error(f"Pièce '{room_id}' existe déjà", HTTPStatus.CONFLICT)
             rooms.append({"id": room_id, "name": name})
-            await mgr.async_save_meta(meta_store)
+            saved = await mgr.async_save_meta(meta_store)
+            if not saved:
+                return self.json_error("Échec de sauvegarde des métadonnées", HTTPStatus.INTERNAL_SERVER_ERROR)
             return self.json_ok({"id": room_id, "name": name})
 
         if action == "create_type":
@@ -111,7 +115,9 @@ class HseMetaView(HseBaseView):
             if name in types_list:
                 return self.json_error(f"Type '{name}' existe déjà", HTTPStatus.CONFLICT)
             types_list.append(name)
-            await mgr.async_save_meta(meta_store)
+            saved = await mgr.async_save_meta(meta_store)
+            if not saved:
+                return self.json_error("Échec de sauvegarde des métadonnées", HTTPStatus.INTERNAL_SERVER_ERROR)
             return self.json_ok({"name": name})
 
         if action == "rename_room":
@@ -127,7 +133,9 @@ class HseMetaView(HseBaseView):
                     break
             if not found:
                 return self.json_error(f"Pièce '{room_id}' introuvable", HTTPStatus.NOT_FOUND)
-            await mgr.async_save_meta(meta_store)
+            saved = await mgr.async_save_meta(meta_store)
+            if not saved:
+                return self.json_error("Échec de sauvegarde des métadonnées", HTTPStatus.INTERNAL_SERVER_ERROR)
             return self.json_ok({"id": room_id, "name": name})
 
         if action == "delete_room":
@@ -139,7 +147,9 @@ class HseMetaView(HseBaseView):
             for asn in assignments.values():
                 if isinstance(asn, dict) and asn.get("room_id") == room_id:
                     asn["room_id"] = None
-            await mgr.async_save_meta(meta_store)
+            saved = await mgr.async_save_meta(meta_store)
+            if not saved:
+                return self.json_error("Échec de sauvegarde des métadonnées", HTTPStatus.INTERNAL_SERVER_ERROR)
             return self.json_ok({"deleted": room_id})
 
         if action == "assign":
@@ -151,7 +161,9 @@ class HseMetaView(HseBaseView):
                 asn["room_id"] = body.get("room_id")
             if "type_id" in body:
                 asn["type_id"] = body.get("type_id")
-            await mgr.async_save_meta(meta_store)
+            saved = await mgr.async_save_meta(meta_store)
+            if not saved:
+                return self.json_error("Échec de sauvegarde des métadonnées", HTTPStatus.INTERNAL_SERVER_ERROR)
             return self.json_ok({"entity_id": entity_id, "room_id": asn.get("room_id"), "type_id": asn.get("type_id")})
 
         return self.json_error(f"action inconnue: {action}", HTTPStatus.UNPROCESSABLE_ENTITY)
@@ -199,6 +211,8 @@ class HseMetaSyncApplyView(HseBaseView):
         self._applying = False
 
     async def post(self, request: web.Request) -> web.Response:
+        if not self._is_admin_request(request):
+            return self.json_error("Accès réservé aux administrateurs", HTTPStatus.FORBIDDEN)
         if self._applying:
             return self.json_error("Sync déjà en cours", HTTPStatus.CONFLICT)
         try:
@@ -216,7 +230,9 @@ class HseMetaSyncApplyView(HseBaseView):
             snapshot = await async_build_ha_snapshot(self.hass, catalogue)
             diff = compute_pending_diff(meta_store, snapshot)
             updated = apply_pending_diff(meta_store, diff, apply_mode="all")
-            await mgr.async_save_meta(updated)
+            saved = await mgr.async_save_meta(updated)
+            if not saved:
+                return self.json_error("Échec de sauvegarde des métadonnées", HTTPStatus.INTERNAL_SERVER_ERROR)
             applied = diff.get("stats", {}).get("create_rooms", 0) + diff.get("stats", {}).get("rename_rooms", 0)
         except Exception as exc:
             errors.append(str(exc))

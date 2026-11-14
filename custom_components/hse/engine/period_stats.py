@@ -31,12 +31,13 @@ from __future__ import annotations
 import logging
 import re
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from homeassistant.core import HomeAssistant
 
-from ..time_utils import window_for_period
+from ..time_utils import window_for_period, parse_hhmm
 from .measure import ENERGY_UNITS, POWER_UNITS
 
 _LOGGER = logging.getLogger(__name__)
@@ -231,6 +232,24 @@ def _energy_from_table_sync(
     return 0.0
 
 
+def _table_has_rows(
+    conn: sqlite3.Connection,
+    meta_id: int,
+    table: str,
+    start_ts: float,
+    end_ts: float,
+) -> bool:
+    """Vérifie si la table contient au moins une ligne pour cette entité dans la fenêtre."""
+    cursor = conn.cursor()
+    cursor.execute(
+        f"SELECT COUNT(*) FROM {table} "
+        f"WHERE metadata_id = ? AND start_ts >= ? AND start_ts < ?",
+        (meta_id, start_ts, end_ts),
+    )
+    row = cursor.fetchone()
+    return bool(row and row[0] > 0)
+
+
 def _energy_from_table_sync_full(
     conn: sqlite3.Connection,
     meta_id: int,
@@ -248,7 +267,10 @@ def _energy_from_table_sync_full(
     Retourne (kwh, method, quality, error)
     method ∈ {"stats_long_term", "stats_short_term"}
     quality ∈ {"ok", "partial", "missing"}
-    error ∈ {None, "no_data", "db_error"}
+        - "ok" : des données existent dans la fenêtre (même si kwh == 0.0)
+        - "missing" : aucune donnée dans la fenêtre
+        - "partial" : données partielles (court terme)
+    error ∈ {None, "db_error"}
     """
     try:
         energy = _energy_from_table_sync(
@@ -257,14 +279,16 @@ def _energy_from_table_sync_full(
         )
         if energy > 0:
             return energy, "stats_long_term", "ok", None
+        # Consommation nulle réelle : des données existent mais énergie = 0
+        if _table_has_rows(conn, meta_id, table, start_ts, end_ts):
+            return 0.0, "stats_long_term", "ok", None
         return 0.0, "stats_long_term", "missing", None
     except Exception:
         _LOGGER.exception("period_stats: erreur lecture table %s pour %s", table, statistic_id)
         return 0.0, "stats_long_term", "missing", "db_error"
 
 
-async def _fetch_stats_sync(
-    hass: HomeAssistant,
+def _fetch_stats_sync_full(
     db_path: str,
     entity_ids: list[str],
     all_stats: dict[str, dict],
@@ -272,7 +296,7 @@ async def _fetch_stats_sync(
     end_ts: float,
 ) -> dict[str, dict]:
     """
-    Travail synchrone DB pour async_energy_detail. Appelé via
+    Travail synchrone DB pour async_energy_detail. À appeler via
     hass.async_add_executor_job pour ne pas bloquer la boucle async (A05).
 
     Retourne {entity_id: {"kwh": float, "method": str, "quality": str, "error": str|null}}
@@ -288,29 +312,54 @@ async def _fetch_stats_sync(
                 unit = meta["unit_of_measurement"]
                 unit_class = meta["unit_class"]
 
-                # Long terme
+                # ── Long terme ──────────────────────────────────────────
                 energy, method, quality, error = _energy_from_table_sync_full(
                     conn, meta_id, eid, unit, unit_class,
                     "statistics", 1.0, start_ts, end_ts,
                 )
-                if energy > 0:
+                if quality == "ok":
+                    # Données présentes (même si kwh == 0.0) → qualité ok
                     entry = {"kwh": energy, "method": "stats_long_term", "quality": "ok", "error": None}
                 else:
-                    # Court terme
+                    # Pas de données long terme → essayer court terme
                     energy2, method2, quality2, error2 = _energy_from_table_sync_full(
                         conn, meta_id, eid, unit, unit_class,
                         "statistics_short_term", 5.0 / 60.0, start_ts, end_ts,
                     )
-                    if energy2 > 0:
-                        entry = {"kwh": energy2, "method": "stats_short_term", "quality": "partial", "error": None}
+                    if quality2 == "ok":
+                        entry = {
+                            "kwh": energy2,
+                            "method": "stats_short_term",
+                            "quality": "partial",
+                            "error": None,
+                        }
                     else:
-                        entry = {"kwh": 0.0, "method": "stats_long_term", "quality": "missing", "error": error or None}
+                        entry = {
+                            "kwh": 0.0,
+                            "method": "stats_long_term",
+                            "quality": "missing",
+                            "error": error or error2 or None,
+                        }
             else:
                 entry = {"kwh": 0.0, "method": "unavailable", "quality": "missing", "error": None}
             result[eid] = entry
     finally:
         conn.close()
     return result
+
+
+async def _fetch_stats_sync(
+    hass: HomeAssistant,
+    db_path: str,
+    entity_ids: list[str],
+    all_stats: dict[str, dict],
+    start_ts: float,
+    end_ts: float,
+) -> dict[str, dict]:
+    """Wrapper async qui délègue tout le SQLite à l'executor (A05)."""
+    return await hass.async_add_executor_job(
+        _fetch_stats_sync_full, db_path, entity_ids, all_stats, start_ts, end_ts
+    )
 
 
 async def async_energy_for_period(
@@ -605,5 +654,267 @@ async def async_energy_detail(
                     "quality": "missing",
                     "error": "db_error",
                 }
+
+    return result
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# A07 — Split HP/HC (Heures Pleines / Heures Creuses)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _energy_hphc_split_sync(
+    conn: sqlite3.Connection,
+    meta_id: int,
+    statistic_id: str,
+    unit: str | None,
+    unit_class: str | None,
+    table: str,
+    start_ts: float,
+    end_ts: float,
+    hc_start_min: int | None,
+    hc_end_min: int | None,
+) -> dict[str, float]:
+    """
+    Calcule l'énergie kWh séparée HP/HC pour une entité sur une fenêtre.
+
+    Itère sur les lignes individuelles de la table statistique et classe
+    chaque intervalle HP ou HC selon l'heure de début de l'intervalle.
+
+    Retourne {"hp_kwh": float, "hc_kwh": float, "total_kwh": float}
+    """
+    is_cumulative = _is_cumulative_energy(unit_class, unit)
+    is_power = _is_power_sensor(unit)
+    energy_factor = _energy_unit_factor(unit)
+    power_factor = _power_unit_factor(unit)
+
+    cursor = conn.cursor()
+
+    if is_cumulative:
+        # Compteur cumulatif : delta entre lignes consécutives
+        cursor.execute(
+            f"SELECT s.start_ts, s.sum FROM {table} s "
+            f"WHERE s.metadata_id = ? AND s.start_ts >= ? AND s.start_ts <= ? "
+            f"ORDER BY s.start_ts ASC",
+            (meta_id, start_ts, end_ts),
+        )
+        rows = cursor.fetchall()
+        hp_kwh = 0.0
+        hc_kwh = 0.0
+        prev_sum = None
+        for row_start_ts, row_sum in rows:
+            row_sum_f = _safe_float(row_sum)
+            if row_sum_f is None:
+                continue
+            # Classer l'intervalle selon l'heure de la ligne courante
+            in_hc = False
+            if hc_start_min is not None and hc_end_min is not None:
+                dt = datetime.fromtimestamp(row_start_ts, tz=timezone.utc)
+                cur_min = dt.hour * 60 + dt.minute
+                if hc_start_min < hc_end_min:
+                    in_hc = hc_start_min <= cur_min < hc_end_min
+                else:
+                    in_hc = cur_min >= hc_start_min or cur_min < hc_end_min
+            if prev_sum is not None and row_sum_f >= prev_sum:
+                delta = (row_sum_f - prev_sum) * energy_factor
+                if in_hc:
+                    hc_kwh += delta
+                else:
+                    hp_kwh += delta
+            prev_sum = row_sum_f
+        return {"hp_kwh": round(hp_kwh, 3), "hc_kwh": round(hc_kwh, 3),
+                "total_kwh": round(hp_kwh + hc_kwh, 3)}
+
+    if is_power:
+        # Capteur de puissance : chaque entrée mean sur son intervalle
+        cursor.execute(
+            f"SELECT s.start_ts, s.mean FROM {table} s "
+            f"WHERE s.metadata_id = ? AND s.start_ts >= ? AND s.start_ts <= ? "
+            f"ORDER BY s.start_ts ASC",
+            (meta_id, start_ts, end_ts),
+        )
+        rows = cursor.fetchall()
+        hp_kwh = 0.0
+        hc_kwh = 0.0
+        for row_start_ts, row_mean in rows:
+            mean_f = _safe_float(row_mean)
+            if mean_f is None or mean_f <= 0:
+                continue
+            in_hc = False
+            if hc_start_min is not None and hc_end_min is not None:
+                dt = datetime.fromtimestamp(row_start_ts, tz=timezone.utc)
+                cur_min = dt.hour * 60 + dt.minute
+                if hc_start_min < hc_end_min:
+                    in_hc = hc_start_min <= cur_min < hc_end_min
+                else:
+                    in_hc = cur_min >= hc_start_min or cur_min < hc_end_min
+            watts = mean_f * power_factor
+            # Durée de l'entrée : 1h par défaut pour statistics
+            kwh = watts * 1.0 / 1000.0
+            if in_hc:
+                hc_kwh += kwh
+            else:
+                hp_kwh += kwh
+        return {"hp_kwh": round(hp_kwh, 3), "hc_kwh": round(hc_kwh, 3),
+                "total_kwh": round(hp_kwh + hc_kwh, 3)}
+
+    # Autre compteur d'énergie (non cumulatif) : chaque ligne est une valeur d'énergie
+    cursor.execute(
+        f"SELECT s.start_ts, s.sum FROM {table} s "
+        f"WHERE s.metadata_id = ? AND s.start_ts >= ? AND s.start_ts <= ? "
+        f"ORDER BY s.start_ts ASC",
+        (meta_id, start_ts, end_ts),
+    )
+    rows = cursor.fetchall()
+    hp_kwh = 0.0
+    hc_kwh = 0.0
+    prev_sum = None
+    for row_start_ts, row_sum in rows:
+        row_sum_f = _safe_float(row_sum)
+        if row_sum_f is None:
+            continue
+        in_hc = False
+        if hc_start_min is not None and hc_end_min is not None:
+            dt = datetime.fromtimestamp(row_start_ts, tz=timezone.utc)
+            cur_min = dt.hour * 60 + dt.minute
+            if hc_start_min < hc_end_min:
+                in_hc = hc_start_min <= cur_min < hc_end_min
+            else:
+                in_hc = cur_min >= hc_start_min or cur_min < hc_end_min
+        kwh = row_sum_f * energy_factor
+        if prev_sum is not None:
+            delta = kwh - prev_sum
+            if delta > 0:
+                if in_hc:
+                    hc_kwh += delta
+                else:
+                    hp_kwh += delta
+        prev_sum = kwh
+    return {"hp_kwh": round(hp_kwh, 3), "hc_kwh": round(hc_kwh, 3),
+            "total_kwh": round(hp_kwh + hc_kwh, 3)}
+
+
+async def async_energy_detail_hphc(
+    hass: HomeAssistant,
+    entity_ids: list[str],
+    period: str = "month",
+    hc_start: str | None = None,
+    hc_end: str | None = None,
+) -> dict[str, dict]:
+    """
+    Énergie par entité avec split HP/HC (contrat API A07).
+
+    Retourne {entity_id: {"hp_kwh": float, "hc_kwh": float, "total_kwh": float,
+    "method": str, "quality": str, "error": str|null}}
+
+    Tous les accès SQLite sont délégués à l'executor (A05).
+    """
+    from .time_utils import parse_hhmm
+
+    if not entity_ids:
+        return {}
+
+    hc_start_min = None
+    hc_end_min = None
+    if hc_start and hc_end:
+        parsed_start = parse_hhmm(hc_start)
+        parsed_end = parse_hhmm(hc_end)
+        if parsed_start and parsed_end:
+            hc_start_min = parsed_start[0] * 60 + parsed_start[1]
+            hc_end_min = parsed_end[0] * 60 + parsed_end[1]
+
+    try:
+        from homeassistant.components.recorder import history as rec_history
+    except ImportError:
+        _LOGGER.warning("HSE period_stats: recorder non disponible")
+        return {
+            eid: {"hp_kwh": 0.0, "hc_kwh": 0.0, "total_kwh": 0.0,
+                  "method": "unavailable", "quality": "missing", "error": None}
+            for eid in entity_ids
+        }
+
+    start, end = window_for_period(period)
+    result: dict[str, dict] = {}
+    start_ts = start.timestamp()
+    end_ts = end.timestamp()
+
+    try:
+        db_path = str(Path(hass.config.path(_DB_NAME)))
+
+        # Charger toutes les statistics_meta une seule fois (dans l'executor)
+        def _load_meta():
+            conn = sqlite3.connect(db_path)
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT statistic_id, id, unit_of_measurement, unit_class FROM statistics_meta"
+                )
+                return {
+                    row[0]: {
+                        "id": row[1],
+                        "unit_of_measurement": row[2],
+                        "unit_class": row[3],
+                    }
+                    for row in cursor.fetchall()
+                }
+            finally:
+                conn.close()
+
+        all_stats = await hass.async_add_executor_job(_load_meta)
+
+        # Traitement synchrone des entités avec statistiques (dans l'executor)
+        def _calc_all():
+            conn = sqlite3.connect(db_path)
+            try:
+                out = {}
+                for eid in entity_ids:
+                    entry = {"hp_kwh": 0.0, "hc_kwh": 0.0, "total_kwh": 0.0,
+                             "method": "unavailable", "quality": "missing", "error": None}
+                    if eid in all_stats:
+                        meta = all_stats[eid]
+                        meta_id = meta["id"]
+                        unit = meta["unit_of_measurement"]
+                        unit_class = meta["unit_class"]
+
+                        # Long terme
+                        split = _energy_hphc_split_sync(
+                            conn, meta_id, eid, unit, unit_class,
+                            "statistics", start_ts, end_ts,
+                            hc_start_min, hc_end_min,
+                        )
+                        if split["total_kwh"] > 0:
+                            entry = {**split, "method": "stats_long_term",
+                                     "quality": "ok", "error": None}
+                        else:
+                            # Court terme
+                            split2 = _energy_hphc_split_sync(
+                                conn, meta_id, eid, unit, unit_class,
+                                "statistics_short_term", start_ts, end_ts,
+                                hc_start_min, hc_end_min,
+                            )
+                            if split2["total_kwh"] > 0:
+                                entry = {**split2, "method": "stats_short_term",
+                                         "quality": "partial", "error": None}
+                            else:
+                                entry = {**split2, "method": "stats_long_term",
+                                         "quality": "missing", "error": None}
+                    else:
+                        # Entité sans statistiques : fallback sur le delta d'états
+                        entry = {"hp_kwh": 0.0, "hc_kwh": 0.0, "total_kwh": 0.0,
+                                 "method": "stats_long_term", "quality": "missing",
+                                 "error": "no_stats"}
+                    out[eid] = entry
+                return out
+            finally:
+                conn.close()
+
+        result = await hass.async_add_executor_job(_calc_all)
+
+    except Exception:
+        _LOGGER.exception("HSE period_stats detail_hphc: erreur pour période %s", period)
+        for eid in entity_ids:
+            if eid not in result:
+                result[eid] = {"hp_kwh": 0.0, "hc_kwh": 0.0, "total_kwh": 0.0,
+                               "method": "unavailable", "quality": "missing",
+                               "error": "db_error"}
 
     return result
