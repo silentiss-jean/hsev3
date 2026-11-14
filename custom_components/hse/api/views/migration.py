@@ -51,6 +51,8 @@ class HseMigrationExportView(HseBaseView):
         super().__init__(hass)
 
     async def get(self, request: web.Request) -> web.Response:
+        if not self._is_admin_request(request):
+            return self.json_error("Accès réservé aux administrateurs", HTTPStatus.FORBIDDEN)
         mgr = HseStorageManager(self.hass)
         catalogue = await mgr.async_load_catalogue()
         items = catalogue.get("items") or {}
@@ -90,6 +92,8 @@ class HseMigrationApplyView(HseBaseView):
         self._applying = False
 
     async def post(self, request: web.Request) -> web.Response:
+        if not self._is_admin_request(request):
+            return self.json_error("Accès réservé aux administrateurs", HTTPStatus.FORBIDDEN)
         if self._applying:
             return self.json_error("Migration déjà en cours", HTTPStatus.CONFLICT)
         try:
@@ -139,7 +143,9 @@ class HseMigrationApplyView(HseBaseView):
                     items.pop(key, None)
                     cleaned += 1
 
-            await mgr.async_save_catalogue(catalogue)
+            saved = await mgr.async_save_catalogue(catalogue)
+            if not saved:
+                return self.json_error("Échec de sauvegarde du catalogue", HTTPStatus.INTERNAL_SERVER_ERROR)
         except Exception as exc:
             errors.append(str(exc))
         finally:
