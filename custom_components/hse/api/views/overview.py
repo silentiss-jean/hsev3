@@ -28,6 +28,21 @@ from ...engine.reference import coverage, energy_coverage
 from ...engine.sources import plan_sources
 from ...time_utils import utc_now_iso
 
+
+def _subscription_prorata(settings: dict, period: str) -> float:
+    """Retourne l'abonnement proratisé selon la période (cohérence avec costs.py)."""
+    sub = subscription_eur_month(settings)
+    if period == "month":
+        return sub
+    if period == "day":
+        return round(sub / 30.0, 2)
+    if period == "week":
+        return round(sub * 7.0 / 30.0, 2)
+    if period == "year":
+        return round(sub * 12.0, 2)
+    return 0.0
+
+
 _PERIODS = ("day", "week", "month", "year")
 
 
@@ -105,8 +120,9 @@ class HseOverviewView(HseBaseView):
             else:
                 detail = await async_energy_detail(self.hass, plan.energy_sources, p)
                 total_kwh = round(sum(d["kwh"] for d in detail.values()), 3)
-                cost_data = cost_summary(total_kwh, settings, include_subscription=(p == "month"))
-                periods[p] = {"kwh": total_kwh, "eur": cost_data["cost_ttc_eur"]}
+                cost_data = cost_summary(total_kwh, settings, include_subscription=False)
+                cost_ttc_eur = round(cost_data["cost_ttc_eur"] + _subscription_prorata(settings, p), 2)
+                periods[p] = {"kwh": total_kwh, "eur": cost_ttc_eur}
                 for eid, d in detail.items():
                     method_count[d["method"]] = method_count.get(d["method"], 0) + 1
                     if d["quality"] == "missing":
@@ -123,7 +139,8 @@ class HseOverviewView(HseBaseView):
                 energy_cov[p] = energy_coverage(ref_kwh, total_kwh)
                 periods[p]["reference_kwh"] = ref_kwh
                 periods[p]["reference_eur"] = (
-                    cost_summary(ref_kwh, settings)["cost_ttc_eur"] if ref_kwh is not None else None
+                    round(cost_summary(ref_kwh, settings, include_subscription=False)["cost_ttc_eur"] + _subscription_prorata(settings, p), 2)
+                    if ref_kwh is not None else None
                 )
 
         # ── Pièces ─────────────────────────────────────────────────────────────

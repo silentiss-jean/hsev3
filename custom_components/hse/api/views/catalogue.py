@@ -84,6 +84,9 @@ class HseCatalogueView(HseBaseView):
         if status_filter not in _VALID_STATUS:
             return self.json_error(f"Param status invalide. Valeurs: {_VALID_STATUS}", HTTPStatus.UNPROCESSABLE_ENTITY)
 
+        # Recherche textuelle (q) - HSE-11
+        search_query = request.query.get("q", "").strip().lower()
+
         try:
             page = max(1, int(request.query.get("page", 1)))
             per_page = min(200, max(1, int(request.query.get("per_page", 50))))
@@ -101,12 +104,21 @@ class HseCatalogueView(HseBaseView):
             policy = (item.get("triage") or {}).get("policy") or "pending"
             if status_filter != "all" and policy != status_filter:
                 continue
+            
             src = item.get("source") or {}
             eid = src.get("entity_id") or item_id
             state_obj = self.hass.states.get(eid)
             friendly_name = (
                 (getattr(state_obj, "attributes", {}) or {}).get("friendly_name") or eid
             )
+            display_name = (item.get("enrichment") or {}).get("display_name") or ""
+            
+            # Filtre recherche sur entity_id, friendly_name, display_name
+            if search_query:
+                haystack = f"{eid} {friendly_name} {display_name}".lower()
+                if search_query not in haystack:
+                    continue
+
             ha_state_raw = getattr(state_obj, "state", None) if state_obj else None
             resolved_domain = _resolve_integration_domain(self.hass, src)
 
@@ -122,6 +134,7 @@ class HseCatalogueView(HseBaseView):
                 "integration": _resolve_integration_label(self.hass, src),
                 "integration_domain": resolved_domain,
                 "platform": src.get("platform"),
+                "unit": src.get("unit"),
             })
 
         total = len(filtered)
@@ -164,7 +177,10 @@ class HseCatalogueItemView(HseBaseView):
         enrichment = items[key].setdefault("enrichment", {})
 
         if "active" in body:
-            enrichment["active"] = bool(body["active"])
+            active_val = bool(body["active"])
+            enrichment["active"] = active_val
+            # Sync triage.policy avec enrichment.active (HSE-10)
+            items[key].setdefault("triage", {})["policy"] = "selected" if active_val else "ignored"
         if "display_name" in body and isinstance(body["display_name"], str):
             enrichment["display_name"] = body["display_name"].strip()
         if "icon" in body and isinstance(body["icon"], str):
@@ -233,9 +249,11 @@ class HseCatalogueBulkView(HseBaseView):
                 continue
             if action == "activate":
                 items[key].setdefault("enrichment", {})["active"] = True
+                items[key].setdefault("triage", {})["policy"] = "selected"
                 processed += 1
             elif action == "deactivate":
                 items[key].setdefault("enrichment", {})["active"] = False
+                items[key].setdefault("triage", {})["policy"] = "ignored"
                 processed += 1
             elif action == "delete":
                 keys_to_delete.append(key)
@@ -283,6 +301,8 @@ class HseCatalogueTriageView(HseBaseView):
 
         new_policy = {"select": "selected", "ignore": "ignored", "reset": "pending"}[action]
         items[key].setdefault("triage", {})["policy"] = new_policy
+        # Sync enrichment.active avec triage.policy (HSE-10)
+        items[key].setdefault("enrichment", {})["active"] = (new_policy == "selected")
         saved = await mgr.async_save_catalogue(catalogue)
         if not saved:
             return self.json_error("Échec de sauvegarde du catalogue", HTTPStatus.INTERNAL_SERVER_ERROR)
@@ -337,6 +357,8 @@ class HseCatalogueTriageBulkView(HseBaseView):
                 continue
             new_policy = {"select": "selected", "ignore": "ignored", "reset": "pending"}[action]
             items[key].setdefault("triage", {})["policy"] = new_policy
+            # Sync enrichment.active avec triage.policy (HSE-10)
+            items[key].setdefault("enrichment", {})["active"] = (new_policy == "selected")
             processed += 1
 
         saved = await mgr.async_save_catalogue(catalogue)

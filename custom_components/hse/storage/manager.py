@@ -35,17 +35,28 @@ _LOGGER = logging.getLogger(__name__)
 _STORE_VERSION = 1
 
 # Shape par défaut des settings (tarif + capteur référence)
+# Doit correspondre exactement à _SETTINGS_KEYS dans api/views/settings.py
 _SETTINGS_DEFAULTS: dict[str, Any] = {
     "schema_version": 1,
     "mode": "flat",                  # flat | hphc
+    # Tarif fixe
     "price_ht_kwh": 0.0,
     "price_ttc_kwh": 0.25,
-    "price_hp_ttc_kwh": None,
-    "price_hc_ttc_kwh": None,
+    # HP/HC
+    "price_hp_ht_kwh": 0.0,
+    "price_hp_ttc_kwh": 0.0,
+    "price_hc_ht_kwh": 0.0,
+    "price_hc_ttc_kwh": 0.0,
+    # Plage horaire HC
+    "hc_start": "22:00",
+    "hc_end": "06:00",
+    # Abonnement & fiscalité
     "subscription_eur_month": 0.0,
     "tax_rate_pct": 20.0,
-    "reference_entity_id": None,     # capteur de référence (DELTA-009)
-    "reference_energy_entity_id": None,  # index kWh du compteur général (V3.1)
+    # Capteur de référence (DELTA-064 Q2)
+    "reference_entity_id": None,
+    # Index kWh du compteur général (V3.1)
+    "reference_energy_entity_id": None,
 }
 
 

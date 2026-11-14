@@ -394,14 +394,19 @@ class TestSplitHPHC(unittest.TestCase):
         return datetime(year, month, day, hour, minute, tzinfo=timezone.utc).timestamp()
 
     def test_compteur_cumulatif_split_hphc(self):
-        """Compteur kWh cumulatif : delta classé HC ou HP selon l'heure."""
+        """Compteur kWh cumulatif : delta classé HC ou HP selon l'heure LOCALE (Paris)."""
         conn = self._make_conn_hphc(
             rows_meta=[(1, "sensor.test", "kWh", "energy")],
             rows_stats=[
-                (1, 1, self._ts(2026, 1, 1, 21, 0), 100.0, None),   # HP
-                (2, 1, self._ts(2026, 1, 1, 23, 0), 110.0, None),   # HC
-                (3, 1, self._ts(2026, 1, 2, 5, 0), 115.0, None),    # HC
-                (4, 1, self._ts(2026, 1, 2, 7, 0), 120.0, None),    # HP
+                # Timestamps en UTC. En janvier (hiver), Paris = UTC+1.
+                # 20:00 UTC = 21:00 Paris → HP
+                # 22:00 UTC = 23:00 Paris → HC (début HC à 22:00)
+                # 04:00 UTC = 05:00 Paris → HC
+                # 06:00 UTC = 07:00 Paris → HP (fin HC à 06:00)
+                (1, 1, self._ts(2026, 1, 1, 20, 0), 100.0, None),   # HP
+                (2, 1, self._ts(2026, 1, 1, 22, 0), 110.0, None),   # HC
+                (3, 1, self._ts(2026, 1, 2, 4, 0), 115.0, None),    # HC
+                (4, 1, self._ts(2026, 1, 2, 6, 0), 120.0, None),    # HP
             ],
         )
         start_ts = self._ts(2026, 1, 1, 0, 0)
@@ -412,6 +417,11 @@ class TestSplitHPHC(unittest.TestCase):
             hc_start_min=22 * 60,   # 22:00
             hc_end_min=6 * 60,      # 06:00
         )
+        # Avec fuseau Paris (UTC+1 en janvier) :
+        # 20:00 UTC = 21:00 Paris → HP (delta non compté sans référence)
+        # 22:00 UTC = 23:00 Paris → HC (delta 10)
+        # 04:00 UTC = 05:00 Paris → HC (delta 5)
+        # 06:00 UTC = 07:00 Paris → HP (delta 5)
         self.assertEqual(split["hc_kwh"], 15.0, f"attendu 15.0 kWh HC, obtenu {split['hc_kwh']}")
         self.assertEqual(split["hp_kwh"], 5.0, f"attendu 5.0 kWh HP, obtenu {split['hp_kwh']}")
         self.assertEqual(split["total_kwh"], 20.0)

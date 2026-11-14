@@ -94,7 +94,7 @@ async def _build_costs_data(
             cost_hp = cost_summary(hp_kwh, settings, is_hc=False)
             cost_hc = cost_summary(hc_kwh, settings, is_hc=True)
             cost_ttc_eur = round(cost_hp["cost_ttc_eur"] + cost_hc["cost_ttc_eur"], 2)
-            cost_ht_eur = round(cost_hp["ht"] + cost_hc["ht"], 2)
+            cost_ht_eur = round(cost_hp["cost_ht_eur"] + cost_hc["cost_ht_eur"], 2)
             energy_kwh = en
             method = d["method"]
             quality = d["quality"]

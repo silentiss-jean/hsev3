@@ -37,7 +37,13 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant
 
-from ..time_utils import window_for_period, parse_hhmm
+try:
+    from homeassistant.util import dt as dt_util
+except ImportError:
+    # Fallback pour environnement de test sans HA
+    dt_util = None
+
+from ..time_utils import window_for_period, parse_hhmm, is_hc_hour
 from .measure import ENERGY_UNITS, POWER_UNITS
 
 _LOGGER = logging.getLogger(__name__)
@@ -307,6 +313,85 @@ def _energy_from_table_sync_full(
         return 0.0, "stats_long_term", "missing", "db_error"
 
 
+def _energy_from_states_fallback(
+    conn: sqlite3.Connection,
+    entity_id: str,
+    unit: str | None,
+    unit_class: str | None,
+    start_ts: float,
+    end_ts: float,
+) -> tuple[float, str, str, str | None]:
+    """
+    Fallback sur l'historique d'états (table states) pour les entités
+    sans statistiques HA.
+    
+    Retourne (kwh, method, quality, error)
+    method = "states_fallback"
+    """
+    try:
+        cursor = conn.cursor()
+        # Récupère les états valides dans la fenêtre
+        cursor.execute(
+            "SELECT state, last_updated_ts FROM states "
+            "WHERE entity_id = ? AND last_updated_ts >= ? AND last_updated_ts <= ? "
+            "AND state NOT IN ('unavailable', 'unknown', 'none', '') "
+            "ORDER BY last_updated_ts ASC",
+            (entity_id, start_ts, end_ts),
+        )
+        rows = cursor.fetchall()
+        
+        if not rows:
+            return 0.0, "states_fallback", "missing", "no_states"
+        
+        # Détermine si c'est un compteur d'énergie ou un capteur de puissance
+        is_cumulative = _is_cumulative_energy(unit_class, unit)
+        is_power = _is_power_sensor(unit)
+        energy_factor = _energy_unit_factor(unit)
+        power_factor = _power_unit_factor(unit)
+        
+        if is_cumulative:
+            # Compteur cumulatif : delta = dernier - premier
+            first_state = _safe_float(rows[0][0])
+            last_state = _safe_float(rows[-1][0])
+            if first_state is not None and last_state is not None and last_state >= first_state:
+                return (last_state - first_state) * energy_factor, "states_fallback", "ok", None
+            return 0.0, "states_fallback", "ok", None
+        
+        if is_power:
+            # Capteur de puissance : intégration trapézoïdale
+            total_kwh = 0.0
+            prev_ts = None
+            prev_val = None
+            for state_str, ts in rows:
+                val = _safe_float(state_str)
+                if val is None:
+                    continue
+                if prev_ts is not None and prev_val is not None:
+                    dt_h = (ts - prev_ts) / 3600.0
+                    if dt_h > 0:
+                        mean_w = (prev_val + val) / 2.0 * power_factor
+                        total_kwh += mean_w * dt_h / 1000.0
+                prev_ts = ts
+                prev_val = val
+            if total_kwh > 0:
+                return total_kwh, "states_fallback", "ok", None
+            return 0.0, "states_fallback", "ok", None
+        
+        # Autre type d'énergie non cumulatif : somme des valeurs
+        total = 0.0
+        for state_str, _ in rows:
+            val = _safe_float(state_str)
+            if val is not None:
+                total += val * energy_factor
+        if total > 0:
+            return total, "states_fallback", "ok", None
+        return 0.0, "states_fallback", "ok", None
+        
+    except Exception:
+        _LOGGER.exception("period_stats: fallback states échoué pour %s", entity_id)
+        return 0.0, "states_fallback", "missing", "db_error"
+
+
 def _fetch_stats_sync_full(
     db_path: str,
     entity_ids: list[str],
@@ -339,7 +424,8 @@ def _fetch_stats_sync_full(
                 if quality == "ok":
                     # Données présentes (même si kwh == 0.0) → qualité ok.
                     # A04 : si la couverture long terme est partielle,
-                    # compléter par le court terme.
+                    # utiliser le court terme pour la fenêtre complète (plus haute résolution)
+                    # au lieu d'additionner (risque de double comptage).
                     coverage = _table_coverage_ratio(
                         conn, meta_id, "statistics", start_ts, end_ts, 1.0
                     )
@@ -348,10 +434,10 @@ def _fetch_stats_sync_full(
                             conn, meta_id, eid, unit, unit_class,
                             "statistics_short_term", 5.0 / 60.0, start_ts, end_ts,
                         )
-                        if quality2 == "ok" and energy2 > 0:
+                        if quality2 == "ok":
                             entry = {
-                                "kwh": round(energy + energy2, 3),
-                                "method": "stats_long_term+short_term",
+                                "kwh": energy2,
+                                "method": "stats_short_term",
                                 "quality": "partial",
                                 "error": None,
                             }
@@ -386,7 +472,27 @@ def _fetch_stats_sync_full(
                             "error": error or error2 or None,
                         }
             else:
-                entry = {"kwh": 0.0, "method": "unavailable", "quality": "missing", "error": None}
+                # Entité sans statistiques → fallback sur l'historique d'états (recorder)
+                # Récupère les métadonnées depuis la table statistics_meta si disponible
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT id, unit_of_measurement, unit_class FROM statistics_meta "
+                    "WHERE statistic_id = ?",
+                    (eid,),
+                )
+                meta_row = cursor.fetchone()
+                if meta_row:
+                    meta_id, unit, unit_class = meta_row
+                else:
+                    # Pas de métadonnées → on essaie quand même avec unit/unit_class None
+                    meta_id = None
+                    unit = None
+                    unit_class = None
+                
+                energy, method, quality, error = _energy_from_states_fallback(
+                    conn, eid, unit, unit_class, start_ts, end_ts,
+                )
+                entry = {"kwh": energy, "method": method, "quality": quality, "error": error}
             result[eid] = entry
     finally:
         conn.close()
@@ -429,7 +535,8 @@ async def async_energy_for_period(
         _LOGGER.warning("HSE period_stats: recorder non disponible")
         return {eid: 0.0 for eid in entity_ids}
 
-    start, end = window_for_period(period)
+    tz = dt_util.DEFAULT_TIME_ZONE if dt_util else None
+    start, end = window_for_period(period, tz=tz)
     result: dict[str, float] = {eid: 0.0 for eid in entity_ids}
     start_ts = start.timestamp()
     end_ts = end.timestamp()
@@ -624,7 +731,8 @@ async def async_energy_detail(
         }
 
     if start is None or end is None:
-        start, end = window_for_period(period)
+        tz = dt_util.DEFAULT_TIME_ZONE if dt_util else None
+        start, end = window_for_period(period, tz=tz)
     result: dict[str, dict] = {}
     start_ts = start.timestamp()
     end_ts = end.timestamp()
@@ -726,7 +834,8 @@ def _energy_hphc_split_sync(
     Calcule l'énergie kWh séparée HP/HC pour une entité sur une fenêtre.
 
     Itère sur les lignes individuelles de la table statistique et classe
-    chaque intervalle HP ou HC selon l'heure de début de l'intervalle.
+    chaque intervalle HP ou HC selon l'heure de début de l'intervalle
+    (fuseau local via is_hc_hour).
 
     Retourne {"hp_kwh": float, "hc_kwh": float, "total_kwh": float}
     """
@@ -735,33 +844,48 @@ def _energy_hphc_split_sync(
     energy_factor = _energy_unit_factor(unit)
     power_factor = _power_unit_factor(unit)
 
+    # Convertir minutes depuis minuit vers chaînes HH:MM pour is_hc_hour
+    hc_start_str = None
+    hc_end_str = None
+    if hc_start_min is not None and hc_end_min is not None:
+        hc_start_str = f"{hc_start_min // 60:02d}:{hc_start_min % 60:02d}"
+        hc_end_str = f"{hc_end_min // 60:02d}:{hc_end_min % 60:02d}"
+
     cursor = conn.cursor()
+
+    def _is_hc(ts: float) -> bool:
+        """Détermine si un timestamp est en HC selon la config locale."""
+        return is_hc_hour(ts, hc_start_str, hc_end_str) or False
 
     if is_cumulative:
         # Compteur cumulatif : delta entre lignes consécutives
+        # Récupère d'abord la référence avant la période (comme _energy_from_table_sync)
+        ref_before = None
+        cursor.execute(
+            f"SELECT s.sum FROM {table} s "
+            f"WHERE s.metadata_id = ? AND s.start_ts < ? "
+            f"ORDER BY s.start_ts DESC LIMIT 1",
+            (meta_id, start_ts),
+        )
+        ref_row = cursor.fetchone()
+        if ref_row:
+            ref_before = _safe_float(ref_row[0])
+
         cursor.execute(
             f"SELECT s.start_ts, s.sum FROM {table} s "
-            f"WHERE s.metadata_id = ? AND s.start_ts >= ? AND s.start_ts <= ? "
+            f"WHERE s.metadata_id = ? AND s.start_ts >= ? AND s.start_ts < ? "
             f"ORDER BY s.start_ts ASC",
             (meta_id, start_ts, end_ts),
         )
         rows = cursor.fetchall()
         hp_kwh = 0.0
         hc_kwh = 0.0
-        prev_sum = None
+        prev_sum = ref_before
         for row_start_ts, row_sum in rows:
             row_sum_f = _safe_float(row_sum)
             if row_sum_f is None:
                 continue
-            # Classer l'intervalle selon l'heure de la ligne courante
-            in_hc = False
-            if hc_start_min is not None and hc_end_min is not None:
-                dt = datetime.fromtimestamp(row_start_ts, tz=timezone.utc)
-                cur_min = dt.hour * 60 + dt.minute
-                if hc_start_min < hc_end_min:
-                    in_hc = hc_start_min <= cur_min < hc_end_min
-                else:
-                    in_hc = cur_min >= hc_start_min or cur_min < hc_end_min
+            in_hc = _is_hc(row_start_ts)
             if prev_sum is not None and row_sum_f >= prev_sum:
                 delta = (row_sum_f - prev_sum) * energy_factor
                 if in_hc:
@@ -787,14 +911,7 @@ def _energy_hphc_split_sync(
             mean_f = _safe_float(row_mean)
             if mean_f is None or mean_f <= 0:
                 continue
-            in_hc = False
-            if hc_start_min is not None and hc_end_min is not None:
-                dt = datetime.fromtimestamp(row_start_ts, tz=timezone.utc)
-                cur_min = dt.hour * 60 + dt.minute
-                if hc_start_min < hc_end_min:
-                    in_hc = hc_start_min <= cur_min < hc_end_min
-                else:
-                    in_hc = cur_min >= hc_start_min or cur_min < hc_end_min
+            in_hc = _is_hc(row_start_ts)
             watts = mean_f * power_factor
             # Durée de l'entrée : 1h par défaut pour statistics
             kwh = watts * 1.0 / 1000.0
@@ -820,14 +937,7 @@ def _energy_hphc_split_sync(
         row_sum_f = _safe_float(row_sum)
         if row_sum_f is None:
             continue
-        in_hc = False
-        if hc_start_min is not None and hc_end_min is not None:
-            dt = datetime.fromtimestamp(row_start_ts, tz=timezone.utc)
-            cur_min = dt.hour * 60 + dt.minute
-            if hc_start_min < hc_end_min:
-                in_hc = hc_start_min <= cur_min < hc_end_min
-            else:
-                in_hc = cur_min >= hc_start_min or cur_min < hc_end_min
+        in_hc = _is_hc(row_start_ts)
         kwh = row_sum_f * energy_factor
         if prev_sum is not None:
             delta = kwh - prev_sum
@@ -880,7 +990,8 @@ async def async_energy_detail_hphc(
             for eid in entity_ids
         }
 
-    start, end = window_for_period(period)
+    tz = dt_util.DEFAULT_TIME_ZONE if dt_util else None
+    start, end = window_for_period(period, tz=tz)
     result: dict[str, dict] = {}
     start_ts = start.timestamp()
     end_ts = end.timestamp()

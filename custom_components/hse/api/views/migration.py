@@ -109,7 +109,6 @@ class HseMigrationApplyView(HseBaseView):
 
         self._applying = True
         applied = 0
-        cleaned = 0
         errors: list[str] = []
 
         try:
@@ -139,9 +138,10 @@ class HseMigrationApplyView(HseBaseView):
                     continue
                 items[key].setdefault("source", {})["entity_id"] = target_eid
                 applied += 1
-                if cleanup_legacy:
-                    items.pop(key, None)
-                    cleaned += 1
+                # Note: cleanup_legacy ne supprime PAS l'entrée migrée.
+                # La migration convertit déjà l'ancien entity_id vers le nouveau.
+                # Le nettoyage des entrées legacy orphelines (sans target) doit être fait
+                # via une passe séparée ou manuellement.
 
             saved = await mgr.async_save_catalogue(catalogue)
             if not saved:
@@ -151,4 +151,4 @@ class HseMigrationApplyView(HseBaseView):
         finally:
             self._applying = False
 
-        return self.json_ok({"applied": applied, "cleaned": cleaned, "errors": errors})
+        return self.json_ok({"applied": applied, "errors": errors})

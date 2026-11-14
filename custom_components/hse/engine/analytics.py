@@ -136,21 +136,26 @@ async def async_history_12months(
     else:
         try:
             from ..storage.manager import HseStorageManager
+            from ..engine.sources import plan_sources
 
             mgr = HseStorageManager(hass)
             catalogue = await mgr.async_load_catalogue()
             items = catalogue.get("items") or {}
-            energy_sources = [
-                eid
-                for eid in (
-                    (it.get("source") or {}).get("entity_id")
-                    for it in items.values()
-                    if isinstance(it, dict)
-                    and (it.get("triage") or {}).get("policy") == "selected"
-                    and isinstance(it.get("source"), dict)
-                )
-                if eid
+            selected_items = [
+                it for it in items.values()
+                if isinstance(it, dict)
+                and (it.get("triage") or {}).get("policy") == "selected"
+                and isinstance(it.get("source"), dict)
             ]
+            # Récupère les états HA pour plan_sources
+            states = {eid: hass.states.get(eid) for eid in (
+                (it.get("source") or {}).get("entity_id")
+                for it in selected_items
+                if isinstance(it.get("source"), dict)
+            ) if eid}
+            # Utilise plan_sources pour éviter le double comptage (puissance + énergie même appareil)
+            plan = plan_sources(selected_items, states)
+            energy_sources = plan.energy_sources
         except Exception:
             _LOGGER.exception("HSE analytics: échec chargement catalogue")
             energy_sources = []

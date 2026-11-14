@@ -130,6 +130,10 @@ class HseMetaView(HseBaseView):
             if name not in types_list:
                 return self.json_error(f"Type '{name}' introuvable", HTTPStatus.NOT_FOUND)
             types_list.remove(name)
+            # Nettoyer les assignments qui référencent ce type supprimé (HSE-12)
+            for asn in assignments.values():
+                if isinstance(asn, dict) and asn.get("type_id") == name:
+                    asn["type_id"] = None
             saved = await mgr.async_save_meta(meta_store)
             if not saved:
                 return self.json_error("Échec de sauvegarde des métadonnées", HTTPStatus.INTERNAL_SERVER_ERROR)
