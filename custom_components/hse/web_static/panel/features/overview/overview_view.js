@@ -134,6 +134,10 @@ export class OverviewView {
     const statusIcon = status.level === 'ok' ? '✓' : status.level === 'warning' ? '⚠' : '✕';
     const statusMsg = status.message
       ?? (status.level === 'ok' ? 'Tous les capteurs sont actifs' : 'Aucun capteur actif');
+    const quality = data.quality ?? {};
+    const qualityLevel = quality.level ?? 'warning';
+    const qualityNotes = quality.notes ?? [];
+    const missingCount = quality.missing_energy ? quality.missing_energy.length : 0;
 
     // M1: première fois → construire le DOM complet et stocker les refs
     if (!this._els.powerValue) {
@@ -175,9 +179,9 @@ export class OverviewView {
             <span class="hse-overview__ref-icon">⭐</span>
             <div class="hse-overview__ref-info">
               <div class="hse-overview__ref-title">Capteur de référence</div>
-              <div class="hse-overview__ref-value" id="hse-ref-power">${refSensor.power_w.toLocaleString('fr-FR')} W</div>
-              <div class="hse-overview__ref-delta ${refSensor.delta_w >= 0 ? 'positive' : 'negative'}" id="hse-ref-delta">
-                Δ ${refSensor.delta_w >= 0 ? '+' : ''}${refSensor.delta_w.toFixed(1)} W (${refSensor.delta_pct >= 0 ? '+' : ''}${refSensor.delta_pct}%)
+              <div class="hse-overview__ref-value" id="hse-ref-power">${refSensor.power_w !== null ? refSensor.power_w.toLocaleString('fr-FR') : '—'} W</div>
+              <div class="hse-overview__ref-delta ${refSensor.delta_w !== null && refSensor.delta_w >= 0 ? 'positive' : 'negative'}" id="hse-ref-delta">
+                Δ ${refSensor.delta_w !== null ? (refSensor.delta_w >= 0 ? '+' : '') : ''}${refSensor.delta_w !== null ? refSensor.delta_w.toFixed(1) : '—'} W (${refSensor.delta_pct !== null ? (refSensor.delta_pct >= 0 ? '+' : '') : ''}${refSensor.delta_pct !== null ? refSensor.delta_pct : '—'}%)
               </div>
             </div>
           </div>` : ''}
@@ -235,9 +239,9 @@ export class OverviewView {
       this._els.monthKwh.textContent = (consumption.month_kwh ?? 0).toFixed(1);
       this._els.monthEur.textContent = `${(consumption.month_eur ?? 0).toFixed(2)} € TTC`;
       if (refSensor && this._els.refPower) {
-        this._els.refPower.textContent = refSensor.power_w.toLocaleString('fr-FR') + ' W';
-        this._els.refDelta.textContent = `Δ ${refSensor.delta_w >= 0 ? '+' : ''}${refSensor.delta_w.toFixed(1)} W (${refSensor.delta_pct >= 0 ? '+' : ''}${refSensor.delta_pct}%)`;
-        this._els.refDelta.className = `hse-overview__ref-delta ${refSensor.delta_w >= 0 ? 'positive' : 'negative'}`;
+        this._els.refPower.textContent = (refSensor.power_w !== null ? refSensor.power_w.toLocaleString('fr-FR') : '—') + ' W';
+        this._els.refDelta.textContent = `Δ ${refSensor.delta_w !== null ? (refSensor.delta_w >= 0 ? '+' : '') : ''}${refSensor.delta_w !== null ? refSensor.delta_w.toFixed(1) : '—'} W (${refSensor.delta_pct !== null ? (refSensor.delta_pct >= 0 ? '+' : '') : ''}${refSensor.delta_pct !== null ? refSensor.delta_pct : '—'}%)`;
+        this._els.refDelta.className = `hse-overview__ref-delta ${refSensor.delta_w !== null && refSensor.delta_w >= 0 ? 'positive' : 'negative'}`;
       }
       // Top5: rebuild (peu d'items, OK)
       if (this._els.top5Container) {
