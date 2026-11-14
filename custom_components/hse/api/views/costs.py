@@ -18,7 +18,7 @@ from ..base import HseBaseView
 from ...storage.manager import HseStorageManager
 from ...engine.calculation import get_power_w
 from ...engine.cost import cost_summary, cost_eur, subscription_eur_month
-from ...engine.period_stats import async_energy_detail, async_energy_for_period
+from ...engine.period_stats import async_energy_detail, async_energy_detail_hphc, async_energy_for_period
 from ...engine.sources import plan_sources
 from ...engine.analytics import async_history_12months
 from ...time_utils import utc_now_iso
@@ -64,11 +64,19 @@ async def _build_costs_data(
         for it in selected if (it.get("source") or {}).get("entity_id")
     }
     plan = plan_sources(selected, states, reference_entity_id=ref_ids)
-    detail = await async_energy_detail(hass, plan.energy_sources, period)
+    is_hphc = (settings.get("mode") or "flat").lower() == "hphc"
+    hc_start = settings.get("hc_start")
+    hc_end = settings.get("hc_end")
+    if is_hphc and hc_start and hc_end:
+        detail = await async_energy_detail_hphc(hass, plan.energy_sources, period, hc_start=hc_start, hc_end=hc_end)
+    else:
+        detail = await async_energy_detail(hass, plan.energy_sources, period)
     excluded = {x["entity_id"]: x["reason"] for x in plan.excluded}
 
     result_items = []
     total_kwh = 0.0
+    total_hp_kwh = 0.0
+    total_hc_kwh = 0.0
     total_ttc = 0.0
 
     for item in selected:
@@ -79,8 +87,27 @@ async def _build_costs_data(
         state_obj = hass.states.get(eid)
         pw = get_power_w(state_obj) or 0.0
         d = detail.get(eid)
-        en = d["kwh"] if d else 0.0
-        cost = cost_summary(en, settings)
+        if is_hphc and hc_start and hc_end and d:
+            hp_kwh = d["hp_kwh"]
+            hc_kwh = d["hc_kwh"]
+            en = hp_kwh + hc_kwh
+            cost_hp = cost_summary(hp_kwh, settings, is_hc=False)
+            cost_hc = cost_summary(hc_kwh, settings, is_hc=True)
+            cost_ttc_eur = round(cost_hp["cost_ttc_eur"] + cost_hc["cost_ttc_eur"], 2)
+            cost_ht_eur = round(cost_hp["ht"] + cost_hc["ht"], 2)
+            energy_kwh = en
+            method = d["method"]
+            quality = d["quality"]
+        else:
+            en = d["kwh"] if d else 0.0
+            cost = cost_summary(en, settings)
+            cost_ttc_eur = cost["cost_ttc_eur"]
+            cost_ht_eur = cost["cost_ht_eur"]
+            energy_kwh = en
+            hp_kwh = None
+            hc_kwh = None
+            method = d["method"] if d else "excluded"
+            quality = d["quality"] if d else "excluded"
         asn = assignments.get(eid) or {}
         room_id = asn.get("room_id")
         friendly = (getattr(state_obj, "attributes", {}) or {}).get("friendly_name") or eid
@@ -90,16 +117,20 @@ async def _build_costs_data(
             "room": room_name_by_id.get(room_id, room_id) if room_id else None,
             "type": asn.get("type_id"),
             "power_w": int(pw),
-            "energy_kwh": cost["energy_kwh"],
-            "cost_ht_eur": cost["cost_ht_eur"],
-            "cost_ttc_eur": cost["cost_ttc_eur"],
+            "energy_kwh": energy_kwh,
+            "hp_kwh": hp_kwh,
+            "hc_kwh": hc_kwh,
+            "cost_ht_eur": cost_ht_eur,
+            "cost_ttc_eur": cost_ttc_eur,
             "pct_total": 0.0,
-            "method": d["method"] if d else "excluded",
-            "quality": d["quality"] if d else "excluded",
+            "method": method,
+            "quality": quality,
             "excluded_reason": excluded.get(eid),
         })
         total_kwh += en
-        total_ttc += cost["cost_ttc_eur"]
+        total_hp_kwh += (hp_kwh or 0.0)
+        total_hc_kwh += (hc_kwh or 0.0)
+        total_ttc += cost_ttc_eur
 
     for it in result_items:
         it["pct_total"] = round(it["cost_ttc_eur"] / total_ttc * 100, 1) if total_ttc > 0 else 0.0
@@ -114,6 +145,8 @@ async def _build_costs_data(
         "period": period,
         "generated_at": utc_now_iso(),
         "total_kwh": round(total_kwh, 3),
+        "total_hp_kwh": round(total_hp_kwh, 3),
+        "total_hc_kwh": round(total_hc_kwh, 3),
         "total_ttc_eur": round(total_ttc, 2),
         "items": result_items,
     }
