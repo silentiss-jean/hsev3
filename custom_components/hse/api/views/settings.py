@@ -121,28 +121,28 @@ def _serialize_settings(settings: dict) -> dict:
     }
 
 
-async def _apply_settings_update(hass: HomeAssistant, body: dict) -> tuple[dict, dict | None]:
-    """Applique un PUT partiel. Retourne (settings_mis_à_jour, erreur_ou_None)."""
+async def _apply_settings_update(hass: HomeAssistant, body: dict) -> tuple[dict, dict | None, bool]:
+    """Applique un PUT partiel. Retourne (settings_mis_à_jour, erreur_ou_None, sauvegarde_reussie)."""
     if "mode" in body and body["mode"] not in _VALID_MODES:
         return {}, {"status": HTTPStatus.UNPROCESSABLE_ENTITY,
-                    "message": f"mode invalide. Valeurs: {_VALID_MODES}"}
+                    "message": f"mode invalide. Valeurs: {_VALID_MODES}"}, False
 
     unknown = [k for k in body.keys() if k not in _SETTINGS_KEYS]
     if unknown:
         return {}, {"status": HTTPStatus.UNPROCESSABLE_ENTITY,
-                    "message": f"Clés inconnues: {unknown}. Autorisées: {_SETTINGS_KEYS}"}
+                    "message": f"Clés inconnues: {unknown}. Autorisées: {_SETTINGS_KEYS}"}, False
 
     validation = _validate_settings(body)
     if validation:
-        return {}, validation
+        return {}, validation, False
 
     mgr = HseStorageManager(hass)
     settings = await mgr.async_load_settings()
     for field in _SETTINGS_KEYS:
         if field in body:
             settings[field] = body[field]
-    await mgr.async_save_settings(settings)
-    return settings, None
+    saved = await mgr.async_save_settings(settings)
+    return settings, None, saved
 
 
 class HseSettingsView(HseBaseView):
@@ -164,9 +164,11 @@ class HseSettingsView(HseBaseView):
         except Exception:
             return self.json_error("Body JSON invalide", HTTPStatus.UNPROCESSABLE_ENTITY)
 
-        settings, err = await _apply_settings_update(self.hass, body)
+        settings, err, saved = await _apply_settings_update(self.hass, body)
         if err:
             return self.json_error(err["message"], err["status"])
+        if not saved:
+            return self.json_error("Échec de sauvegarde des réglages", HTTPStatus.INTERNAL_SERVER_ERROR)
         return self.json_ok({"saved": True, "settings": _serialize_settings(settings)})
 
 
@@ -198,7 +200,9 @@ class HseSettingsPricingView(HseBaseView):
         except Exception:
             return self.json_error("Body JSON invalide", HTTPStatus.UNPROCESSABLE_ENTITY)
 
-        settings, err = await _apply_settings_update(self.hass, body)
+        settings, err, saved = await _apply_settings_update(self.hass, body)
         if err:
             return self.json_error(err["message"], err["status"])
+        if not saved:
+            return self.json_error("Échec de sauvegarde des réglages", HTTPStatus.INTERNAL_SERVER_ERROR)
         return self.json_ok({"saved": True})
