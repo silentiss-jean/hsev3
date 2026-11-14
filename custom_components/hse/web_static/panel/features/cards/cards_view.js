@@ -60,8 +60,20 @@ const CSS = `
 `;
 
 /**
+ * Échappe une chaîne pour une valeur YAML scalaire (guillemets doubles).
+ * Échappe les backslashes et les guillemets doubles.
+ */
+function yamlString(v) {
+  if (v === null || v === undefined) return '""';
+  const s = String(v);
+  const needsQuotes = /[:#{}[\],&*!|>'"%@`\n\r\t]/.test(s) || s === '' || s === 'true' || s === 'false' || s === 'null' || s.match(/^[0-9]/);
+  if (!needsQuotes) return s;
+  return '"' + s.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+}
+
+/**
  * Génère le YAML Lovelace à partir des appareils sélectionnés et des options.
- * @param {Array<{entity_id: string, name: string}>} devices
+ * @param {Array<{entity_id: string, name: string, unit: string|null}>} devices
  * @param {{card_type: string, show_cost: boolean, period: string}} options
  * @returns {string}
  */
@@ -70,11 +82,13 @@ function generateYaml(devices, options) {
   const cards = devices.map(d => {
     const parts = [
       `type: ${card_type}`,
-      `entity: ${d.entity_id}`,
-      `name: ${d.name || d.entity_id}`,
+      `entity: ${yamlString(d.entity_id)}`,
+      `name: ${yamlString(d.name || d.entity_id)}`,
     ];
     if (card_type === 'gauge') {
-      parts.push('min: 0', 'max: 5000', 'unit: W');
+      const unit = d.unit && d.unit.toUpperCase() === 'KWH' ? 'kWh' : 'W';
+      const max = d.unit && d.unit.toUpperCase() === 'KWH' ? '50000' : '5000';
+      parts.push('min: 0', `max: ${max}`, `unit: ${unit}`);
     }
     if (show_cost) {
       parts.push(`secondary_info: Coût ${period}`);
@@ -270,7 +284,13 @@ export class CardsView {
 
   _getSelectedDevices() {
     if (!this._data) return [];
-    return (this._data.items || []).filter(i => this._selected.has(i.entity_id));
+    return (this._data.items || [])
+      .filter(i => this._selected.has(i.entity_id))
+      .map(i => ({
+        entity_id: i.entity_id,
+        name: i.name || i.entity_id,
+        unit: (i.source && i.source.unit) || null,
+      }));
   }
 
   _updateYaml() {
