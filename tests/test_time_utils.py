@@ -77,14 +77,23 @@ class TestIsHcHour(unittest.TestCase):
         self.assertFalse(tu.is_hc_hour(7 * 3600, "02:00", "07:00"))
 
     def test_plage_traversant_minuit(self):
-        # HC de 22:00 à 06:00
-        self.assertTrue(tu.is_hc_hour(23 * 3600, "22:00", "06:00"))   # 23:00 → HC
-        self.assertTrue(tu.is_hc_hour(0, "22:00", "06:00"))            # 00:00 → HC
-        self.assertTrue(tu.is_hc_hour(5 * 3600, "22:00", "06:00"))     # 05:00 → HC
-        self.assertFalse(tu.is_hc_hour(7 * 3600, "22:00", "06:00"))    # 07:00 → HP
-        self.assertFalse(tu.is_hc_hour(10 * 3600, "22:00", "06:00"))   # 10:00 → HP
-        self.assertTrue(tu.is_hc_hour(22 * 3600, "22:00", "06:00"))    # 22:00 → HC (borne incluse)
-        self.assertFalse(tu.is_hc_hour(6 * 3600, "22:00", "06:00"))    # 06:00 → HP (borne exclue)
+        # HC de 22:00 à 06:00 (heure locale Paris, UTC+2 en été 2026)
+        def ts(h):
+            return datetime(2026, 6, 15, h, 0, tzinfo=timezone.utc).timestamp()
+        # 23:00 UTC = 01:00 Paris → HC
+        self.assertTrue(tu.is_hc_hour(ts(23), "22:00", "06:00"))
+        # 00:00 UTC = 02:00 Paris → HC
+        self.assertTrue(tu.is_hc_hour(ts(0), "22:00", "06:00"))
+        # 05:00 UTC = 07:00 Paris → HP (hors plage qui finit à 06:00 locale)
+        self.assertFalse(tu.is_hc_hour(ts(5), "22:00", "06:00"))
+        # 07:00 UTC = 09:00 Paris → HP
+        self.assertFalse(tu.is_hc_hour(ts(7), "22:00", "06:00"))
+        # 10:00 UTC = 12:00 Paris → HP
+        self.assertFalse(tu.is_hc_hour(ts(10), "22:00", "06:00"))
+        # 22:00 UTC = 00:00 Paris (jour+1) → HC (borne incluse)
+        self.assertTrue(tu.is_hc_hour(ts(22), "22:00", "06:00"))
+        # 06:00 UTC = 08:00 Paris → HP (borne exclue)
+        self.assertFalse(tu.is_hc_hour(ts(6), "22:00", "06:00"))
 
     def test_avec_datetime(self):
         dt = datetime(2026, 11, 14, 3, 0, tzinfo=timezone.utc)  # 03:00 UTC

@@ -11,6 +11,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
+
+
+_PARIS_TZ = ZoneInfo("Europe/Paris")
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -148,9 +152,12 @@ def is_hc_hour(
         return None
 
     if isinstance(ts, (int, float)):
-        dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+        dt = datetime.fromtimestamp(ts, tz=timezone.utc).astimezone(_PARIS_TZ)
     else:
         dt = ts
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.astimezone(_PARIS_TZ)
 
     h, m = dt.hour, dt.minute
     sh, sm = start

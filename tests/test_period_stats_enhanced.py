@@ -58,6 +58,12 @@ def _load_period_stats():
 
 pstats = _load_period_stats()
 
+# Charger time_utils de manière autonome (stdlib uniquement)
+import importlib.util
+_tu_spec = importlib.util.spec_from_file_location("hse_t_time_utils", str(_ROOT / "time_utils.py"))
+tu = importlib.util.module_from_spec(_tu_spec)
+_tu_spec.loader.exec_module(tu)
+
 
 class TestUnitsNormalization(unittest.TestCase):
     """A03 : normalisation des unités dans toutes les voies de calcul."""
@@ -343,6 +349,44 @@ class TestSplitHPHC(unittest.TestCase):
         self.assertEqual(split["hp_kwh"], 10.0)
         self.assertEqual(split["hc_kwh"], 0.0)
         self.assertEqual(split["total_kwh"], 10.0)
+
+
+# ═════════════════════════════════════════════════════════════════════
+# A07b — Heure locale Europe/Paris pour les plages HC
+# ═════════════════════════════════════════════════════════════════════
+
+class TestIsHcHourLocal(unittest.TestCase):
+    """Vérifie que is_hc_hour utilise l'heure locale Paris, pas l'UTC."""
+
+    def test_20h_utc_est_22h_paris_donc_hc(self):
+        """20:00 UTC = 22:00 Paris (UTC+2 été). Avec plage HC 22:00-06:00, c'est HC."""
+        from zoneinfo import ZoneInfo
+        paris = ZoneInfo("Europe/Paris")
+        ts = datetime(2026, 6, 15, 20, 0, tzinfo=timezone.utc).timestamp()
+        assert tu.is_hc_hour(ts, "22:00", "06:00") is True
+
+    def test_20h_utc_en_utc_serait_hp(self):
+        """En UTC pur, 20:00 n'est pas HC (plage 22:00-06:00 traverse minuit)."""
+        from zoneinfo import ZoneInfo
+        paris = ZoneInfo("Europe/Paris")
+        ts = datetime(2026, 6, 15, 20, 0, tzinfo=timezone.utc).timestamp()
+        # Vérifie que le différentiel UTC vs Paris est bien pris en compte
+        dt_utc = datetime.fromtimestamp(ts, tz=timezone.utc)
+        self.assertEqual(dt_utc.hour, 20)  # UTC dit 20h
+        dt_paris = dt_utc.astimezone(paris)
+        self.assertEqual(dt_paris.hour, 22)  # Paris dit 22h
+
+    def test_21h_utc_est_23h_paris_donc_hc(self):
+        """21:00 UTC = 23:00 Paris, dans la plage HC 22:00-06:00."""
+        from zoneinfo import ZoneInfo
+        ts = datetime(2026, 6, 15, 21, 0, tzinfo=timezone.utc).timestamp()
+        assert tu.is_hc_hour(ts, "22:00", "06:00") is True
+
+    def test_05h_utc_est_07h_paris_donc_hp(self):
+        """05:00 UTC = 07:00 Paris (UTC+2), hors plage HC qui se termine à 06:00."""
+        from zoneinfo import ZoneInfo
+        ts = datetime(2026, 6, 15, 5, 0, tzinfo=timezone.utc).timestamp()
+        assert tu.is_hc_hour(ts, "22:00", "06:00") is False
 
 
 if __name__ == "__main__":
