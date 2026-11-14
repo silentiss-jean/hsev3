@@ -37,6 +37,70 @@ _SETTINGS_KEYS = (
     "reference_energy_entity_id",
 )
 
+# Clés prix : doivent être des nombres finis >= 0 s'il sont présents.
+_PRICE_KEYS = (
+    "price_ht_kwh", "price_ttc_kwh",
+    "price_hp_ht_kwh", "price_hp_ttc_kwh",
+    "price_hc_ht_kwh", "price_hc_ttc_kwh",
+    "subscription_eur_month",
+)
+
+# Borne fiscale : tax_rate_pct doit être >= 0 (évite division par zéro à -100)
+# et fini.
+_TAX_KEY = "tax_rate_pct"
+
+
+def _is_finite_number(v: Any) -> bool:
+    if v is None:
+        return False
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return False
+    return f == f and f not in (float("inf"), float("-inf"))
+
+
+def _valid_hhmm(v: Any) -> bool:
+    if not isinstance(v, str):
+        return False
+    parts = v.split(":")
+    if len(parts) != 2:
+        return False
+    try:
+        h, m = int(parts[0]), int(parts[1])
+    except ValueError:
+        return False
+    return 0 <= h <= 23 and 0 <= m <= 59
+
+
+def _validate_settings(body: dict) -> dict | None:
+    """Valide les valeurs des settings. Retourne une erreur ou None."""
+    # Prix non négatifs et finis
+    for key in _PRICE_KEYS:
+        if key in body and not _is_finite_number(body[key]):
+            return {"status": HTTPStatus.UNPROCESSABLE_ENTITY,
+                    "message": f"{key} doit être un nombre valide"}
+        if key in body and float(body[key]) < 0:
+            return {"status": HTTPStatus.UNPROCESSABLE_ENTITY,
+                    "message": f"{key} doit être >= 0"}
+
+    # Tax : nombre fini, >= 0 (évite division par zéro à tax_rate_pct = -100)
+    if _TAX_KEY in body:
+        if not _is_finite_number(body[_TAX_KEY]):
+            return {"status": HTTPStatus.UNPROCESSABLE_ENTITY,
+                    "message": f"{_TAX_KEY} doit être un nombre valide"}
+        if float(body[_TAX_KEY]) < 0:
+            return {"status": HTTPStatus.UNPROCESSABLE_ENTITY,
+                    "message": f"{_TAX_KEY} doit être >= 0"}
+
+    # Plages horaires HC au format HH:MM
+    for key in ("hc_start", "hc_end"):
+        if key in body and not _valid_hhmm(body[key]):
+            return {"status": HTTPStatus.UNPROCESSABLE_ENTITY,
+                    "message": f"{key} doit être au format HH:MM"}
+
+    return None
+
 
 def _serialize_settings(settings: dict) -> dict:
     """Sérialise un dict settings en payload complet avec défauts."""
@@ -67,6 +131,10 @@ async def _apply_settings_update(hass: HomeAssistant, body: dict) -> tuple[dict,
     if unknown:
         return {}, {"status": HTTPStatus.UNPROCESSABLE_ENTITY,
                     "message": f"Clés inconnues: {unknown}. Autorisées: {_SETTINGS_KEYS}"}
+
+    validation = _validate_settings(body)
+    if validation:
+        return {}, validation
 
     mgr = HseStorageManager(hass)
     settings = await mgr.async_load_settings()

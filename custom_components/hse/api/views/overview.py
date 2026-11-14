@@ -78,7 +78,8 @@ class HseOverviewView(HseBaseView):
         for p in _PERIODS:
             detail = await async_energy_detail(self.hass, plan.energy_sources, p)
             total_kwh = round(sum(d["kwh"] for d in detail.values()), 3)
-            periods[p] = {"kwh": total_kwh, "eur": cost_summary(total_kwh, settings)["cost_ttc_eur"]}
+            cost_data = cost_summary(total_kwh, settings, include_subscription=(p == "month"))
+            periods[p] = {"kwh": total_kwh, "eur": cost_data["cost_ttc_eur"]}
             for eid, d in detail.items():
                 method_count[d["method"]] = method_count.get(d["method"], 0) + 1
                 if d["quality"] == "missing":

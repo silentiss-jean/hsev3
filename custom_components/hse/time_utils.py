@@ -105,3 +105,64 @@ def window_for_period(
     else:
         start_local = midnight
     return start_local.astimezone(timezone.utc), t.astimezone(timezone.utc)
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Heures pleines / heures creuses (A07)
+# ────────────────────────────────────────────────────────────────────────────
+
+def parse_hhmm(value: str) -> tuple[int, int] | None:
+    """Parse une chaîne HH:MM en (heure, minute). Retourne None si invalide."""
+    try:
+        parts = value.strip().split(":")
+        if len(parts) != 2:
+            return None
+        h, m = int(parts[0]), int(parts[1])
+        if 0 <= h <= 23 and 0 <= m <= 59:
+            return h, m
+    except (ValueError, AttributeError):
+        return None
+    return None
+
+
+def is_hc_hour(
+    ts: float | datetime,
+    hc_start: str | None,
+    hc_end: str | None,
+) -> bool | None:
+    """
+    Détermine si un timestamp est en Heures Creuses selon la plage configurée.
+
+    - ts : timestamp UNIX (float) ou datetime timezone-aware
+    - hc_start, hc_end : chaînes "HH:MM" (ex. "22:00", "06:00")
+    - Retourne True si en HC, False si en HP, None si pas de config HC.
+
+    La plage HC peut traverser minuit (ex. 22:00 → 06:00).
+    """
+    if not hc_start or not hc_end:
+        return None
+
+    start = parse_hhmm(hc_start)
+    end = parse_hhmm(hc_end)
+    if start is None or end is None:
+        return None
+
+    if isinstance(ts, (int, float)):
+        dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+    else:
+        dt = ts
+
+    h, m = dt.hour, dt.minute
+    sh, sm = start
+    eh, em = end
+
+    start_min = sh * 60 + sm
+    end_min = eh * 60 + em
+    cur_min = h * 60 + m
+
+    if start_min < end_min:
+        # Plage simple dans la journée (ex. 02:00 → 07:00)
+        return start_min <= cur_min < end_min
+    else:
+        # Plage traversant minuit (ex. 22:00 → 06:00)
+        return cur_min >= start_min or cur_min < end_min

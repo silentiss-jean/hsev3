@@ -17,7 +17,7 @@ from homeassistant.core import HomeAssistant
 from ..base import HseBaseView
 from ...storage.manager import HseStorageManager
 from ...engine.calculation import get_power_w
-from ...engine.cost import cost_summary, cost_eur
+from ...engine.cost import cost_summary, cost_eur, subscription_eur_month
 from ...engine.period_stats import async_energy_detail, async_energy_for_period
 from ...engine.sources import plan_sources
 from ...engine.analytics import async_history_12months
@@ -103,6 +103,10 @@ async def _build_costs_data(
 
     for it in result_items:
         it["pct_total"] = round(it["cost_ttc_eur"] / total_ttc * 100, 1) if total_ttc > 0 else 0.0
+
+    # Abonnement ajouté une seule fois (pas par appareil) — uniquement pour la période mensuelle
+    if period == "month":
+        total_ttc += subscription_eur_month(settings)
 
     result_items.sort(key=lambda x: -x["cost_ttc_eur"])
 
