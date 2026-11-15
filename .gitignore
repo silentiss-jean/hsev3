@@ -5,3 +5,17 @@
 .opencode/
 opencode.json
 __pycache__/
+
+# Obsidian vault
+_obsidian/
+
+# Rapports projet (à mettre dans docs/ ou wiki)
+*_RAPPORT*.md
+*_ROADMAP*.md
+*_STATUT*.md
+analyse*.md
+
+# Backups
+**/.bak_layout/
+*.bak
+*.before_fix*
