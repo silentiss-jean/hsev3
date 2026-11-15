@@ -779,6 +779,8 @@ export class ConfigView {
 
   _setCatBody(html) { const el = this._el?.querySelector('#hse-cfg-cat-body'); if (el) el.innerHTML = html; }
 
+  _setMetaBody(html) { const el = this._el?.querySelector('#hse-cfg-meta-body'); if (el) el.innerHTML = html; }
+
   _bindModeEvents() {
     const body = this._el?.querySelector('#hse-cfg-cat-body');
     if (!body) return;
