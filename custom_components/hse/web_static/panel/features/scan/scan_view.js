@@ -819,7 +819,7 @@ async _triggerRescan() {
     const body = this._el?.querySelector('#hse-scan-body');
     if (!body) return;
     body.querySelectorAll('[data-triage-id][data-triage-action]').forEach(btn => {
-      btn.addEventListener('click', () => this._triage(btn.dataset.triageId, btn.dataset.triageAction));
+      btn.addEventListener('click', () => this._triage(btn.getAttribute('data-triage-id'), btn.getAttribute('data-triage-action')));
     });
     body.querySelectorAll('.hse-scan__cb').forEach(cb => {
       cb.addEventListener('change', () => {
@@ -853,7 +853,7 @@ async _triggerRescan() {
     const body = this._el?.querySelector('#hse-cat-body');
     if (!body) return;
     body.querySelectorAll('[data-triage-id][data-triage-action]').forEach(btn => {
-      btn.addEventListener('click', () => this._triage(btn.dataset.triageId, btn.dataset.triageAction));
+      btn.addEventListener('click', () => this._triage(btn.getAttribute('data-triage-id'), btn.getAttribute('data-triage-action')));
     });
   }
 
@@ -870,7 +870,7 @@ async _triggerRescan() {
     const body = this._el?.querySelector('#hse-scan-body');
     if (!body) return;
     body.querySelectorAll('tr[data-entity-id]').forEach(row => {
-      const eid = row.dataset.entityId;
+      const eid = row.getAttribute('data-entity-id');
       const sel = this._selected.has(eid);
       row.classList.toggle('selected', sel);
       const cb = row.querySelector('.hse-scan__cb');

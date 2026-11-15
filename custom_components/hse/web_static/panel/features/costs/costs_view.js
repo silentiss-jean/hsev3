@@ -213,7 +213,7 @@ export class CostsView {
     });
     this._el?.querySelectorAll('.hse-costs__sort').forEach(th => {
       th.addEventListener('click', () => {
-        const col = th.dataset.sort;
+        const col = th.getAttribute('data-sort');
         if (this._sortCol === col) this._sortDir = this._sortDir === 'asc' ? 'desc' : 'asc';
         else { this._sortCol = col; this._sortDir = 'desc'; }
         this._render(this._data);

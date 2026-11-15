@@ -248,7 +248,7 @@ export class CardsView {
     for (const item of items) {
       const div = document.createElement('div');
       div.className = 'hse-cards__item';
-      div.dataset.id = item.entity_id;
+      div.setAttribute('data-id', item.entity_id);
       div.innerHTML = `
         <input type="checkbox" data-id="${escAttr(item.entity_id)}" />
         <span class="hse-cards__item-name"></span>

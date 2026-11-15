@@ -173,7 +173,7 @@ export class DiagnosticView {
     const score = data.score_pct ?? 0;
     const status = score >= 90 ? 'ok' : score >= 60 ? 'warning' : 'error';
     this._els.ring.textContent = `${score}%`;
-    this._els.ring.dataset.status = status;
+    this._els.ring.setAttribute('data-status', status);
 
     const lastRun = data.last_run_at;
     this._els.lastRun.textContent = lastRun ? `Dernier diagnostic : ${new Date(lastRun).toLocaleString('fr-FR')}` : 'Jamais';
@@ -220,7 +220,7 @@ export class DiagnosticView {
       if (!row) continue;
       row.querySelector('.hse-diag__name').textContent = s.name || s.entity_id;
       const statusEl = row.querySelector('.hse-diag__status');
-      statusEl.dataset.status = s.status || 'ok';
+      statusEl.setAttribute('data-status', s.status || 'ok');
       statusEl.textContent = s.status === 'ok' ? 'OK' : s.status === 'warning' ? 'Attention' : 'Erreur';
       row.querySelector('.hse-diag__issues').textContent = (s.issues || []).join(', ') || '—';
     }

@@ -368,9 +368,9 @@ export class CustomView {
     if (!this._els.status) return;
     this._els.status.textContent = text;
     if (kind) {
-      this._els.status.dataset.kind = kind;
+      this._els.status.setAttribute('data-kind', kind);
     } else {
-      delete this._els.status.dataset.kind;
+      this._els.status.removeAttribute('data-kind');
     }
   }
 

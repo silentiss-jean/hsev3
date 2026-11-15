@@ -127,11 +127,11 @@ export class MigrationView {
 
   _setStep(n) {
     this._step = n;
-    this._els.step1.dataset.active = n === 1 ? 'true' : 'false';
-    this._els.step2.dataset.active = n === 2 ? 'true' : 'false';
-    this._els.step3.dataset.active = n === 3 ? 'true' : 'false';
-    this._els.step1.dataset.done = n > 1 ? 'true' : 'false';
-    this._els.step2.dataset.done = n > 2 ? 'true' : 'false';
+    this._els.step1.setAttribute('data-active', n === 1 ? 'true' : 'false');
+    this._els.step2.setAttribute('data-active', n === 2 ? 'true' : 'false');
+    this._els.step3.setAttribute('data-active', n === 3 ? 'true' : 'false');
+    this._els.step1.setAttribute('data-done', n > 1 ? 'true' : 'false');
+    this._els.step2.setAttribute('data-done', n > 2 ? 'true' : 'false');
   }
 
   async _fetchDetection() {
@@ -218,7 +218,7 @@ export class MigrationView {
 
     // Collecter les modifications
     this._els.card.querySelectorAll('tr[data-idx]').forEach(tr => {
-      const idx = parseInt(tr.dataset.idx, 10);
+      const idx = parseInt(tr.getAttribute('data-idx'), 10);
       const targetInput = tr.querySelector('[data-field="target"]');
       const actionSelect = tr.querySelector('[data-field="action"]');
       targetInput.addEventListener('input', () => { this._mappings[idx].target_entity_id = targetInput.value; });

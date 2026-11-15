@@ -219,12 +219,12 @@ export class ConfigView {
   _bindTabs(root) {
     root.querySelectorAll('.hse-cfg__tab').forEach(btn => {
       btn.addEventListener('click', () => {
-        const tab = btn.dataset.tab;
+        const tab = btn.getAttribute('data-tab');
         if (tab === this._activeTab) return;
         this._activeTab = tab;
         root.querySelectorAll('.hse-cfg__tab').forEach(b => {
-          b.classList.toggle('active', b.dataset.tab === tab);
-          b.setAttribute('aria-selected', b.dataset.tab === tab ? 'true' : 'false');
+          b.classList.toggle('active', b.getAttribute('data-tab') === tab);
+          b.setAttribute('aria-selected', b.getAttribute('data-tab') === tab ? 'true' : 'false');
         });
         root.querySelectorAll('.hse-cfg__panel').forEach(p => {
           p.classList.toggle('active', p.id === `hse-cfg-panel-${tab}`);
@@ -320,7 +320,7 @@ export class ConfigView {
       if (!groups?.length) return;
       const anyOpen = Array.from(groups).some(g => g.classList.contains('open'));
       groups.forEach(g => {
-        const key = g.dataset.group;
+        const key = g.getAttribute('data-group');
         if (anyOpen) { g.classList.remove('open'); this._openGroups.delete(key); }
         else { g.classList.add('open'); this._openGroups.add(key); }
       });
@@ -454,7 +454,7 @@ export class ConfigView {
       head.addEventListener('click', e => {
         if (e.target.closest('button')) return;
         const grp = head.closest('.hse-cfg__group');
-        const key = grp.dataset.group;
+        const key = grp.getAttribute('data-group');
         const open = grp.classList.toggle('open');
         open ? this._openGroups.add(key) : this._openGroups.delete(key);
         // Sync label bouton expand
@@ -468,8 +468,8 @@ export class ConfigView {
     });
     body.querySelectorAll('[data-grp-sel]').forEach(btn => {
       btn.addEventListener('click', () => {
-        const grp = btn.dataset.grpSel;
-        const action = btn.dataset.grpAction;
+        const grp = btn.getAttribute('data-grp-sel');
+        const action = btn.getAttribute('data-grp-action');
         const items = (this._catData?.items ?? []).filter(i => (i.integration_domain ?? i.integration ?? 'inconnu') === grp);
         items.forEach(i => action === 'select_all' ? this._selected.add(i.entity_id) : this._selected.delete(i.entity_id));
         items.forEach(i => {
@@ -484,7 +484,7 @@ export class ConfigView {
     });
     body.querySelectorAll('.hse-cfg__cb').forEach(cb => {
       cb.addEventListener('change', async () => {
-        const eid = cb.dataset.cbEid;
+        const eid = cb.getAttribute('data-cb-eid');
         if (!eid) return;
         const action = cb.checked ? 'select' : 'ignore';
         cb.checked ? this._selected.add(eid) : this._selected.delete(eid);
@@ -507,7 +507,7 @@ export class ConfigView {
     });
     body.querySelectorAll('[data-toggle-cb]').forEach(el => {
       el.addEventListener('click', () => {
-        const eid = el.dataset.toggleCb;
+        const eid = el.getAttribute('data-toggle-cb');
         const esc = CSS.escape ? CSS.escape(eid) : eid;
         const cb = body.querySelector(`[data-cb-eid="${esc}"]`);
         if (cb) {
@@ -517,7 +517,7 @@ export class ConfigView {
       });
     });
     body.querySelectorAll('[data-triage-id]').forEach(btn => {
-      btn.addEventListener('click', () => this._triage(btn.dataset.triageId, btn.dataset.triageAction));
+      btn.addEventListener('click', () => this._triage(btn.getAttribute('data-triage-id'), btn.getAttribute('data-triage-action')));
     });
   }
 
@@ -607,7 +607,7 @@ export class ConfigView {
     this._activeMode = mode;
     // Mise à jour des boutons de mode
     this._el?.querySelectorAll('.hse-mode-btn').forEach(b => {
-      b.classList.toggle('hse-mode-active', b.dataset.mode === mode);
+      b.classList.toggle('hse-mode-active', b.getAttribute('data-mode') === mode);
     });
     // Re-render le catalogue avec le bon mode
     this._renderCatalogue();
@@ -790,7 +790,7 @@ export class ConfigView {
     // Boutons conseiller
     body.querySelectorAll('[data-conseiller-id]').forEach(btn => {
       btn.addEventListener('click', () => {
-        const eid = btn.dataset.conseillerId;
+        const eid = btn.getAttribute('data-conseiller-id');
         this._ctx.hseFetch('/api/hse/catalogue/triage', {
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ entity_id: eid, action: 'select' }), signal: this._abort?.signal,
@@ -866,11 +866,11 @@ export class ConfigView {
     if (asgBody) {
       asgBody.addEventListener('click', e => {
         const btn = e.target.closest('[data-asg-save]');
-        if (btn) this._saveAssignment(btn.dataset.asgSave);
+        if (btn) this._saveAssignment(btn.getAttribute('data-asg-save'));
       });
       asgBody.addEventListener('change', e => {
         const sel = e.target.closest('[data-asg-field]');
-        if (sel) this._markAssignmentDirty(sel.dataset.asgField, sel.dataset.asgEid, sel.value);
+        if (sel) this._markAssignmentDirty(sel.getAttribute('data-asg-field'), sel.getAttribute('data-asg-eid'), sel.value);
       });
     }
   }
@@ -1140,17 +1140,17 @@ export class ConfigView {
     if (!root) return;
     // Room rename/delete
     root.querySelectorAll('[data-room-rename]').forEach(btn => {
-      btn.addEventListener('click', () => this._openRoomModal('rename', btn.dataset.roomRename));
+      btn.addEventListener('click', () => this._openRoomModal('rename', btn.getAttribute('data-room-rename')));
     });
     root.querySelectorAll('[data-room-delete]').forEach(btn => {
-      btn.addEventListener('click', () => this._confirmDeleteRoom(btn.dataset.roomDelete));
+      btn.addEventListener('click', () => this._confirmDeleteRoom(btn.getAttribute('data-room-delete')));
     });
     // Type rename/delete
     root.querySelectorAll('[data-type-rename]').forEach(btn => {
-      btn.addEventListener('click', () => this._openTypeModal('rename', btn.dataset.typeRename));
+      btn.addEventListener('click', () => this._openTypeModal('rename', btn.getAttribute('data-type-rename')));
     });
     root.querySelectorAll('[data-type-delete]').forEach(btn => {
-      btn.addEventListener('click', () => this._confirmDeleteType(btn.dataset.typeDelete));
+      btn.addEventListener('click', () => this._confirmDeleteType(btn.getAttribute('data-type-delete')));
     });
   }
 
@@ -1159,7 +1159,7 @@ export class ConfigView {
     if (!root) return;
     root.querySelectorAll('[data-asg-page]').forEach(btn => {
       btn.addEventListener('click', () => {
-        const dir = btn.dataset.asgPage;
+        const dir = btn.getAttribute('data-asg-page');
         if (dir === 'prev' && this._asgPage > 1) { this._asgPage--; this._asgSig = null; this._loadAssignments(); }
         if (dir === 'next' && this._asgData && this._asgPage < this._asgData.pages) { this._asgPage++; this._asgSig = null; this._loadAssignments(); }
       });

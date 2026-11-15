@@ -160,7 +160,7 @@ export class HseShell {
       const btn = document.createElement('button');
       btn.className = 'hse-tab';
       btn.setAttribute('role', 'tab');
-      btn.dataset.tab = t.id;
+      btn.setAttribute('data-tab', t.id);
       btn.setAttribute('aria-selected', t.id === this._activeTab ? 'true' : 'false');
       btn.textContent = t.label;
       nav.appendChild(btn);
@@ -168,8 +168,8 @@ export class HseShell {
 
     nav.addEventListener('click', e => {
       const btn = e.target.closest('[data-tab]');
-      if (btn && btn.dataset.tab !== this._activeTab) {
-        this._switchTab(btn.dataset.tab);
+      if (btn && btn.getAttribute('data-tab') !== this._activeTab) {
+        this._switchTab(btn.getAttribute('data-tab'));
       }
     });
 
@@ -231,7 +231,7 @@ export class HseShell {
     }
     this._activeTab = tabId;
     this._nav.querySelectorAll('[data-tab]').forEach(btn => {
-      btn.setAttribute('aria-selected', btn.dataset.tab === tabId ? 'true' : 'false');
+      btn.setAttribute('aria-selected', btn.getAttribute('data-tab') === tabId ? 'true' : 'false');
     });
     this._activateTab(tabId);
   }
