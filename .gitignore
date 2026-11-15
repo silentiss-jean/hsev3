@@ -1,15 +1,20 @@
-.DS_Store
-**/.DS_Store
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
 
-# OpenCode local config (IDE-specific, not part of the project)
+# IDE / Editors
 .opencode/
 opencode.json
-__pycache__/
+.vscode/
+.idea/
+*.swp
+*.swo
 
-# Obsidian vault
+# Obsidian vault (personal config)
 _obsidian/
 
-# Rapports projet (à mettre dans docs/ ou wiki)
+# Project reports (archive in docs/ or wiki)
 *_RAPPORT*.md
 *_ROADMAP*.md
 *_STATUT*.md
@@ -19,3 +24,6 @@ analyse*.md
 **/.bak_layout/
 *.bak
 *.before_fix*
+
+# macOS
+.DS_Store
