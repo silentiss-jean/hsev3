@@ -886,9 +886,15 @@ export class ConfigView {
       const sig = JSON.stringify(data);
       if (sig === this._metaSig) return;
       this._metaSig = sig; this._metaData = data;
+      // Pré-peupler _asgData pour le 1er render (évite double-fetch + double-render)
+      const assignments = data.assignments ?? [];
+      const rooms = data.rooms ?? [];
+      const types = data.types ?? [];
+      this._asgPage = 1; this._asgSig = null;
+      this._asgData = { items: assignments.slice(0, 50), total: assignments.length, page: 1, per_page: 50, pages: Math.ceil(assignments.length / 50), rooms, types };
       this._renderMeta();
-      // Charger les assignations (pagination)
-      this._asgPage = 1; this._asgSig = null; await this._loadAssignments();
+      // Charger les assignations (pagination/filtres) - seulement si nécessaire
+      // this._loadAssignments(); // Supprimé: _renderMeta() a déjà rendu la table
     } catch (e) {
       if (e.name === 'AbortError') return;
       this._setMetaBody(`<div class="hse-error">Erreur meta — ${this._esc(e.message)}</div>`);
@@ -901,10 +907,9 @@ export class ConfigView {
     const bodyEl = this._el?.querySelector('#hse-cfg-asg-body');
     if (bodyEl && this._asgPage === 1) bodyEl.innerHTML = '<div class="hse-skeleton"></div>';
     try {
-      // On charge tout via meta (pas de pagination backend pour assignments), on filtre côté client
-      const r = await this._ctx.hseFetch('/api/hse/meta', { signal: this._abort?.signal });
-      const data = await r.json();
-      if (!this._mounted) return;
+      // Utilise les données déjà chargées par _loadMeta() pour éviter un 2ème fetch
+      const data = this._metaData;
+      if (!data) return;
       const assignments = data.assignments ?? [];
       const rooms = data.rooms ?? [];
       const types = data.types ?? [];
@@ -930,7 +935,7 @@ export class ConfigView {
       const pageItems = filtered.slice(start, start + perPage);
       const pages = Math.ceil(total / perPage);
       this._asgData = { items: pageItems, total, page: this._asgPage, per_page: perPage, pages, rooms, types };
-      this._renderAssignments();
+      this._renderMeta(); // Re-render le panel meta (inclut la table des assignations)
     } catch (e) {
       if (e.name === 'AbortError') return;
       if (bodyEl) bodyEl.innerHTML = `<div class="hse-error">Erreur assignations — ${this._esc(e.message)}</div>`;
