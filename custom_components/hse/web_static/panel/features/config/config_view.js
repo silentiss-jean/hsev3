@@ -126,6 +126,10 @@ export class ConfigView {
     this._catStatus = 'all'; this._catQ = ''; this._selected = new Set(); this._openGroups = new Set();
     this._refEntityId = null; this._refSaving = false; this._autoSelecting = false;
     this._metaFetching = false; this._metaData = null; this._metaSig = null; this._diffApplying = false;
+    this._asgFetching = false; this._asgData = null; this._asgSig = null; this._asgPage = 1;
+    this._asgStatus = 'all'; this._asgQ = ''; this._asgFilter = 'all';
+    this._asgDirty = new Map(); // entity_id -> {room_id?, type_id?}
+    this._modalState = null; // {mode: 'create'|'rename', kind: 'room'|'type', id?, name?}
     this._pricingFetching = false; this._pricingData = null; this._pricingSig = null; this._pricingSaving = false;
   }
 
@@ -835,6 +839,38 @@ export class ConfigView {
       const banner = this._el?.querySelector('#hse-cfg-diff-banner');
       if (banner) banner.classList.remove('visible');
     });
+    // Room actions
+    root.querySelector('#hse-cfg-room-add')?.addEventListener('click', () => this._openRoomModal('create'));
+    root.querySelector('#hse-cfg-type-add')?.addEventListener('click', () => this._openTypeModal('create'));
+    // Assignments: search, filter
+    const search = root.querySelector('#hse-cfg-asg-search');
+    if (search) {
+      let deb;
+      search.addEventListener('input', e => {
+        clearTimeout(deb);
+        deb = setTimeout(() => { this._asgQ = e.target.value.trim(); this._asgPage = 1; this._asgSig = null; this._loadAssignments(); }, 300);
+      });
+    }
+    root.querySelector('#hse-cfg-asg-filter')?.addEventListener('change', e => { this._asgFilter = e.target.value; this._asgPage = 1; this._asgSig = null; this._loadAssignments(); });
+    root.querySelector('#hse-cfg-asg-refresh')?.addEventListener('click', () => { this._asgSig = null; this._loadAssignments(); });
+    // Modal close
+    root.querySelector('#hse-cfg-modal-close')?.addEventListener('click', () => this._closeModal());
+    root.querySelector('#hse-cfg-modal-cancel')?.addEventListener('click', () => this._closeModal());
+    root.querySelector('#hse-cfg-modal-save')?.addEventListener('click', () => this._saveModal());
+    // Close modal on backdrop click
+    root.querySelector('#hse-cfg-modal-backdrop')?.addEventListener('click', e => { if (e.target === e.currentTarget) this._closeModal(); });
+    // Assignment row save buttons (delegated)
+    const asgBody = root.querySelector('#hse-cfg-asg-body');
+    if (asgBody) {
+      asgBody.addEventListener('click', e => {
+        const btn = e.target.closest('[data-asg-save]');
+        if (btn) this._saveAssignment(btn.dataset.asgSave);
+      });
+      asgBody.addEventListener('change', e => {
+        const sel = e.target.closest('[data-asg-field]');
+        if (sel) this._markAssignmentDirty(sel.dataset.asgField, sel.dataset.asgEid, sel.value);
+      });
+    }
   }
 
   async _loadMeta() {
@@ -849,10 +885,54 @@ export class ConfigView {
       if (sig === this._metaSig) return;
       this._metaSig = sig; this._metaData = data;
       this._renderMeta();
+      // Charger les assignations (pagination)
+      this._asgPage = 1; this._asgSig = null; await this._loadAssignments();
     } catch (e) {
       if (e.name === 'AbortError') return;
       this._setMetaBody(`<div class="hse-error">Erreur meta — ${this._esc(e.message)}</div>`);
     } finally { this._metaFetching = false; }
+  }
+
+  async _loadAssignments() {
+    if (this._asgFetching) return;
+    this._asgFetching = true;
+    const bodyEl = this._el?.querySelector('#hse-cfg-asg-body');
+    if (bodyEl && this._asgPage === 1) bodyEl.innerHTML = '<div class="hse-skeleton"></div>';
+    try {
+      // On charge tout via meta (pas de pagination backend pour assignments), on filtre côté client
+      const r = await this._ctx.hseFetch('/api/hse/meta', { signal: this._abort?.signal });
+      const data = await r.json();
+      if (!this._mounted) return;
+      const assignments = data.assignments ?? [];
+      const rooms = data.rooms ?? [];
+      const types = data.types ?? [];
+      // Filtres
+      let filtered = assignments;
+      if (this._asgQ) {
+        const q = this._asgQ.toLowerCase();
+        filtered = filtered.filter(a => a.entity_id.toLowerCase().includes(q));
+      }
+      if (this._asgFilter === 'unassigned_room') {
+        filtered = filtered.filter(a => !a.room);
+      } else if (this._asgFilter === 'unassigned_type') {
+        filtered = filtered.filter(a => !a.type);
+      } else if (this._asgFilter === 'unassigned_both') {
+        filtered = filtered.filter(a => !a.room && !a.type);
+      } else if (this._asgFilter === 'pending') {
+        filtered = filtered.filter(a => a.pending);
+      }
+      // Pagination côté client (50 par page)
+      const perPage = 50;
+      const total = filtered.length;
+      const start = (this._asgPage - 1) * perPage;
+      const pageItems = filtered.slice(start, start + perPage);
+      const pages = Math.ceil(total / perPage);
+      this._asgData = { items: pageItems, total, page: this._asgPage, per_page: perPage, pages, rooms, types };
+      this._renderAssignments();
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      if (bodyEl) bodyEl.innerHTML = `<div class="hse-error">Erreur assignations — ${this._esc(e.message)}</div>`;
+    } finally { this._asgFetching = false; }
   }
 
   async _loadDiffPreview() {
@@ -903,27 +983,373 @@ export class ConfigView {
     const rooms = d.rooms ?? [];
     const types = d.types ?? [];
     const TYPE_ICON_META = TYPE_ICON;
-    const roomsHtml = !rooms.length ? `<li>Aucune pièce.</li>` :
-      rooms.map(r => `<li><span>${this._esc(r.name ?? r.id ?? r)}</span><span class="hse-cfg__list-eid">${this._esc(r.id ?? '')}</span></li>`).join('');
-    const typesHtml = !types.length ? `<li>Aucun type.</li>` :
+
+    const roomsHtml = !rooms.length ? `<li class="hse-empty-row">Aucune pièce.</li>` :
+      rooms.map(r => {
+        const id = r.id ?? '';
+        const name = r.name ?? id;
+        const count = (d.assignments ?? []).filter(a => a.room === id).length;
+        return `<li data-room-id="${this._attrVal(id)}">
+          <span class="hse-cfg__room-name">${this._esc(name)}</span>
+          <span class="hse-cfg__list-eid">${this._esc(id)}</span>
+          <span class="hse-cfg__badge hse-cfg__badge--normal">${count} capteur${count > 1 ? 's' : ''}</span>
+          <div class="hse-cfg__sensor-actions">
+            <button class="hse-btn hse-btn--sm hse-btn--ghost" data-room-rename="${this._attrVal(id)}" title="Renommer">✏️</button>
+            <button class="hse-btn hse-btn--sm hse-btn--danger" data-room-delete="${this._attrVal(id)}" title="Supprimer">🗑️</button>
+          </div>
+        </li>`;
+      }).join('');
+
+    const typesHtml = !types.length ? `<li class="hse-empty-row">Aucun type.</li>` :
       types.map(t => {
         const icon = TYPE_ICON_META[t?.toLowerCase()] ?? '';
-        return `<li><span>${icon ? icon + ' ' : ''}${this._esc(t)}</span></li>`;
+        const count = (d.assignments ?? []).filter(a => a.type === t).length;
+        return `<li data-type-name="${this._attrVal(t)}">
+          <span class="hse-cfg__type-name">${icon ? icon + ' ' : ''}${this._esc(t)}</span>
+          <span class="hse-cfg__badge hse-cfg__badge--normal">${count} capteur${count > 1 ? 's' : ''}</span>
+          <div class="hse-cfg__sensor-actions">
+            <button class="hse-btn hse-btn--sm hse-btn--ghost" data-type-rename="${this._attrVal(t)}" title="Renommer">✏️</button>
+            <button class="hse-btn hse-btn--sm hse-btn--danger" data-type-delete="${this._attrVal(t)}" title="Supprimer">🗑️</button>
+          </div>
+        </li>`;
       }).join('');
+
+    // Assignments table
+    const asgData = this._asgData;
+    const asgItems = asgData?.items ?? [];
+    const asgTotal = asgData?.total ?? 0;
+    const asgPage = asgData?.page ?? 1;
+    const asgPages = asgData?.pages ?? 1;
+    const asgRooms = asgData?.rooms ?? rooms;
+    const asgTypes = asgData?.types ?? types;
+
+    const roomOptions = asgRooms.map(r => `<option value="${this._attrVal(r.id)}">${this._esc(r.name)}</option>`).join('');
+    const typeOptions = asgTypes.map(t => `<option value="${this._attrVal(t)}">${this._esc(t)}</option>`).join('');
+
+    const asgRowsHtml = !asgItems.length ? `<tr><td colspan="7" class="hse-empty-row">Aucune assignation.</td></tr>` :
+      asgItems.map(a => {
+        const eid = a.entity_id;
+        const roomId = a.room ?? '';
+        const typeId = a.type ?? '';
+        const pending = a.pending;
+        const dirty = this._asgDirty.get(eid) ?? {};
+        const currentRoom = dirty.room_id !== undefined ? dirty.room_id : roomId;
+        const currentType = dirty.type_id !== undefined ? dirty.type_id : typeId;
+        const isDirty = dirty.room_id !== undefined || dirty.type_id !== undefined;
+        const roomSel = `<select class="hse-cfg__select hse-cfg__asg-select" data-asg-field="room_id" data-asg-eid="${this._attrVal(eid)}"><option value="">— Non affecté —</option>${roomOptions.replace(new RegExp(`value="${this._attrVal(currentRoom)}"`), 'value="' + this._attrVal(currentRoom) + '" selected')}</select>`;
+        const typeSel = `<select class="hse-cfg__select hse-cfg__asg-select" data-asg-field="type_id" data-asg-eid="${this._attrVal(eid)}"><option value="">— Non affecté —</option>${typeOptions.replace(new RegExp(`value="${this._attrVal(currentType)}"`), 'value="' + this._attrVal(currentType) + '" selected')}</select>`;
+        const statusBadge = pending
+          ? `<span class="hse-cfg__badge hse-cfg__badge--pending">Proposé</span>`
+          : (!roomId && !typeId
+              ? `<span class="hse-cfg__badge hse-cfg__badge--ignored">Non affecté</span>`
+              : `<span class="hse-cfg__badge hse-cfg__badge--selected">Affecté</span>`);
+        const saveBtn = isDirty
+          ? `<button class="hse-btn hse-btn--sm hse-btn--primary" data-asg-save="${this._attrVal(eid)}">💾</button>`
+          : `<button class="hse-btn hse-btn--sm hse-btn--ghost" data-asg-save="${this._attrVal(eid)}" disabled>💾</button>`;
+        return `<tr data-eid="${this._attrVal(eid)}" class="${isDirty ? 'hse-dirty' : ''}${pending ? ' hse-pending' : ''}">
+          <td class="hse-cfg__asg-name">${this._esc(eid)}</td>
+          <td>${roomSel}</td>
+          <td>${typeSel}</td>
+          <td>${statusBadge}</td>
+          <td>${saveBtn}</td>
+        </tr>`;
+      }).join('');
+
+    const pagerHtml = asgPages <= 1 ? '' : `
+      <div class="hse-cfg__asg-pager">
+        <button class="hse-btn hse-btn--ghost hse-btn--sm" data-asg-page="prev" ${asgPage <= 1 ? 'disabled' : ''}>◀</button>
+        <span>Page ${asgPage} / ${asgPages} — ${asgTotal} assignation${asgTotal > 1 ? 's' : ''}</span>
+        <button class="hse-btn hse-btn--ghost hse-btn--sm" data-asg-page="next" ${asgPage >= asgPages ? 'disabled' : ''}>▶</button>
+      </div>`;
+
     this._setMetaBody(`
+      <div class="hse-cfg__meta-toolbar">
+        <button id="hse-cfg-room-add" class="hse-btn hse-btn--primary hse-btn--sm">➕ Ajouter une pièce</button>
+        <button id="hse-cfg-type-add" class="hse-btn hse-btn--primary hse-btn--sm">➕ Ajouter un type</button>
+        <button id="hse-cfg-asg-refresh" class="hse-btn hse-btn--ghost hse-btn--sm" title="Actualiser">🔄</button>
+      </div>
       <div class="hse-cfg__grid">
         <div class="hse-cfg__card">
           <div class="hse-cfg__card-head"><span>🏠 Pièces (${rooms.length})</span></div>
-          <ul class="hse-cfg__list">${roomsHtml}</ul>
+          <ul class="hse-cfg__list hse-cfg__list--meta">${roomsHtml}</ul>
         </div>
         <div class="hse-cfg__card">
           <div class="hse-cfg__card-head"><span>🏷️ Types (${types.length})</span></div>
-          <ul class="hse-cfg__list">${typesHtml}</ul>
+          <ul class="hse-cfg__list hse-cfg__list--meta">${typesHtml}</ul>
         </div>
-      </div>`);
+      </div>
+      <div class="hse-cfg__card hse-cfg__asg-card">
+        <div class="hse-cfg__card-head">
+          <span>📋 Affectations des capteurs (${asgTotal})</span>
+          <div class="hse-cfg__asg-filters">
+            <input type="search" id="hse-cfg-asg-search" class="hse-cfg__search" placeholder="Rechercher entity_id…" style="width:200px;">
+            <select id="hse-cfg-asg-filter" class="hse-cfg__filter" style="width:auto;">
+              <option value="all">Tous</option>
+              <option value="unassigned_room">Sans pièce</option>
+              <option value="unassigned_type">Sans type</option>
+              <option value="unassigned_both">Sans pièce ni type</option>
+              <option value="pending">Proposés (sync)</option>
+            </select>
+          </div>
+        </div>
+        <div class="hse-cfg__asg-table-wrap">
+          <table class="hse-cfg__asg-table">
+            <thead>
+              <tr>
+                <th>Entity ID</th>
+                <th>Pièce</th>
+                <th>Type</th>
+                <th>Statut</th>
+                <th style="width:60px;"></th>
+              </tr>
+            </thead>
+            <tbody id="hse-cfg-asg-body">${asgRowsHtml}</tbody>
+          </table>
+        </div>
+        ${pagerHtml}
+      </div>
+      <!-- Modal pour création/renommage pièce/type -->
+      <div id="hse-cfg-modal-backdrop" class="hse-cfg__modal-backdrop" style="display:none;">
+        <div class="hse-cfg__modal">
+          <div class="hse-cfg__modal-head">
+            <span id="hse-cfg-modal-title"></span>
+            <button id="hse-cfg-modal-close" class="hse-btn hse-btn--ghost hse-btn--sm" aria-label="Fermer">✕</button>
+          </div>
+          <div class="hse-cfg__modal-body">
+            <label class="hse-cfg__label" id="hse-cfg-modal-label"></label>
+            <input type="text" id="hse-cfg-modal-input" class="hse-cfg__input" autocomplete="off" />
+            <span id="hse-cfg-modal-error" class="hse-error" style="display:none;"></span>
+          </div>
+          <div class="hse-cfg__modal-foot">
+            <button id="hse-cfg-modal-cancel" class="hse-btn hse-btn--ghost">Annuler</button>
+            <button id="hse-cfg-modal-save" class="hse-btn hse-btn--primary">Confirmer</button>
+          </div>
+        </div>
+      </div>
+    `);
+
+    // Bind events for room/type actions and assignment pagination
+    this._bindMetaListEvents();
+    this._bindAsgPager();
   }
 
-  _setMetaBody(html) { const el = this._el?.querySelector('#hse-cfg-meta-body'); if (el) el.innerHTML = html; }
+  _bindMetaListEvents() {
+    const root = this._el;
+    if (!root) return;
+    // Room rename/delete
+    root.querySelectorAll('[data-room-rename]').forEach(btn => {
+      btn.addEventListener('click', () => this._openRoomModal('rename', btn.dataset.roomRename));
+    });
+    root.querySelectorAll('[data-room-delete]').forEach(btn => {
+      btn.addEventListener('click', () => this._confirmDeleteRoom(btn.dataset.roomDelete));
+    });
+    // Type rename/delete
+    root.querySelectorAll('[data-type-rename]').forEach(btn => {
+      btn.addEventListener('click', () => this._openTypeModal('rename', btn.dataset.typeRename));
+    });
+    root.querySelectorAll('[data-type-delete]').forEach(btn => {
+      btn.addEventListener('click', () => this._confirmDeleteType(btn.dataset.typeDelete));
+    });
+  }
+
+  _bindAsgPager() {
+    const root = this._el;
+    if (!root) return;
+    root.querySelectorAll('[data-asg-page]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const dir = btn.dataset.asgPage;
+        if (dir === 'prev' && this._asgPage > 1) { this._asgPage--; this._asgSig = null; this._loadAssignments(); }
+        if (dir === 'next' && this._asgData && this._asgPage < this._asgData.pages) { this._asgPage++; this._asgSig = null; this._loadAssignments(); }
+      });
+    });
+  }
+
+  // ── Modal & CRUD Pièces/Types ────────────────────────────────────────────────
+
+  _openRoomModal(mode, id = null) {
+    const backdrop = this._el?.querySelector('#hse-cfg-modal-backdrop');
+    const title = this._el?.querySelector('#hse-cfg-modal-title');
+    const label = this._el?.querySelector('#hse-cfg-modal-label');
+    const input = this._el?.querySelector('#hse-cfg-modal-input');
+    const error = this._el?.querySelector('#hse-cfg-modal-error');
+    if (!backdrop) return;
+    this._modalState = { kind: 'room', mode, id };
+    if (mode === 'create') {
+      title.textContent = 'Créer une pièce';
+      label.textContent = 'Nom de la pièce';
+      input.value = '';
+    } else {
+      const room = this._metaData?.rooms?.find(r => r.id === id);
+      title.textContent = 'Renommer la pièce';
+      label.textContent = `Nouveau nom pour « ${room?.name ?? id} »`;
+      input.value = room?.name ?? '';
+    }
+    error.style.display = 'none';
+    input.focus();
+    backdrop.style.display = 'flex';
+  }
+
+  _openTypeModal(mode, name = null) {
+    const backdrop = this._el?.querySelector('#hse-cfg-modal-backdrop');
+    const title = this._el?.querySelector('#hse-cfg-modal-title');
+    const label = this._el?.querySelector('#hse-cfg-modal-label');
+    const input = this._el?.querySelector('#hse-cfg-modal-input');
+    const error = this._el?.querySelector('#hse-cfg-modal-error');
+    if (!backdrop) return;
+    this._modalState = { kind: 'type', mode, name };
+    if (mode === 'create') {
+      title.textContent = 'Créer un type';
+      label.textContent = 'Nom du type d\'appareil';
+      input.value = '';
+    } else {
+      title.textContent = 'Renommer le type';
+      label.textContent = `Nouveau nom pour « ${name} »`;
+      input.value = name;
+    }
+    error.style.display = 'none';
+    input.focus();
+    backdrop.style.display = 'flex';
+  }
+
+  _closeModal() {
+    const backdrop = this._el?.querySelector('#hse-cfg-modal-backdrop');
+    if (backdrop) backdrop.style.display = 'none';
+    this._modalState = null;
+  }
+
+  async _saveModal() {
+    const input = this._el?.querySelector('#hse-cfg-modal-input');
+    const error = this._el?.querySelector('#hse-cfg-modal-error');
+    const name = input?.value?.trim() ?? '';
+    if (!name) {
+      if (error) { error.textContent = 'Le nom est requis'; error.style.display = 'block'; }
+      return;
+    }
+    const state = this._modalState;
+    if (!state) return;
+    try {
+      if (state.kind === 'room') {
+        if (state.mode === 'create') {
+          await this._ctx.hseFetch('/api/hse/meta', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'create_room', name }), signal: this._abort?.signal,
+          });
+        } else {
+          await this._ctx.hseFetch('/api/hse/meta', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'rename_room', id: state.id, name }), signal: this._abort?.signal,
+          });
+        }
+      } else if (state.kind === 'type') {
+        if (state.mode === 'create') {
+          await this._ctx.hseFetch('/api/hse/meta', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'create_type', name }), signal: this._abort?.signal,
+          });
+        } else {
+          await this._ctx.hseFetch('/api/hse/meta', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'rename_type', old_name: state.name, new_name: name }), signal: this._abort?.signal,
+          });
+        }
+      }
+      this._closeModal();
+      this._metaSig = null; await this._loadMeta();
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      if (error) { error.textContent = e.message; error.style.display = 'block'; }
+    }
+  }
+
+  _confirmDeleteRoom(roomId) {
+    const room = this._metaData?.rooms?.find(r => r.id === roomId);
+    const count = (this._metaData?.assignments ?? []).filter(a => a.room === roomId).length;
+    const msg = `Supprimer la pièce « ${room?.name ?? roomId} » ?\n${count} capteur${count > 1 ? 's' : ''} affecté${count > 1 ? 's' : ''} perdront leur pièce (type conservé).`;
+    if (!confirm(msg)) return;
+    this._deleteRoom(roomId);
+  }
+
+  async _deleteRoom(roomId) {
+    try {
+      await this._ctx.hseFetch('/api/hse/meta', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete_room', id: roomId }), signal: this._abort?.signal,
+      });
+      this._metaSig = null; await this._loadMeta();
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      alert(`Erreur : ${e.message}`);
+    }
+  }
+
+  _confirmDeleteType(typeName) {
+    const count = (this._metaData?.assignments ?? []).filter(a => a.type === typeName).length;
+    const msg = `Supprimer le type « ${typeName} » ?\n${count} capteur${count > 1 ? 's' : ''} affecté${count > 1 ? 's' : ''} perdront leur type (pièce conservée).`;
+    if (!confirm(msg)) return;
+    this._deleteType(typeName);
+  }
+
+  async _deleteType(typeName) {
+    try {
+      await this._ctx.hseFetch('/api/hse/meta', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete_type', name: typeName }), signal: this._abort?.signal,
+      });
+      this._metaSig = null; await this._loadMeta();
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      alert(`Erreur : ${e.message}`);
+    }
+  }
+
+  _markAssignmentDirty(field, entityId, value) {
+    const dirty = this._asgDirty.get(entityId) ?? {};
+    if (value === '') {
+      delete dirty[field];
+    } else {
+      dirty[field] = value;
+    }
+    if (Object.keys(dirty).length === 0) {
+      this._asgDirty.delete(entityId);
+    } else {
+      this._asgDirty.set(entityId, dirty);
+    }
+    // Re-render just the save button state for this row
+    const row = this._el?.querySelector(`[data-eid="${CSS.escape ? CSS.escape(entityId) : entityId}"]`);
+    if (row) {
+      const btn = row.querySelector('[data-asg-save]');
+      const isDirty = Object.keys(dirty).length > 0;
+      if (btn) {
+        btn.disabled = !isDirty;
+        btn.classList.toggle('hse-btn--primary', isDirty);
+        btn.classList.toggle('hse-btn--ghost', !isDirty);
+        btn.textContent = '💾';
+      }
+      row.classList.toggle('hse-dirty', isDirty);
+    }
+  }
+
+  async _saveAssignment(entityId) {
+    const dirty = this._asgDirty.get(entityId);
+    if (!dirty) return;
+    const btn = this._el?.querySelector(`[data-asg-save="${this._attrVal(entityId)}"]`);
+    if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+    try {
+      const payload = { action: 'assign', entity_id: entityId };
+      if (dirty.room_id !== undefined) payload.room_id = dirty.room_id || null;
+      if (dirty.type_id !== undefined) payload.type_id = dirty.type_id || null;
+      await this._ctx.hseFetch('/api/hse/meta', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload), signal: this._abort?.signal,
+      });
+      this._asgDirty.delete(entityId);
+      this._metaSig = null; await this._loadMeta();
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      if (btn) { btn.disabled = false; btn.textContent = '💾'; }
+      alert(`Erreur : ${e.message}`);
+    }
+  }
 
   // ── Tarification (Onglet C) ────────────────────────────────────────────────
 
