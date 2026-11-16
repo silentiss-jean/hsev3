@@ -41,11 +41,55 @@ Réglages (`PUT /api/hse/settings`) :
 |--------|------|
 | `ok` | appareils ≤ compteur (+10 %) ; le reste est la consommation **non suivie** |
 | `tracked_exceeds_ref` | appareils > compteur +10 % : double comptage, mauvaise unité ou capteur figé → niveau `error` |
-| `reference_too_low` | compteur < 50 W : ratio non significatif |
+| `reference_too_low` | compteur < 50 W (puissance) ou ≤ 0,05 kWh (énergie) : ratio non significatif |
 | `no_reference` | aucun compteur configuré |
 
 Réponse additive (rien de supprimé) : `reference_consumption`, `quality`, et par appareil dans `/api/hse/costs`
 `method`, `quality`, `excluded_reason`.
+
+### Écart signé (Q7-R4)
+
+L'écart n'est jamais écrêté silencieusement :
+
+- `delta_kwh` / `delta_w` = **référence − mesuré**, signé ;
+- `untracked_kwh` / `untracked_w` = la même valeur plancher à 0 (part non suivie) ;
+- `surplus_kwh` / `surplus_w` = le dépassement quand le mesuré dépasse la référence.
+
+Un `untracked_kwh = 0` ne prouve donc pas la conformité : il faut lire `delta_kwh`
+(0 = exactement couvert, > 0 = non suivi, < 0 = mesuré > référence) et `surplus_kwh`.
+
+### Filtre des candidats (Q7-R5)
+
+`reference.candidates` ne propose pas n'importe quel capteur :
+
+- les entités **déjà présentes au catalogue** sont exclues (`exclude=`), pour ne pas reproposer un appareil suivi ;
+- `_DEVICE_HINTS` couvre les appareils individuels (`aspirateur`, `plaque`, `hotte`, `four`, `seche_linge`,
+  `piscine`, `vmc`, `pac`, `robot`, `cave`, `garage`…) : leurs `total_energy` sortent avec un score négatif ;
+- un candidat sans indice de compteur (`linky`, `lixee`, `teleinfo`, `compteur`, `slot_`, `general`, `maison`…)
+  n'est retenu que si `score >= 25`. Un `total_energy` nu (aspirateur, plaque) est donc rejeté.
+
+### Bloc `reference` de `/api/hse/costs`
+
+Depuis DELTA-067, `/api/hse/costs` expose le même contrôle que l'overview, dans un bloc `reference` :
+
+```json
+"reference": {
+  "entity_id": "sensor.linky_index",
+  "status": "ok",
+  "reference_kwh": 420.5, "reference_eur": 128.11,
+  "tracked_kwh": 375.8,
+  "delta_kwh": 44.7, "surplus_kwh": 0.0, "untracked_kwh": 44.7,
+  "coverage_pct": 89.4
+}
+```
+
+- `reference_kwh` vient de l'**index** (`reference_energy_entity_id`), pas de la puissance ;
+- `reference_eur` = coût de l'énergie de la référence **+ prorata d'abonnement**, donc directement
+  comparable à `total_ttc_eur` ;
+- `tracked_kwh` est le total des appareils — le compteur de référence n'y est **jamais** inclus
+  (`plan.reference_ids`), même s'il figure au catalogue ;
+- `status` vaut `no_reference` (rien de configuré), `reference_unavailable` (entité introuvable ou
+  sans statistiques), `reference_too_low`, `ok` ou `tracked_exceeds_ref`.
 
 ## Protocole de validation en préprod
 
@@ -66,3 +110,6 @@ Réponse additive (rien de supprimé) : `reference_consumption`, `quality`, et p
 - Code dépendant de Home Assistant (`async_energy_detail`) non exécutable hors HA : la logique pure est testée
   (`python3 -m unittest discover -s tests -v`), l'accès recorder doit être validé en préprod.
 - Le frontend n'affiche pas encore le bloc `quality` (données disponibles via l'API).
+- Le frontend `costs_view.js` n'affiche pas encore le bloc `reference` : la réconciliation
+  (delta, surplus, couverture) est disponible via l'API mais pas visible à l'écran. À traiter
+  avec l'option retenue pour `low_coverage` (repli total) avant d'ajouter un compteur de deltas.
