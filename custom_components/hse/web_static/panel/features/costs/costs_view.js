@@ -40,6 +40,23 @@ table.hse-costs__table { width: 100%; border-collapse: collapse; font-size: 0.87
 .hse-costs__sort.asc::after { content: ' ↑'; opacity: 1; }
 .hse-costs__sort.desc::after { content: ' ↓'; opacity: 1; }
 .hse-costs__export { display: flex; gap: 8px; align-items: center; }
+.hse-costs__ref { display: none; border-radius: 10px; padding: 12px 16px; border: 1px solid; font-size: 0.8rem; }
+.hse-costs__ref.is-on { display: block; }
+.hse-costs__ref[data-level="ok"] { border-color: rgba(74,222,128,0.25); background: rgba(74,222,128,0.06); }
+.hse-costs__ref[data-level="warn"] { border-color: rgba(250,204,21,0.25); background: rgba(250,204,21,0.06); }
+.hse-costs__ref[data-level="error"] { border-color: rgba(248,113,113,0.3); background: rgba(248,113,113,0.08); }
+.hse-costs__ref-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.hse-costs__ref-title { font-weight: 600; color: rgba(255,255,255,0.9); }
+.hse-costs__ref-badge { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; }
+.hse-costs__ref[data-level="ok"] .hse-costs__ref-badge { background: rgba(74,222,128,0.15); color: #4ade80; }
+.hse-costs__ref[data-level="warn"] .hse-costs__ref-badge { background: rgba(250,204,21,0.15); color: #facc15; }
+.hse-costs__ref[data-level="error"] .hse-costs__ref-badge { background: rgba(248,113,113,0.18); color: #f87171; }
+.hse-costs__ref-grid { display: flex; flex-wrap: wrap; gap: 6px 22px; }
+.hse-costs__ref-item { display: flex; flex-direction: column; gap: 1px; }
+.hse-costs__ref-item b { font-size: 0.92rem; font-weight: 600; color: rgba(255,255,255,0.92); }
+.hse-costs__ref-item span { font-size: 0.7rem; color: rgba(255,255,255,0.45); }
+.hse-costs__ref-note { margin-top: 8px; font-size: 0.74rem; color: rgba(255,255,255,0.55); }
+.hse-costs__ref[data-level="error"] .hse-costs__ref-note { color: #fca5a5; }
 @keyframes hse-shimmer { 0% { background-position:-200% 0; } 100% { background-position: 200% 0; } }
 .hse-skeleton { background:linear-gradient(90deg,rgba(255,255,255,0.04) 25%,rgba(255,255,255,0.08) 50%,rgba(255,255,255,0.04) 75%); background-size:200% 100%; animation:hse-shimmer 1.5s ease-in-out infinite; border-radius:10px; min-height:120px; width:100%; }
 @media(prefers-reduced-motion:reduce){ .hse-skeleton { animation:none; } }
@@ -135,6 +152,7 @@ export class CostsView {
               <span class="hse-costs__total-sub" id="hse-total-kwh">${totalKwh.toFixed(2)} kWh</span>
             </div>
           </div>
+          <div id="hse-costs-ref" class="hse-costs__ref" data-level="ok"></div>
           <div class="hse-costs__table-wrap">
             <table class="hse-costs__table">
               <thead>
@@ -159,6 +177,7 @@ export class CostsView {
         totalValue: this._el.querySelector('#hse-total-value'),
         totalKwh: this._el.querySelector('#hse-total-kwh'),
         tbody: this._el.querySelector('#hse-costs-tbody'),
+        ref: this._el.querySelector('#hse-costs-ref'),
       };
       this._bindEvents();
     } else {
@@ -168,6 +187,87 @@ export class CostsView {
       // Rebuild tbody (peu de lignes, OK)
       this._els.tbody.innerHTML = items.length ? items.map(item => this._renderRow(item, totalTtc)).join('') : '<tr><td colspan="7" class="hse-empty">Aucun appareil sélectionné</td></tr>';
     }
+
+    // DELTA-067 (Q7) — réconciliation mesuré / référence Linky
+    this._renderReference(data.reference);
+  }
+
+  /**
+   * DELTA-067 — affiche la réconciliation entre la consommation suivie et le
+   * capteur de référence (index Linky/facturable).
+   *
+   * Le backend envoie `reference.status` ∈ {no_reference, reference_unavailable,
+   * reference_too_low, ok, tracked_exceeds_ref} et un écart SIGNÉ
+   * (`delta_kwh` = référence − mesuré). Un `delta` négatif signifie que le
+   * suivi dépasse la référence : c'est une erreur de mesure, pas une économie.
+   */
+  _renderReference(ref) {
+    const box = this._els?.ref;
+    if (!box) return;
+    if (!ref || !ref.reference_kwh) {
+      // Pas de référence configurée : on masque le bloc (rien à réconcilier).
+      box.classList.remove('is-on');
+      box.innerHTML = '';
+      return;
+    }
+
+    const isError = ref.status === 'tracked_exceeds_ref'
+      || ref.quality?.level === 'error';
+    const isWarn = ref.status === 'reference_too_low' || ref.status === 'reference_unavailable';
+    const level = isError ? 'error' : (isWarn ? 'warn' : 'ok');
+
+    const LABELS = {
+      ok: 'Conforme',
+      tracked_exceeds_ref: 'Dépasse la référence',
+      reference_too_low: 'Référence trop basse',
+      reference_unavailable: 'Référence indisponible',
+      no_reference: 'Aucune référence',
+    };
+
+    const nf = (v, d = 1) => (typeof v === 'number' ? v.toFixed(d) : '—');
+    const delta = ref.delta_kwh;
+    const deltaLabel = typeof delta === 'number' && delta < 0
+      ? `${delta.toFixed(1)} kWh`   // négatif : alerte
+      : `${nf(delta)} kWh`;
+    const deltaSign = typeof delta === 'number' ? (delta < 0 ? '−' : '+') : '';
+
+    const notes = (ref.quality?.notes ?? []).join(', ');
+
+    box.className = `hse-costs__ref is-on`;
+    box.dataset.level = level;
+    box.innerHTML = `
+      <div class="hse-costs__ref-head">
+        <span class="hse-costs__ref-title">Réconciliation avec la référence</span>
+        <span class="hse-costs__ref-badge">${escHtml(LABELS[ref.status] ?? ref.status ?? '')}</span>
+      </div>
+      <div class="hse-costs__ref-grid">
+        <div class="hse-costs__ref-item">
+          <b>${nf(ref.reference_kwh)} kWh / ${nf(ref.reference_eur, 2)} €</b>
+          <span>Référence (${escHtml(ref.entity_id ?? '')})</span>
+        </div>
+        <div class="hse-costs__ref-item">
+          <b>${nf(ref.tracked_kwh)} kWh</b>
+          <span>Consommation suivie</span>
+        </div>
+        <div class="hse-costs__ref-item">
+          <b>${deltaSign}${deltaLabel}</b>
+          <span>Écart signé (référence − suivi)</span>
+        </div>
+        <div class="hse-costs__ref-item">
+          <b>${nf(ref.untracked_kwh)} kWh</b>
+          <span>Non suivi (plancher 0)</span>
+        </div>
+        <div class="hse-costs__ref-item">
+          <b>${nf(ref.surplus_kwh)} kWh</b>
+          <span>Dépassement éventuel</span>
+        </div>
+        <div class="hse-costs__ref-item">
+          <b>${nf(ref.coverage_pct, 0)} %</b>
+          <span>Couverture du suivi</span>
+        </div>
+      </div>
+      ${notes ? `<div class="hse-costs__ref-note">⚠ ${escHtml(notes)}</div>` : ''}
+      ${level === 'error' ? '<div class="hse-costs__ref-note">⚠ Le suivi dépasse la référence de plus de 10 % : doublons, mauvaise conversion ou capteur erroné à corriger.</div>' : ''}`;
   }
 
   _renderRow(item, totalTtc) {

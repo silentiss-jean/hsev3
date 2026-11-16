@@ -61,6 +61,15 @@ const CSS = `
 .hse-diag__issues { color: var(--hse-text-muted, #6b7280); font-size: 0.82rem; }
 .hse-diag__empty { text-align: center; padding: 32px; color: var(--hse-text-muted, #6b7280); }
 .hse-diag__last-run { font-size: 0.8rem; color: var(--hse-text-muted, #6b7280); }
+.hse-diag__ref-block { margin-top: 16px; }
+.hse-diag__ref-block:empty { display: none; }
+.hse-diag__ref-block table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.hse-diag__ref-block th, .hse-diag__ref-block td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--hse-border, #e5e7eb); }
+.hse-diag__ref-block th { font-weight: 600; color: var(--hse-text-muted, #6b7280); font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.hse-diag__ref-eid { font-family: monospace; font-size: 0.76rem; color: var(--hse-text-muted, #6b7280); }
+.hse-diag__ref-score { font-weight: 700; }
+.hse-diag__ref-note { margin-top: 10px; font-size: 0.8rem; color: var(--hse-text-muted, #6b7280); }
+.hse-diag__ref-note strong { color: var(--hse-text, #1f2937); }
 `;
 
 export class DiagnosticView {
@@ -132,6 +141,8 @@ export class DiagnosticView {
           <div class="hse-diag__section-title">Capteurs supervisés</div>
           <div id="hse-diag-body"><div class="hse-skeleton"></div></div>
         </div>
+
+        <div class="hse-diag__ref-block" id="hse-diag-ref"></div>
       </div>
     `;
 
@@ -144,6 +155,7 @@ export class DiagnosticView {
       ignored: this._el.querySelector('#hse-diag-ignored'),
       pending: this._el.querySelector('#hse-diag-pending'),
       body: this._el.querySelector('#hse-diag-body'),
+      ref: this._el.querySelector('#hse-diag-ref'),
     };
 
     this._els.refresh.addEventListener('click', () => this._triggerRefresh());
@@ -174,6 +186,10 @@ export class DiagnosticView {
     const status = score >= 90 ? 'ok' : score >= 60 ? 'warning' : 'error';
     this._els.ring.textContent = `${score}%`;
     this._els.ring.setAttribute('data-status', status);
+
+    // Q7-R8 — rendu avant tout `return` : le bloc référence doit s'afficher
+    // même quand aucun capteur n'est au catalogue.
+    this._renderReference(data.reference);
 
     const lastRun = data.last_run_at;
     this._els.lastRun.textContent = lastRun ? `Dernier diagnostic : ${new Date(lastRun).toLocaleString('fr-FR')}` : 'Jamais';
@@ -224,6 +240,62 @@ export class DiagnosticView {
       statusEl.textContent = s.status === 'ok' ? 'OK' : s.status === 'warning' ? 'Attention' : 'Erreur';
       row.querySelector('.hse-diag__issues').textContent = (s.issues || []).join(', ') || '—';
     }
+  }
+
+  /**
+   * Q7-R8 (DELTA-067) — affiche pourquoi chaque entité est, ou n'est pas,
+   * proposée comme capteur de référence.
+   *
+   * Le diagnostic renvoie `reference.candidates` (verdict `propose`),
+   * `reference.rejected` (avec `verdict` + `reasons[]`) et `reference.counts`.
+   * Sans ce tableau, l'utilisateur ne peut pas savoir pourquoi son Linky
+   * n'apparaît pas — d'où l'affichage des motifs de rejet.
+   */
+  _renderReference(ref) {
+    const box = this._els?.ref;
+    if (!box) return;
+    if (!ref || !Array.isArray(ref.candidates) || !ref.candidates.length) {
+      box.innerHTML = '';
+      return;
+    }
+
+    const V_LABELS = {
+      propose: 'proposé',
+      rejete_device: 'indice d\'appareil',
+      rejete_periodique: 'cumul non cumulatif',
+      deja_au_catalogue: 'déjà au catalogue',
+      rejete_score: 'score trop faible',
+      rejete_role: 'mauvais type',
+    };
+
+    const rows = (ref.rejected ?? []).map(c => `
+      <tr>
+        <td>
+          <div class="hse-diag__ref-eid">${escHtml(c.entity_id)}</div>
+        </td>
+        <td>${escHtml(c.name ?? '—')}</td>
+        <td><span class="hse-diag__ref-score">${c.score ?? '—'}</span></td>
+        <td>${escHtml(V_LABELS[c.verdict] ?? c.verdict ?? '')}</td>
+        <td>${escHtml((c.reasons ?? []).join(' · ') || '—')}</td>
+      </tr>`).join('');
+
+    const counts = ref.counts ?? {};
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+
+    box.innerHTML = `
+      <div class="hse-diag__section-title">Capteur de référence (index Linky)</div>
+      <div class="hse-diag__ref-note">
+        <strong>${ref.candidates.length}</strong> candidat(s) proposé(s)
+        sur <strong>${total}</strong> entité(s) évaluée(s).
+        Une référence doit être un index <strong>cumulatif</strong> (kWh, state_class
+        total/total_increasing) : c'est la base de facturation.
+      </div>
+      ${rows ? `<table>
+        <thead>
+          <tr><th>Entité</th><th>Nom</th><th>Score</th><th>Verdict</th><th>Motif</th></tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>` : ''}`;
   }
 
   async _triggerRefresh() {

@@ -255,6 +255,58 @@ class TestReference(unittest.TestCase):
             [],
         )
 
+    # ── Q7-R8 (2026-11-16) — verdicts explicites sur le diagnostic ───────────
+    def test_verdict_propose_pour_un_vrai_compteur(self):
+        entries = [self._e("sensor.linky_index", "kWh", "energy", "total_increasing",
+                           name="Index Linky")]
+        out = reference.find_reference_candidates(entries, with_verdicts=True)
+        self.assertEqual([c["verdict"] for c in out], ["propose"])
+
+    def test_verdict_rejete_device_pour_un_aspirateur(self):
+        entries = [self._e("sensor.buanderie_aspirateur_total_energy", "kWh",
+                           "energy", "total_increasing")]
+        out = reference.find_reference_candidates(entries, with_verdicts=True)
+        self.assertEqual(out[0]["verdict"], "rejete_device")
+
+    def test_verdict_rejete_periodique_pour_un_cumul_quotidien(self):
+        entries = [self._e("sensor.linky_index_jour", "kWh", "energy",
+                           "total_increasing")]
+        out = reference.find_reference_candidates(entries, with_verdicts=True)
+        self.assertEqual(out[0]["verdict"], "rejete_periodique")
+
+    def test_verdict_deja_au_catalogue(self):
+        entries = [self._e("sensor.linky_index", "kWh", "energy", "total_increasing")]
+        out = reference.find_reference_candidates(
+            entries, exclude={"sensor.linky_index"}, with_verdicts=True
+        )
+        self.assertEqual(out[0]["verdict"], "deja_au_catalogue")
+
+    def test_verdicts_sans_option_ne_changent_pas_la_liste(self):
+        """with_verdicts=False garde exactement le comportement historique."""
+        entries = [
+            self._e("sensor.linky_index", "kWh", "energy", "total_increasing"),
+            self._e("sensor.buanderie_aspirateur_total_energy", "kWh",
+                    "energy", "total_increasing"),
+        ]
+        self.assertEqual(
+            [c["entity_id"] for c in reference.find_reference_candidates(entries)],
+            ["sensor.linky_index"],
+        )
+
+    def test_chaque_entree_porte_un_verdict_valide(self):
+        entries = [
+            self._e("sensor.linky_index", "kWh", "energy", "total_increasing"),
+            self._e("sensor.zlinky_power", "W", "power"),
+            self._e("sensor.ballon_electricite", "kWh", "energy", "total_increasing"),
+            self._e("sensor.temperature_salon", "°C", "temperature"),
+        ]
+        valides = {"propose", "rejete_device", "rejete_periodique",
+                   "deja_au_catalogue", "rejete_score", "rejete_role"}
+        out = reference.find_reference_candidates(entries, with_verdicts=True)
+        self.assertTrue(out)
+        for c in out:
+            self.assertIn(c["verdict"], valides, msg=c["entity_id"])
+
     # ── D5 / Q7-R4 (2026-11-16) — delta signé, surplus chiffré ───────────────
     def test_delta_kwh_signe(self):
         dep = reference.energy_coverage(10.0, 12.0)

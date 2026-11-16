@@ -294,6 +294,39 @@ class TestCostsReferenceBlock(unittest.TestCase):
         self.assertEqual(data["total_kwh"], 10.0)
         self.assertEqual(data["reference"]["tracked_kwh"], 10.0)
 
+    def test_quality_ok_quand_conforme(self):
+        """Q7-R3 — pas de dépassement : quality.level = ok, aucune note."""
+        data = self._run(SETTINGS_REF, 20.0, 10.0)
+        quality = data["reference"]["quality"]
+        self.assertEqual(quality["level"], "ok")
+        self.assertEqual(quality["notes"], [])
+
+    def test_quality_error_quand_depasse_de_10pct(self):
+        """Q7-R3 — mesuré > référence × 1,10 : quality.level = error."""
+        # 10 kWh mesurés contre 8 de référence → +25 %, au-delà des 10 %.
+        data = self._run(SETTINGS_REF, 8.0, 10.0)
+        quality = data["reference"]["quality"]
+        self.assertEqual(quality["level"], "error")
+        self.assertIn("tracked_exceeds_reference", quality["notes"])
+
+    def test_quality_ok_dans_la_tolérance_10pct(self):
+        """Q7-R3 — +10 % exactement reste acceptable (tolérance incluse)."""
+        # 11 kWh mesurés contre 10 de référence → +10 %, tolérance pile.
+        data = self._run(SETTINGS_REF, 10.0, 11.0)
+        ref = data["reference"]
+        self.assertEqual(ref["status"], "ok")
+        self.assertEqual(ref["quality"]["level"], "ok")
+
+    def test_quality_sans_reference_reste_ok(self):
+        """Q7-R3 — sans référence, rien à réconcilier : pas d'erreur."""
+        data = self._run(SETTINGS_NO_REF, 0.0, 10.0)
+        self.assertEqual(data["reference"]["quality"]["level"], "ok")
+
+    def test_quality_est_exposee_dans_la_reponse(self):
+        """Q7-R3 — le bloc quality fait bien partie du payload de /costs."""
+        data = self._run(SETTINGS_REF, 20.0, 10.0)
+        self.assertIn("quality", data["reference"])
+
 
 if __name__ == "__main__":
     unittest.main()

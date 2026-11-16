@@ -28,6 +28,11 @@ const CSS = `
 .hse-cfg__ref-select { flex:1 1 240px; min-width:180px; padding:5px 10px; border:1px solid rgba(255,255,255,0.12); border-radius:6px; background:rgba(255,255,255,0.05); color:rgba(255,255,255,0.9); font-size:0.82rem; font-family:inherit; outline:none; transition:border-color 150ms; }
 .hse-cfg__ref-select:focus { border-color:#f59e0b; }
 .hse-cfg__ref-status { font-size:0.75rem; color:rgba(255,255,255,0.35); margin-left:4px; }
+.hse-cfg__ref-status[data-level="error"] { color:#fca5a5; }
+.hse-cfg__ref-status[data-level="ok"] { color:#4ade80; }
+.hse-cfg__ref-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; width:100%; }
+.hse-cfg__ref-row + .hse-cfg__ref-row { margin-top:8px; }
+.hse-cfg__ref-hint { font-size:0.72rem; color:rgba(255,255,255,0.4); flex:1 1 100%; }
 .hse-cfg__toolbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
 .hse-cfg__search { flex:1 1 200px; padding:7px 12px; border:1px solid rgba(255,255,255,0.12); border-radius:6px; background:rgba(255,255,255,0.05); color:inherit; font-size:0.875rem; font-family:inherit; outline:none; transition:border-color 150ms; }
 .hse-cfg__search:focus { border-color:#e879f9; }
@@ -124,7 +129,7 @@ export class ConfigView {
     this._el = null; this._ctx = null; this._abort = null; this._mounted = false; this._activeTab = 'appareils';
     this._catFetching = false; this._catData = null; this._catSig = null; this._catPage = 1;
     this._catStatus = 'all'; this._catQ = ''; this._selected = new Set(); this._openGroups = new Set();
-    this._refEntityId = null; this._refSaving = false; this._autoSelecting = false;
+    this._refEntityId = null; this._refEnergyId = null; this._refSaving = false; this._autoSelecting = false;
     this._metaFetching = false; this._metaData = null; this._metaSig = null; this._diffApplying = false;
     this._asgFetching = false; this._asgData = null; this._asgSig = null; this._asgPage = 1;
     this._asgStatus = 'all'; this._asgQ = ''; this._asgFilter = 'all';
@@ -163,10 +168,19 @@ export class ConfigView {
       <div class="hse-cfg__panel active" id="hse-cfg-panel-appareils" role="tabpanel">
         <div class="hse-cfg__ref-block">
           <span class="hse-cfg__ref-icon">⭐</span>
-          <span class="hse-cfg__ref-label">Capteur de référence (ex : Linky) :</span>
-          <select id="hse-cfg-ref-select" class="hse-cfg__ref-select"><option value="">— Aucun —</option></select>
-          <button id="hse-cfg-ref-save" class="hse-btn hse-btn--primary hse-btn--sm">Enregistrer</button>
-          <span id="hse-cfg-ref-status" class="hse-cfg__ref-status"></span>
+          <span class="hse-cfg__ref-label">Capteur de référence (ex : Linky)</span>
+          <div class="hse-cfg__ref-row">
+            <span class="hse-cfg__ref-hint">Index d'énergie cumulatif (kWh, state_class total) — base de facturation</span>
+            <select id="hse-cfg-ref-energy-select" class="hse-cfg__ref-select"><option value="">— Aucun —</option></select>
+            <button id="hse-cfg-ref-energy-save" class="hse-btn hse-btn--primary hse-btn--sm">Enregistrer</button>
+            <span id="hse-cfg-ref-energy-status" class="hse-cfg__ref-status"></span>
+          </div>
+          <div class="hse-cfg__ref-row">
+            <span class="hse-cfg__ref-hint">Puissance instantanée (W) — contrôle en direct uniquement, jamais facturable</span>
+            <select id="hse-cfg-ref-select" class="hse-cfg__ref-select"><option value="">— Aucun —</option></select>
+            <button id="hse-cfg-ref-save" class="hse-btn hse-btn--ghost hse-btn--sm">Enregistrer</button>
+            <span id="hse-cfg-ref-status" class="hse-cfg__ref-status"></span>
+          </div>
         </div>
         <div class="hse-cfg__auto-block">
           <span class="hse-cfg__ref-icon">✨</span>
@@ -242,6 +256,7 @@ export class ConfigView {
       const data = await r.json();
       if (!this._mounted) return;
       this._refEntityId = data.reference_entity_id ?? null;
+      this._refEnergyId = data.reference_energy_entity_id ?? null;
       this._populateRefSelect();
     } catch (e) {}
   }
@@ -249,17 +264,29 @@ export class ConfigView {
   // FIX #2 : liste élargie à tous les capteurs non-ignorés, triés par quality_score desc
   // Capteurs selected+energy en tête ; current_ref toujours présent même si non catalogué
   _populateRefSelect() {
-    const sel = this._el?.querySelector('#hse-cfg-ref-select');
+    this._fillRefSelect('#hse-cfg-ref-select', this._refEntityId, false);
+    this._fillRefSelect('#hse-cfg-ref-energy-select', this._refEnergyId, true);
+  }
+
+  /**
+   * Q7-R7 — alimente un des deux selects de référence.
+   *
+   * `energyOnly` = index cumulatif (kWh) : on ne propose que des entités dont
+   * le type évoque une énergie, parce que le backend refuse toute autre unité
+   * (Q7-R1). Sans ce filtre, l'utilisateur sélectionne une puissance et
+   * l'enregistrement échoue en 422 sans comprendre pourquoi.
+   */
+  _fillRefSelect(selector, current, energyOnly) {
+    const sel = this._el?.querySelector(selector);
     if (!sel) return;
     const items = this._catData?.items ?? [];
-    const current = this._refEntityId;
     const ENERGY_TYPES = new Set([
-      'energy','today_energy','month_energy','daily_energy',
-      'weekly_energy','yearly_energy','total_energy','consumption',
+      'energy', 'today_energy', 'month_energy', 'daily_energy',
+      'weekly_energy', 'yearly_energy', 'total_energy', 'consumption',
     ]);
     const candidates = items
       .filter(i => i.status !== 'ignored')
-      .sort((a,b) => (b.quality_score ?? b.score ?? 0) - (a.quality_score ?? a.score ?? 0));
+      .sort((a, b) => (b.quality_score ?? b.score ?? 0) - (a.quality_score ?? a.score ?? 0));
     // Sélectionnés de type energy en tête
     const priority = candidates.filter(i =>
       i.status === 'selected' && ENERGY_TYPES.has((i.type ?? '').toLowerCase())
@@ -267,10 +294,13 @@ export class ConfigView {
     const rest = candidates.filter(i =>
       !(i.status === 'selected' && ENERGY_TYPES.has((i.type ?? '').toLowerCase()))
     );
-    const sorted = [...priority, ...rest];
+    let sorted = [...priority, ...rest];
+    if (energyOnly) {
+      sorted = sorted.filter(i => ENERGY_TYPES.has((i.type ?? '').toLowerCase()));
+    }
     // Garder la ref actuelle même si non cataloguée
     if (current && !sorted.find(i => i.entity_id === current)) {
-      sorted.unshift({ entity_id: current, name: current });
+      sorted = [{ entity_id: current, name: current }, ...sorted];
     }
     sel.innerHTML = '<option value="">— Aucun —</option>';
     sorted.forEach(item => {
@@ -284,22 +314,59 @@ export class ConfigView {
     });
   }
 
-  async _saveReference() {
-    if (this._refSaving) return;
-    this._refSaving = true;
-    const sel = this._el?.querySelector('#hse-cfg-ref-select');
-    const status = this._el?.querySelector('#hse-cfg-ref-status');
-    const val = sel?.value ?? '';
+  async _saveReference(selector, statusSelector, field, value) {
+    const status = this._el?.querySelector(statusSelector);
     try {
       const r = await this._ctx.hseFetch('/api/hse/settings/pricing', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reference_entity_id: val }), signal: this._abort?.signal,
+        body: JSON.stringify({ [field]: value }), signal: this._abort?.signal,
       });
-      this._refEntityId = val;
-      if (status) { status.textContent = '✓ Enregistré'; setTimeout(() => { if (status) status.textContent = ''; }, 2500); }
+      if (!r.ok) {
+        // Q7-R1 — le backend renvoie un message explicite (422) : on l'affiche
+        // tel quel plutôt qu'un « Erreur » générique.
+        let msg = `HTTP ${r.status}`;
+        try { const body = await r.json(); msg = body.message ?? body.error ?? msg; } catch (e) {}
+        if (status) {
+          status.textContent = msg;
+          status.dataset.level = 'error';
+          setTimeout(() => { if (status) { status.textContent = ''; delete status.dataset.level; } }, 6000);
+        }
+        return false;
+      }
+      if (status) {
+        status.textContent = '✓ Enregistré';
+        status.dataset.level = 'ok';
+        setTimeout(() => { if (status) { status.textContent = ''; delete status.dataset.level; } }, 2500);
+      }
+      return true;
     } catch (e) {
-      if (e.name === 'AbortError') return;
-      if (status) { status.textContent = `Erreur : ${e.message}`; setTimeout(() => { if (status) status.textContent = ''; }, 3000); }
+      if (e.name === 'AbortError') return false;
+      if (status) { status.textContent = `Erreur : ${e.message}`; status.dataset.level = 'error'; }
+      return false;
+    }
+  }
+
+  async _saveReference() {
+    if (this._refSaving) return;
+    this._refSaving = true;
+    try {
+      const sel = this._el?.querySelector('#hse-cfg-ref-select');
+      const val = sel?.value ?? '';
+      if (await this._saveReference('#hse-cfg-ref-select', '#hse-cfg-ref-status', 'reference_entity_id', val)) {
+        this._refEntityId = val;
+      }
+    } finally { this._refSaving = false; }
+  }
+
+  async _saveReferenceEnergy() {
+    if (this._refSaving) return;
+    this._refSaving = true;
+    try {
+      const sel = this._el?.querySelector('#hse-cfg-ref-energy-select');
+      const val = sel?.value ?? '';
+      if (await this._saveReference('#hse-cfg-ref-energy-select', '#hse-cfg-ref-energy-status', 'reference_energy_entity_id', val)) {
+        this._refEnergyId = val;
+      }
     } finally { this._refSaving = false; }
   }
 
@@ -330,6 +397,7 @@ export class ConfigView {
     root.querySelector('#hse-cfg-bulk-ignore').addEventListener('click', () => this._bulkAction('ignore'));
     root.querySelector('#hse-cfg-bulk-cancel').addEventListener('click', () => { this._selected.clear(); this._updateBulkBar(); });
     root.querySelector('#hse-cfg-ref-save').addEventListener('click', () => this._saveReference());
+    root.querySelector('#hse-cfg-ref-energy-save').addEventListener('click', () => this._saveReferenceEnergy());
     root.querySelector('#hse-cfg-auto-btn').addEventListener('click', () => this._modeAuto());
     root.querySelector('#hse-cfg-mode-auto').addEventListener('click', () => this._setMode('auto'));
     root.querySelector('#hse-cfg-mode-conseiller').addEventListener('click', () => this._setMode('conseiller'));

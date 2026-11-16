@@ -47,6 +47,8 @@ const CSS = `
 .hse-overview__ref-delta { font-size: 0.78rem; color: rgba(255,255,255,0.4); }
 .hse-overview__ref-delta.positive { color: #4ade80; }
 .hse-overview__ref-delta.negative { color: #f87171; }
+.hse-overview__ref-delta.neutral { color: rgba(255,255,255,0.45); }
+.hse-overview__ref-status { font-size: 0.72rem; color: rgba(255,255,255,0.4); }
 .hse-overview__status { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 8px; font-size: 0.82rem; }
 .hse-overview__status--ok { background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.2); color: #4ade80; }
 .hse-overview__status--warning { background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.2); color: #facc15; }
@@ -179,10 +181,9 @@ export class OverviewView {
             <span class="hse-overview__ref-icon">⭐</span>
             <div class="hse-overview__ref-info">
               <div class="hse-overview__ref-title">Capteur de référence</div>
-              <div class="hse-overview__ref-value" id="hse-ref-power">${refSensor.power_w !== null ? refSensor.power_w.toLocaleString('fr-FR') : '—'} W</div>
-              <div class="hse-overview__ref-delta ${refSensor.delta_w !== null && refSensor.delta_w >= 0 ? 'positive' : 'negative'}" id="hse-ref-delta">
-                Δ ${refSensor.delta_w !== null ? (refSensor.delta_w >= 0 ? '+' : '') : ''}${refSensor.delta_w !== null ? refSensor.delta_w.toFixed(1) : '—'} W (${refSensor.delta_pct !== null ? (refSensor.delta_pct >= 0 ? '+' : '') : ''}${refSensor.delta_pct !== null ? refSensor.delta_pct : '—'}%)
-              </div>
+              <div class="hse-overview__ref-value" id="hse-ref-power">—</div>
+              <div class="hse-overview__ref-delta neutral" id="hse-ref-delta"></div>
+              <div class="hse-overview__ref-status" id="hse-ref-status"></div>
             </div>
           </div>` : ''}
           <div>
@@ -224,6 +225,7 @@ export class OverviewView {
         monthEur: this._el.querySelector('#hse-month-eur'),
         refPower: this._el.querySelector('#hse-ref-power'),
         refDelta: this._el.querySelector('#hse-ref-delta'),
+        refStatus: this._el.querySelector('#hse-ref-status'),
         top5Container: this._el.querySelector('#hse-top5-container'),
         byRoomContainer: this._el.querySelector('#hse-by-room-container'),
         byTypeContainer: this._el.querySelector('#hse-by-type-container'),
@@ -239,9 +241,25 @@ export class OverviewView {
       this._els.monthKwh.textContent = (consumption.month_kwh ?? 0).toFixed(1);
       this._els.monthEur.textContent = `${(consumption.month_eur ?? 0).toFixed(2)} € TTC`;
       if (refSensor && this._els.refPower) {
-        this._els.refPower.textContent = (refSensor.power_w !== null ? refSensor.power_w.toLocaleString('fr-FR') : '—') + ' W';
-        this._els.refDelta.textContent = `Δ ${refSensor.delta_w !== null ? (refSensor.delta_w >= 0 ? '+' : '') : ''}${refSensor.delta_w !== null ? refSensor.delta_w.toFixed(1) : '—'} W (${refSensor.delta_pct !== null ? (refSensor.delta_pct >= 0 ? '+' : '') : ''}${refSensor.delta_pct !== null ? refSensor.delta_pct : '—'}%)`;
-        this._els.refDelta.className = `hse-overview__ref-delta ${refSensor.delta_w !== null && refSensor.delta_w >= 0 ? 'positive' : 'negative'}`;
+        this._els.refPower.textContent = refSensor.power_w !== null
+          ? `${refSensor.power_w.toLocaleString('fr-FR')} W`
+          : '—';
+        // Q7-R6 — un index kWh seul (pas de capteur W) donne delta_w null :
+        // on ne doit pas afficher « Δ — W » comme une anomalie, mais dire
+        // qu'aucune mesure de puissance n'est configurée.
+        if (refSensor.delta_w === null) {
+          this._els.refDelta.className = 'hse-overview__ref-delta neutral';
+          this._els.refDelta.textContent = refSensor.status === 'reference_energy_only'
+            ? 'Index énergie configuré — aucune puissance W à comparer'
+            : 'Δ indisponible';
+        } else {
+          const pos = refSensor.delta_w >= 0;
+          this._els.refDelta.textContent = `Δ ${pos ? '+' : ''}${refSensor.delta_w.toFixed(1)} W (${refSensor.delta_pct !== null ? (refSensor.delta_pct >= 0 ? '+' : '') : ''}${refSensor.delta_pct !== null ? refSensor.delta_pct : '—'}%)`;
+          this._els.refDelta.className = `hse-overview__ref-delta ${pos ? 'positive' : 'negative'}`;
+        }
+        if (this._els.refStatus) {
+          this._els.refStatus.textContent = refSensor.entity_id ?? '';
+        }
       }
       // Top5: rebuild (peu d'items, OK)
       if (this._els.top5Container) {

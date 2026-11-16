@@ -73,8 +73,77 @@ def _valid_hhmm(v: Any) -> bool:
     return 0 <= h <= 23 and 0 <= m <= 59
 
 
-def _validate_settings(body: dict) -> dict | None:
+# Q7-R1 — seules ces unités désignent un index d'énergie cumulatif.
+_ENERGY_UNITS = ("kwh", "wh", "mwh")
+_POWER_UNITS = ("w", "kw")
+
+
+def _check_reference(hass: HomeAssistant, eid: Any, *, kind: str) -> dict | None:
+    """Valide un capteur de référence (Q7-R1).
+
+    kind = "energy" : `reference_energy_entity_id` doit être un index cumulatif
+    (state_class `total` / `total_increasing`, unité kWh/Wh/MWh). C'est la seule
+    base de facturation autorisée.
+    kind = "power"  : `reference_entity_id` doit être une puissance active
+    (W/kW). Elle ne sert qu'au contrôle instantané, jamais à facturer.
+
+    Retourne `None` si la valeur est acceptable (y compris vide = effacement),
+    sinon un dict d'erreur 422.
+    """
+    if eid is None:
+        return None
+    if not isinstance(eid, str):
+        return {"status": HTTPStatus.UNPROCESSABLE_ENTITY,
+                "message": f"{kind}_entity_id doit être une chaîne d'entité"}
+    eid = eid.strip()
+    if not eid:
+        return None  # effacement explicite du capteur de référence
+    if "." not in eid:
+        return {"status": HTTPStatus.UNPROCESSABLE_ENTITY,
+                "message": f"{kind}_entity_id invalide : {eid!r} n'est pas un entity_id"}
+
+    state = hass.states.get(eid) if hass is not None else None
+    if state is None:
+        # Impossible de vérifier : on refuse plutôt que de deviner, avec un
+        # message qui dit quoi corriger.
+        return {"status": HTTPStatus.UNPROCESSABLE_ENTITY,
+                "message": f"{eid} n'existe pas dans Home Assistant : "
+                           f"vérifie l'entity_id du capteur de référence"}
+
+    attrs = getattr(state, "attributes", {}) or {}
+    unit = str(attrs.get("unit_of_measurement") or "").strip().lower()
+    state_class = str(attrs.get("state_class") or "").strip().lower()
+
+    if kind == "energy":
+        if unit not in _ENERGY_UNITS:
+            return {"status": HTTPStatus.UNPROCESSABLE_ENTITY,
+                    "message": f"{eid} n'est pas un index d'énergie "
+                               f"(unité={unit or 'inconnue'}, attendu kWh/Wh/MWh)"}
+        if state_class not in ("total", "total_increasing"):
+            return {"status": HTTPStatus.UNPROCESSABLE_ENTITY,
+                    "message": f"{eid} n'est pas un index cumulatif "
+                               f"(state_class={state_class or 'absent'}, "
+                               f"attendu 'total' ou 'total_increasing')"}
+        return None
+
+    # kind == "power"
+    if unit not in _POWER_UNITS:
+        return {"status": HTTPStatus.UNPROCESSABLE_ENTITY,
+                "message": f"{eid} n'est pas une puissance active "
+                           f"(unité={unit or 'inconnue'}, attendu W/kW)"}
+    return None
+
+
+def _validate_settings(body: dict, hass: HomeAssistant | None = None) -> dict | None:
     """Valide les valeurs des settings. Retourne une erreur ou None."""
+    # Q7-R1 — la référence de facturation doit être un index cumulatif.
+    for field, kind in (("reference_energy_entity_id", "energy"),
+                        ("reference_entity_id", "power")):
+        if field in body:
+            err = _check_reference(hass, body[field], kind=kind)
+            if err:
+                return err
+
     # Prix non négatifs et finis
     for key in _PRICE_KEYS:
         if key in body and not _is_finite_number(body[key]):
@@ -132,7 +201,7 @@ async def _apply_settings_update(hass: HomeAssistant, body: dict) -> tuple[dict,
         return {}, {"status": HTTPStatus.UNPROCESSABLE_ENTITY,
                     "message": f"Clés inconnues: {unknown}. Autorisées: {_SETTINGS_KEYS}"}, False
 
-    validation = _validate_settings(body)
+    validation = _validate_settings(body, hass)
     if validation:
         return {}, validation, False
 

@@ -3,6 +3,10 @@ HSE V3 — Options Flow.
 Permets de configurer post-install (sans restart) :
 - Tarif €/kWh (pré-rempli, modifiable dans l'onglet Config aussi)
 - Capteur de référence (entity_id du compteur général, optionnel)
+- Q7-R7 — Index kWh du compteur général (`reference_energy_entity_id`), qui
+  sert de base de facturation. La puissance W (`reference_entity_id`) ne peut
+  jamais servir à facturer : les deux champs sont donc distincts et
+  explicitement libellés.
 
 Note : ces valeurs sont stockées dans storage/manager.py (DELTA-009).
 L'options flow est uniquement un point d'entrée HA pratique, pas la source de vérité.
@@ -29,6 +33,10 @@ class HseOptionsFlow(config_entries.OptionsFlow):
             settings = await mgr.async_load_settings()
             settings["price_ttc_kwh"] = user_input.get("price_ttc_kwh", settings.get("price_ttc_kwh", 0.25))
             settings["reference_entity_id"] = user_input.get("reference_entity_id") or None
+            # Q7-R7 — index cumulatif = référence de facturation.
+            settings["reference_energy_entity_id"] = (
+                user_input.get("reference_energy_entity_id") or None
+            )
             await mgr.async_save_settings(settings)
             return self.async_create_entry(title="", data={})
 
@@ -44,6 +52,10 @@ class HseOptionsFlow(config_entries.OptionsFlow):
             vol.Optional(
                 "reference_entity_id",
                 default=settings.get("reference_entity_id") or "",
+            ): str,
+            vol.Optional(
+                "reference_energy_entity_id",
+                default=settings.get("reference_energy_entity_id") or "",
             ): str,
         })
 

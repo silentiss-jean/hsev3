@@ -71,7 +71,10 @@ def ensure_item_defaults(existing: dict[str, Any], *, base_entity_id: str | None
     existing.setdefault(
         "triage",
         {
-            "policy": "normal",
+            # Vocabulaire de statut unifié (D3) : `pending` = non encore trié.
+            # L'ancienne valeur `normal` est encore normalisée au chargement du
+            # catalogue (storage/manager.py) pour les catalogues déjà stockés.
+            "policy": "pending",
             "mute_until": None,
             "note": None,
             "updated_at": utc_now_iso(),

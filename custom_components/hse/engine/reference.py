@@ -62,14 +62,23 @@ def find_reference_candidates(
     entries: list[dict[str, Any]],
     limit: int = 8,
     exclude: set[str] | None = None,
+    *,
+    with_verdicts: bool = False,
 ) -> list[dict[str, Any]]:
     """
     entries : [{entity_id, name, platform, unit, device_class, state_class, state}]
     exclude : entity_id déjà présents au catalogue — jamais proposés comme référence
               (D2 / Q7-R5). Un appareil du catalogue n'est pas le compteur général.
+    with_verdicts : si True, retourne TOUTES les entités évaluées avec leur
+              `verdict` (Q7-R8) au lieu de la seule liste proposée. Le verdict
+              ∈ {propose, rejete_device, rejete_periodique, deja_au_catalogue,
+              rejete_score, rejete_role}. Le diagnostic s'en sert pour montrer
+              POURQUOI une entité a été écartée, ce qui est la question que
+              l'utilisateur pose quand la référence est mal détectée.
+
     Retourne une liste triée par score décroissant :
-      {entity_id, name, score, role, unit, reasons[]}
-    role : energy_index | active_power | apparent_power
+      {entity_id, name, score, role, unit, reasons[], verdict}
+    role : energy_index | active_power | apparent_power | None
     """
     out: list[dict[str, Any]] = []
     excluded = exclude or frozenset()
@@ -77,8 +86,7 @@ def find_reference_candidates(
         eid = e.get("entity_id") or ""
         if not eid.startswith("sensor."):
             continue
-        if eid in excluded:
-            continue
+
         unit = e.get("unit")
         kind, _f, reason = classify(e.get("device_class"), unit)
         role = None
@@ -88,7 +96,29 @@ def find_reference_candidates(
             role = "active_power"
         elif reason and reason.startswith("unit_not_active_power:") and unit in ("VA", "kVA"):
             role = "apparent_power"
+
         if role is None:
+            # Ni énergie cumulée ni puissance : ce n'est pas un compteur, mais
+            # on le trace pour que l'utilisateur comprenne le silence.
+            if with_verdicts:
+                out.append({
+                    "entity_id": eid, "name": e.get("name") or eid, "score": 0,
+                    "role": None, "unit": unit,
+                    "reasons": [reason] if reason else ["ni énergie ni puissance"],
+                    "verdict": "rejete_role",
+                })
+            continue
+
+        # Q7-R8 — une entité déjà au catalogue est un appareil suivi : la
+        # signaler comme telle évite de la reproposer en boucle.
+        if eid in excluded:
+            if with_verdicts:
+                out.append({
+                    "entity_id": eid, "name": e.get("name") or eid, "score": 0,
+                    "role": role, "unit": unit,
+                    "reasons": ["déjà présente dans le catalogue"],
+                    "verdict": "deja_au_catalogue",
+                })
             continue
 
         hay = f"{eid} {e.get('name') or ''} {e.get('platform') or ''}".lower()
@@ -113,26 +143,40 @@ def find_reference_candidates(
         if dev:
             score -= 60
             reasons.append(f"ressemble à un appareil: {', '.join(sorted(set(dev)))}")
-        if _tokens_hit(hay, ("today", "daily", "month", "week", "year", "jour", "mois")):
+        periodic = _tokens_hit(hay, ("today", "daily", "month", "week", "year", "jour", "mois"))
+        if periodic:
             score -= 25
             reasons.append("compteur périodique")
-        if score <= 0:
-            continue
+
         # D2 / Q7-R5 — garde-fou. Un candidat n'est recevable que si son score
         # repose sur un indice de compteur (nom ou intégration), ou s'il dépasse
         # franchement le bruit. « total_energy » seul plafonne à 20 : l'aspirateur
         # et la plaque sortaient à 20/20 avant ce garde-fou.
-        if not (strong or medium or score >= MIN_CANDIDATE_SCORE):
+        verdict = "propose"
+        if dev:
+            verdict = "rejete_device"
+        elif periodic:
+            verdict = "rejete_periodique"
+        elif score <= 0:
+            verdict = "rejete_score"
+        elif not (strong or medium or score >= MIN_CANDIDATE_SCORE):
+            verdict = "rejete_score"
             reasons.append(
                 f"rejeté: aucun indice de compteur (score {score} < {MIN_CANDIDATE_SCORE})"
             )
-            continue
+
         out.append({
             "entity_id": eid, "name": e.get("name") or eid, "score": score,
-            "role": role, "unit": unit, "reasons": reasons,
+            "role": role, "unit": unit, "reasons": reasons, "verdict": verdict,
         })
-    out.sort(key=lambda c: (-c["score"], c["entity_id"]))
-    return out[:limit]
+
+    if with_verdicts:
+        out.sort(key=lambda c: (-c["score"], c["entity_id"]))
+        return out
+
+    proposed = [c for c in out if c["verdict"] == "propose"]
+    proposed.sort(key=lambda c: (-c["score"], c["entity_id"]))
+    return proposed[:limit]
 
 
 def coverage(reference_w: float | None, tracked_w: float | None) -> dict[str, Any]:

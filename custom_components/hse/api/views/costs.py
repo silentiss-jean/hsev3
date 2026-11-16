@@ -178,6 +178,17 @@ async def _build_costs_data(
                 2,
             )
 
+    # Q7-R3 — un dépassement de plus de 10 % invalide les coûts par appareil :
+    # la même erreur est remontée sur /costs EN PLUS de /overview, sinon
+    # l'écran coûts affiche des chiffres faux sans le signaler.
+    ref_notes: list[str] = []
+    if reference["status"] == "tracked_exceeds_ref":
+        ref_notes.append("tracked_exceeds_reference")
+    reference["quality"] = {
+        "level": "error" if ref_notes else "ok",
+        "notes": ref_notes,
+    }
+
     result_items.sort(key=lambda x: -x["cost_ttc_eur"])
 
     return {

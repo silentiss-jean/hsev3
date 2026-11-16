@@ -22,7 +22,12 @@ from ...storage.manager import HseStorageManager
 from ...sensors.quality_scorer import score_item
 
 _VALID_ACTIONS = ("select", "ignore", "reset")
-_VALID_STATUS = ("all", "selected", "ignored", "pending")
+# D3 — vocabulaire unifié. `pending` = non trié (valeur de référence).
+# `normal` est l'ancienne valeur stockée : elle reste acceptée en entrée
+# (alias -> pending) pour ne pas casser un client existant, mais elle n'est
+# plus produite.
+_VALID_STATUS = ("all", "selected", "ignored", "pending", "normal")
+_STATUS_ALIASES = {"normal": "pending"}
 _VALID_BULK_ACTIONS = ("activate", "deactivate", "delete")
 
 # Valeurs de platform/domain qui sont des artefacts HA internes
@@ -83,6 +88,9 @@ class HseCatalogueView(HseBaseView):
         status_filter = request.query.get("status", "all")
         if status_filter not in _VALID_STATUS:
             return self.json_error(f"Param status invalide. Valeurs: {_VALID_STATUS}", HTTPStatus.UNPROCESSABLE_ENTITY)
+        # D3 — `normal` (ancienne valeur stockée) interroge le même ensemble que
+        # `pending`, au lieu de renvoyer une liste vide silencieuse.
+        status_filter = _STATUS_ALIASES.get(status_filter, status_filter)
 
         # Recherche textuelle (q) - HSE-11
         search_query = request.query.get("q", "").strip().lower()

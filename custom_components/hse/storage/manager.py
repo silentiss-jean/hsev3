@@ -100,6 +100,39 @@ class HseStorageManager:
         store = self._catalogue_store()
         data = await store.async_load()
         if isinstance(data, dict) and data.get("schema_version") == 1 and "items" in data:
+            # D3 — vocabulaire de statut unifié : `normal` (ancienne valeur
+            # écrite par catalogue/defaults.py) devient `pending`, seule valeur
+            # attendue par le frontend, group_totals et migration.
+            # D4 — `enrichment.active` est la projection d'affichage de
+            # `triage.policy` (catalogue.py:183 les synchronise déjà à
+            # l'écriture). Les catalogues antérieurs laissent `active=false` sur
+            # des items pourtant `selected` : on réaligne au chargement.
+            # `policy` reste l'unique source de vérité pour les calculs
+            # (costs.py / group_totals.py ne lisent que `policy`).
+            # Migration auto-hérissante et idempotente : rien à lancer, le
+            # catalogue stocké est réécrit une fois puis ne bouge plus.
+            changed = False
+            for item in (data.get("items") or {}).values():
+                if not isinstance(item, dict):
+                    continue
+                triage = item.get("triage")
+                if isinstance(triage, dict) and triage.get("policy") == "normal":
+                    triage["policy"] = "pending"
+                    changed = True
+                if isinstance(triage, dict):
+                    enrichment = item.get("enrichment")
+                    if not isinstance(enrichment, dict):
+                        enrichment = {}
+                        item["enrichment"] = enrichment
+                    expected_active = triage.get("policy") == "selected"
+                    if bool(enrichment.get("active", False)) != expected_active:
+                        enrichment["active"] = expected_active
+                        changed = True
+            if changed:
+                try:
+                    await self._catalogue_store().async_save(data)
+                except Exception:
+                    _LOGGER.exception("HSE: échec normalisation statut catalogue")
             return data
         return default_catalogue()
 

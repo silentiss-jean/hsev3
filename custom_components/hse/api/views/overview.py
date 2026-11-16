@@ -184,6 +184,17 @@ class HseOverviewView(HseBaseView):
                 "coverage_pct": None, "status": "reference_unusable", "reason": ref_reading.reason,
             }
 
+        # Q7-R6 — si seule la référence d'énergie (index kWh) est configurée,
+        # le bloc reste non nul : l'UI doit savoir qu'une référence existe et
+        # laquelle, sinon elle affiche « aucun compteur » à tort.
+        if reference_sensor is None and ref_energy_id:
+            reference_sensor = {
+                "entity_id": ref_energy_id,
+                "power_w": None, "delta_w": None, "delta_pct": None,
+                "coverage_pct": power_cov["coverage_pct"],
+                "status": "reference_energy_only",
+            }
+
         # ── Qualité globale ─────────────────────────────────────────────────────
         notes: list[str] = []
         level = "ok"

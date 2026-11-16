@@ -135,7 +135,15 @@ class HseDiagnosticView(HseBaseView):
             eid for eid in ((it.get("source") or {}).get("entity_id") for it in valid_items.values())
             if eid
         }
-        reference_candidates = find_reference_candidates(entries, exclude=catalogue_entity_ids)
+        # Q7-R8 — toutes les entités évaluées avec leur verdict, pour que
+        # l'utilisateur voie pourquoi une entité a été écartée (et pas
+        # seulement la liste finale).
+        reference_candidates = find_reference_candidates(
+            entries, exclude=catalogue_entity_ids, with_verdicts=True
+        )
+        reference_proposed = [
+            c for c in reference_candidates if c["verdict"] == "propose"
+        ][:8]
 
         return self.json_ok({
             "score_pct": score_pct,
@@ -151,7 +159,15 @@ class HseDiagnosticView(HseBaseView):
             "measures": measures,
             "reference": {
                 "configured": ref_ids,
-                "candidates": reference_candidates,
+                # Q7-R8 — `candidates` = la liste filtrée par Q7-R5, celle que
+                # l'utilisateur doit choisir ; `rejected` = le reste avec son
+                # verdict, pour comprendre pourquoi une entité n'apparaît pas.
+                "candidates": reference_proposed,
+                "rejected": reference_candidates,
+                "counts": {
+                    v: sum(1 for c in reference_candidates if c["verdict"] == v)
+                    for v in sorted({c["verdict"] for c in reference_candidates})
+                },
             },
         })
 
