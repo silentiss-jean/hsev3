@@ -91,6 +91,47 @@ Depuis DELTA-067, `/api/hse/costs` expose le même contrôle que l'overview, dan
 - `status` vaut `no_reference` (rien de configuré), `reference_unavailable` (entité introuvable ou
   sans statistiques), `reference_too_low`, `ok` ou `tracked_exceeds_ref`.
 
+### Qualité remontée (Q7-R3)
+
+Un dépassement de plus de 10 % ne se contente pas d'un statut : il remonte en
+`reference.quality = {"level": "error", "notes": ["tracked_exceeds_reference"]}`
+sur `/api/hse/costs` **en plus** de `/overview`. L'écran coûts affiche donc le
+chiffre faux **et** le motif, au lieu de laisser croire qu'il est juste.
+
+### Validation du capteur de référence à la saisie (Q7-R1)
+
+`PUT /api/hse/settings` refuse (422, message explicite) :
+
+| champ | exige | sert à |
+|-------|-------|--------|
+| `reference_energy_entity_id` | unité kWh/Wh/MWh **et** `state_class` `total`/`total_increasing` | base de facturation, réconciliation |
+| `reference_entity_id` | unité W/kW | contrôle instantané uniquement |
+
+Un index sans `state_class` cumulatif, un `today_energy`, ou une puissance W
+dans le champ énergie sont refusés : mieux vaut un refus explicite qu'une
+facture fausse. Un champ vide efface la référence (retour à `no_reference`).
+
+### Verdicts du diagnostic (Q7-R8)
+
+`/api/hse/diagnostic` renvoie `reference.candidates` (verdict `propose`),
+`reference.rejected` (chaque entité écartée avec son `verdict` + `reasons[]`)
+et `reference.counts`. Verdicts : `propose`, `rejete_device`,
+`rejete_periodique`, `deja_au_catalogue`, `rejete_score`, `rejete_role`.
+
+### Statut du catalogue : `pending` (D3)
+
+Le vocabulaire est unifié sur `pending` (celui du frontend, des badges et des
+compteurs). Les catalogues existants en `normal` sont migrés à l'ouverture
+(`storage/manager.py`, auto-hérissant, idempotent) ; `?status=normal` reste
+accepté en lecture et renvoie le même ensemble que `?status=pending`.
+
+### `enrichment.active` est un affichage (D4)
+
+`enrichment.active` est la projection d'affichage de `triage.policy`. La
+source de vérité pour les calculs (`costs.py`, `group_totals.py`) reste
+`triage.policy` : un item `selected` avec `active=false` est réaligné au
+chargement, mais `active` ne coupe jamais un calcul tout seul.
+
 ## Protocole de validation en préprod
 
 1. `GET /api/hse/diagnostic` : choisir le capteur ZLinky (W actif + index kWh) dans `reference.candidates`.
@@ -99,6 +140,12 @@ Depuis DELTA-067, `/api/hse/costs` expose le même contrôle que l'overview, dan
 4. Allumer le ballon (ou la clim) : `power_now_w` doit monter de sa puissance nominale (±10 %).
 5. Après 1 h : énergie ballon ≈ puissance × 1 h ; `coverage_energy.day.status` = `ok`.
 6. Comparer `reference_consumption.month.eur` à la facture : l'écart doit venir de l'abonnement/taxes.
+7. Côté UI, vérifier les trois écrans : **Coûts** affiche le bloc réconciliation (référence,
+   suivi, écart signé, non suivi, surplus, couverture) avec un badge `Conforme` /
+   `Dépasse la référence` ; **Diagnostic** liste les candidats retenus et les motifs de rejet ;
+   **Configuration** montre deux selects distincts (index kWh vs puissance W).
+8. Tenter d'enregistrer une puissance W dans le champ « index d'énergie » : le refus 422 et son
+   message doivent s'afficher sous le select (preuve que Q7-R1 protège la facturation).
 
 ## Limites connues (volontairement documentées)
 
@@ -109,7 +156,6 @@ Depuis DELTA-067, `/api/hse/costs` expose le même contrôle que l'overview, dan
   sur l'historique brut (`quality: partial`, fiable seulement sur la fenêtre de purge).
 - Code dépendant de Home Assistant (`async_energy_detail`) non exécutable hors HA : la logique pure est testée
   (`python3 -m unittest discover -s tests -v`), l'accès recorder doit être validé en préprod.
-- Le frontend n'affiche pas encore le bloc `quality` (données disponibles via l'API).
-- Le frontend `costs_view.js` n'affiche pas encore le bloc `reference` : la réconciliation
-  (delta, surplus, couverture) est disponible via l'API mais pas visible à l'écran. À traiter
-  avec l'option retenue pour `low_coverage` (repli total) avant d'ajouter un compteur de deltas.
+- Le frontend n'affiche pas encore le bloc `quality` de l'overview (données disponibles via l'API).
+- `custom_components/hse/web_static/panel/app.js` n'existe pas : toute vérification JS doit cibler les
+  fichiers réellement présents (`features/*/*_view.js`) via `node --check`.
