@@ -227,7 +227,8 @@ export class ConfigView {
         <div id="hse-cfg-pricing-body"><div class="hse-skeleton"></div></div>
       </div>`;
     this._el.appendChild(root);
-    this._bindTabs(root); this._bindAppareilsEvents(root); this._bindMetaEvents(root);
+    this._bindTabs(root); this._bindAppareilsEvents(root);
+    // FIX: _bindMetaEvents() sera appelé dans _renderMeta() pour rebinder après chaque re-render
   }
 
   _bindTabs(root) {
@@ -1206,6 +1207,8 @@ export class ConfigView {
     // Bind events for room/type actions and assignment pagination
     this._bindMetaListEvents();
     this._bindAsgPager();
+    // FIX: Rebind meta events after every render (delegation sur #hse-cfg-asg-body détruit au innerHTML)
+    this._bindMetaEvents(this._el);
   }
 
   _bindMetaListEvents() {
@@ -1345,15 +1348,25 @@ export class ConfigView {
   }
 
   async _deleteRoom(roomId) {
+    const btn = this._el?.querySelector(`[data-room-delete="${this._attrVal(roomId)}"]`);
+    if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
       await this._ctx.hseFetch('/api/hse/meta', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete_room', id: roomId }), signal: this._abort?.signal,
+        body: JSON.stringify({ action: 'delete_room', id: roomId }), signal: controller.signal,
       });
+      clearTimeout(timeoutId);
       this._metaSig = null; await this._loadMeta();
     } catch (e) {
-      if (e.name === 'AbortError') return;
+      if (e.name === 'AbortError') {
+        alert('Suppression expirée (30s) — le serveur a peut-être traité la requête. Rafraîchissez la page.');
+        return;
+      }
       alert(`Erreur : ${e.message}`);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '🗑️'; }
     }
   }
 
@@ -1365,15 +1378,25 @@ export class ConfigView {
   }
 
   async _deleteType(typeName) {
+    const btn = this._el?.querySelector(`[data-type-delete="${this._attrVal(typeName)}"]`);
+    if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
       await this._ctx.hseFetch('/api/hse/meta', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete_type', name: typeName }), signal: this._abort?.signal,
+        body: JSON.stringify({ action: 'delete_type', name: typeName }), signal: controller.signal,
       });
+      clearTimeout(timeoutId);
       this._metaSig = null; await this._loadMeta();
     } catch (e) {
-      if (e.name === 'AbortError') return;
+      if (e.name === 'AbortError') {
+        alert('Suppression expirée (30s) — le serveur a peut-être traité la requête. Rafraîchissez la page.');
+        return;
+      }
       alert(`Erreur : ${e.message}`);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '🗑️'; }
     }
   }
 
