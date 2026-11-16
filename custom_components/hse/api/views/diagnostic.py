@@ -129,7 +129,13 @@ class HseDiagnosticView(HseBaseView):
                 "unit": a.get("unit_of_measurement"), "device_class": a.get("device_class"),
                 "state_class": a.get("state_class"), "state": st.state, "platform": None,
             })
-        reference_candidates = find_reference_candidates(entries)
+        # D2 / Q7-R5 — une entité déjà présente au catalogue est un appareil, pas
+        # le compteur général : ne jamais la proposer comme référence.
+        catalogue_entity_ids = {
+            eid for eid in ((it.get("source") or {}).get("entity_id") for it in valid_items.values())
+            if eid
+        }
+        reference_candidates = find_reference_candidates(entries, exclude=catalogue_entity_ids)
 
         return self.json_ok({
             "score_pct": score_pct,

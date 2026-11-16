@@ -21,7 +21,7 @@ from homeassistant.core import HomeAssistant
 from ..base import HseBaseView
 from ...storage.manager import HseStorageManager
 from ...engine.calculation import compute_totals, top_n_by_power, get_power_w, read_sensor
-from ...engine.cost import cost_summary, subscription_eur_month
+from ...engine.cost import cost_summary, subscription_eur_month, subscription_prorata
 from ...engine.period_stats import async_energy_detail, async_energy_detail_hphc
 from ...engine.group_totals import totals_by_type
 from ...engine.reference import coverage, energy_coverage
@@ -30,17 +30,12 @@ from ...time_utils import utc_now_iso
 
 
 def _subscription_prorata(settings: dict, period: str) -> float:
-    """Retourne l'abonnement proratisé selon la période (cohérence avec costs.py)."""
-    sub = subscription_eur_month(settings)
-    if period == "month":
-        return sub
-    if period == "day":
-        return round(sub / 30.0, 2)
-    if period == "week":
-        return round(sub * 7.0 / 30.0, 2)
-    if period == "year":
-        return round(sub * 12.0, 2)
-    return 0.0
+    """Prorata délégué à engine.cost.subscription_prorata (source unique).
+
+    Le total TTC (costs.py) et la référence € (overview) doivent utiliser le même
+    prorata, sinon les deux chiffres ne sont pas comparables.
+    """
+    return subscription_prorata(settings, period)
 
 
 _PERIODS = ("day", "week", "month", "year")

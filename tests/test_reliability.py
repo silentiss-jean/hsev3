@@ -224,6 +224,59 @@ class TestReference(unittest.TestCase):
         self.assertEqual(reference.energy_coverage(10.0, 12.0)["status"], "tracked_exceeds_ref")
         self.assertEqual(reference.energy_coverage(10.0, 7.0)["untracked_kwh"], 3.0)
 
+    # ── D2 (2026-11-16) — garde-fou du détecteur de référence ────────────────
+    def test_appareils_total_energy_plus_proposes(self):
+        """L'aspirateur et la plaque ne doivent plus sortir candidats.
+
+        Ils atteignaient 20/20 (energy_index +10, total_energy +10) sans aucun
+        indice de compteur : le diagnostic les proposait comme référence, et
+        l'utilisateur pouvait régler la référence sur un aspirateur.
+        """
+        entries = [
+            self._e("sensor.buanderie_aspirateur_total_energy", "kWh", "energy", "total_increasing"),
+            self._e("sensor.plaque_cuisine_total_energy", "kWh", "energy", "total_increasing"),
+        ]
+        self.assertEqual(reference.find_reference_candidates(entries), [])
+
+    def test_compteur_general_reste_propose(self):
+        """Contrôle positif : un vrai compteur passe toujours le garde-fou."""
+        entries = [
+            self._e("sensor.lixee_zlinky_teleinfo_energy", "kWh", "energy", "total_increasing"),
+        ]
+        ids = [c["entity_id"] for c in reference.find_reference_candidates(entries)]
+        self.assertEqual(ids, ["sensor.lixee_zlinky_teleinfo_energy"])
+
+    def test_entites_du_catalogue_exclues(self):
+        """Une entité déjà au catalogue est un appareil, pas le compteur général."""
+        entries = [self._e("sensor.compteur_general_kiwi", "kWh", "energy", "total_increasing")]
+        self.assertEqual(len(reference.find_reference_candidates(entries)), 1)
+        self.assertEqual(
+            reference.find_reference_candidates(entries, exclude={"sensor.compteur_general_kiwi"}),
+            [],
+        )
+
+    # ── D5 / Q7-R4 (2026-11-16) — delta signé, surplus chiffré ───────────────
+    def test_delta_kwh_signe(self):
+        dep = reference.energy_coverage(10.0, 12.0)
+        self.assertEqual((dep["delta_kwh"], dep["surplus_kwh"], dep["untracked_kwh"]),
+                         (-2.0, 2.0, 0.0))
+        ok = reference.energy_coverage(10.0, 7.0)
+        self.assertEqual((ok["delta_kwh"], ok["surplus_kwh"], ok["untracked_kwh"]),
+                         (3.0, 0.0, 3.0))
+
+    def test_delta_w_signe(self):
+        dep = reference.coverage(1000, 1200)
+        self.assertEqual((dep["delta_w"], dep["surplus_w"], dep["untracked_w"]),
+                         (-200.0, 200.0, 0.0))
+        ok = reference.coverage(1000, 600)
+        self.assertEqual((ok["delta_w"], ok["surplus_w"], ok["untracked_w"]),
+                         (400.0, 0.0, 400.0))
+
+    def test_delta_none_sans_reference(self):
+        self.assertIsNone(reference.coverage(None, 100)["delta_w"])
+        self.assertIsNone(reference.energy_coverage(None, 5.0)["delta_kwh"])
+        self.assertIsNone(reference.coverage(30, 10)["surplus_w"])
+
 
 class TestWindows(unittest.TestCase):
     def test_local_midnight_paris_summer(self):

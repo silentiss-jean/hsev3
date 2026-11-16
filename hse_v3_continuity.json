@@ -1,0 +1,102 @@
+{
+  "schema": "hse-v3-continuity/1",
+  "purpose": "Reprise de session : permettre à un autre modèle de continuer sans relire toute la conversation.",
+  "created_at": "2026-11-16T20:44:00+01:00",
+  "project": "HSE V3 — custom_components/hse (Home Assistant, préprod 192.168.3.67:8123)",
+  "authoritative_source": "hse_v3_decisions_q1_q6.json (revision 2) + hse_v3_analysis.json",
+  "state": {
+    "code_modified": false,
+    "decisions_approved": [
+      "Q1",
+      "Q2",
+      "Q3",
+      "Q4",
+      "Q5",
+      "Q6",
+      "Q7"
+    ],
+    "open_questions_decided": [
+      "OQ1 (A repli total, seuil 0,90)",
+      "OQ2 (removal_mode manuel si présent, auto-archive si absent >3 mois)",
+      "OQ3 (re-détection avant purge ; purge 12 mois)"
+    ],
+    "json_status_should_be": "draft_review",
+    "json_corrections_pending": [
+      "I1",
+      "I2",
+      "I3",
+      "I4",
+      "I5",
+      "I6",
+      "I7",
+      "I8",
+      "I9",
+      "I10",
+      "I11"
+    ]
+  },
+  "key_facts": {
+    "missing_kwh_month": 285,
+    "missing_pct": 43,
+    "expected_month_kwh_after_fix": 658,
+    "dead_counters": 12,
+    "deleted_at": "2026-04-08T19:00:00",
+    "catalogue": {
+      "total": 111,
+      "selected": 29,
+      "normal": 77,
+      "ignored": 5,
+      "pending": 0
+    },
+    "costs": {
+      "total_kwh": 375.085,
+      "total_ttc_eur": 83.01
+    },
+    "linky_in_preprod": false,
+    "critical_defects": [
+      "D1 costs sans réconciliation",
+      "D2 faux positifs détecteur de référence"
+    ]
+  },
+  "to_verify": [
+    "Prorata abonnement (15,50 € entier appliqué)",
+    "Ancres fichier:ligne (hash de commit)",
+    "1049 W vs 1686,5 W"
+  ],
+  "next_steps": [
+    {
+      "order": 1,
+      "task": "Appliquer corrections I1-I11 au JSON de décisions (revision 3)."
+    },
+    {
+      "order": 2,
+      "task": "Obtenir réponses UQ1-UQ5."
+    },
+    {
+      "order": 3,
+      "task": "Comparer avec l'analyse du 3e modèle ; lister divergences."
+    },
+    {
+      "order": 4,
+      "task": "Réordonner les phases (catalogue + Q7-R5 d'abord)."
+    },
+    {
+      "order": 5,
+      "task": "Lancer implémentation phase 1 sur branche dédiée avec tests Q1."
+    }
+  ],
+  "comparison_protocol_for_third_model": {
+    "ask": "Pour chaque inconsistance I1-I11 : confirmer / infirmer / nuancer. Donner ses propres inconsistances non listées. Vérifier le calcul tarifaire.",
+    "output_format": "JSON avec clés confirmed[], rejected[], new_findings[], disagreements_on_recommendations[]",
+    "rules": [
+      "Ne pas modifier le code",
+      "Citer les ancres",
+      "Signaler toute hypothèse non vérifiée"
+    ]
+  },
+  "constraints": [
+    "Spécification uniquement tant que non validé",
+    "Réponses en français",
+    "Un seul fichier faisant autorité"
+  ]
+}

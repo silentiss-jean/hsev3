@@ -17,8 +17,9 @@ from homeassistant.core import HomeAssistant
 from ..base import HseBaseView
 from ...storage.manager import HseStorageManager
 from ...engine.calculation import get_power_w
-from ...engine.cost import cost_summary, cost_eur, subscription_eur_month
+from ...engine.cost import cost_summary, cost_eur, subscription_eur_month, subscription_prorata
 from ...engine.period_stats import async_energy_detail, async_energy_detail_hphc, async_energy_for_period
+from ...engine.reference import energy_coverage
 from ...engine.sources import plan_sources
 from ...engine.analytics import async_history_12months
 from ...time_utils import utc_now_iso
@@ -136,15 +137,46 @@ async def _build_costs_data(
         it["pct_total"] = round(it["cost_ttc_eur"] / total_ttc * 100, 1) if total_ttc > 0 else 0.0
 
     # Abonnement ajouté une seule fois (pas par appareil), proratisé selon la période
-    sub = subscription_eur_month(settings)
-    if period == "month":
-        total_ttc += sub
-    elif period == "day":
-        total_ttc += round(sub / 30.0, 2)
-    elif period == "week":
-        total_ttc += round(sub * 7.0 / 30.0, 2)
-    elif period == "year":
-        total_ttc += round(sub * 12.0, 2)
+    sub_prorata = subscription_prorata(settings, period)
+    total_ttc += sub_prorata
+
+    # ── Q7 / D1 (2026-11-16) — réconciliation avec le compteur de référence ─────
+    # L'index Linky donne la consommation facturable. On la compare au total mesuré
+    # par les appareils : delta_kwh < 0 (mesuré > référence) signale un doublon,
+    # une conversion d'unité fausse ou un capteur figé — la facture ne peut pas
+    # être inférieure au mesuré. Le compteur de référence est déjà exclu du total
+    # (plan.reference_ids), donc il n'est jamais compté deux fois.
+    ref_energy_id = settings.get("reference_energy_entity_id") or None
+    reference: dict = {
+        "entity_id": ref_energy_id,
+        "status": "no_reference",
+        "reference_kwh": None,
+        "reference_eur": None,
+        "tracked_kwh": round(total_kwh, 3),
+        "delta_kwh": None,
+        "surplus_kwh": None,
+        "untracked_kwh": None,
+        "coverage_pct": None,
+    }
+    if ref_energy_id:
+        if is_hphc and hc_start and hc_end:
+            rd = (await async_energy_detail_hphc(
+                hass, [ref_energy_id], period, hc_start=hc_start, hc_end=hc_end
+            )).get(ref_energy_id)
+            ref_kwh = rd["total_kwh"] if rd and rd["quality"] != "missing" else None
+        else:
+            rd = (await async_energy_detail(hass, [ref_energy_id], period)).get(ref_energy_id)
+            ref_kwh = rd["kwh"] if rd and rd["quality"] != "missing" else None
+        if ref_kwh is None:
+            reference["status"] = "reference_unavailable"
+        else:
+            reference.update(energy_coverage(ref_kwh, total_kwh))
+            reference["entity_id"] = ref_energy_id
+            reference["reference_eur"] = round(
+                cost_summary(ref_kwh, settings, include_subscription=False)["cost_ttc_eur"]
+                + sub_prorata,
+                2,
+            )
 
     result_items.sort(key=lambda x: -x["cost_ttc_eur"])
 
@@ -156,6 +188,7 @@ async def _build_costs_data(
         "total_hc_kwh": round(total_hc_kwh, 3),
         "total_ttc_eur": round(total_ttc, 2),
         "items": result_items,
+        "reference": reference,
     }
 
 

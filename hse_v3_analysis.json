@@ -1,0 +1,191 @@
+{
+  "schema": "hse-v3-analysis/1",
+  "analysed_file": "hse_v3_decisions_q1_q6.json (schema hse-v3-decisions/2, revision 2)",
+  "analysed_at": "2026-11-16",
+  "analyst": "Perplexity",
+  "verdict": {
+    "global": "Globalement cohérent sur le fond (décisions Q1→Q7 alignées, chiffres vérifiables), mais statut 'consolidated / 0 question ouverte' prématuré : 4 contradictions internes, 1 incohérence tarifaire à vérifier, et plusieurs ambiguïtés de spec à lever avant implémentation.",
+    "score_coherence_sur_10": 7.5,
+    "limites": "Analyse sur le JSON seul : ancres fichier:ligne et appels préprod non revérifiés par moi."
+  },
+  "coherent_points": [
+    "Arithmétique du manque : 658 - 374 = 284 ≈ 285 kWh ; 285/658 = 43 % -> cohérent.",
+    "Catalogue : 29 selected + 77 normal + 5 ignored = 111 -> cohérent.",
+    "Mapping Q2-R2 : 7 remplacements + 5 sans compteur = 12 compteurs morts (F2) -> cohérent.",
+    "Q1 (repli par fenêtre, catalogue jamais modifié) cohérent avec Q5-R2 (revalidation avant calcul) et OQ1 (repli total, un seul type de source).",
+    "Q7 : séparation index kWh (facturation) / puissance W (instantané) cohérente avec le code existant (champs déjà en storage/manager.py:57 et :59).",
+    "Dates d'exemples Q3 : 1re mardi d'octobre 2026 = 06/10 et 1er vendredi = 02/10 sont exacts (1er oct 2026 = jeudi), sous réserve de numérotation ISO (lun=1).",
+    "Les 12 compteurs supprimés : monotones (nb_chutes=0), la correction 'remise à zéro' est bien identifiée comme P0."
+  ],
+  "inconsistencies": [
+    {
+      "id": "I1",
+      "severity": "high",
+      "title": "Statut 'consolidated, 0 question ouverte' faux",
+      "evidence": "open_questions_remaining=0 alors que questions_to_model contient QM1→QM8 et unknowns U1→U3 (Linky, active).",
+      "fix": "status='draft_review', open_questions_remaining=11 (ou migrer QM/U dans open_questions avec statut)."
+    },
+    {
+      "id": "I2",
+      "severity": "high",
+      "title": "'priority' (P0..P3) confondu avec 'phase' (P0..P10)",
+      "evidence": "Q7-R1..R4 priority=P0 mais phase P8 ; Q1-R1 P0 -> phase P1 ; Q3 P2 -> phases P5/P6 ; Q4 P3 -> P7 ; la phase P0 n'a aucun requirement.",
+      "fix": "Renommer en priority: critical|high|medium|low et garder phase = ordre d'exécution. Ou aligner."
+    },
+    {
+      "id": "I3",
+      "severity": "high",
+      "title": "Ordre d'exécution : défaut critique D2 traité tard",
+      "evidence": "D1 et D2 sont 'critique', mais Q7-R5 (D2) est en P9 après P8 ; le bug à 285 kWh (Q1/Q2-R2) passe après des travaux de spec.",
+      "fix": "Remonter le nettoyage catalogue (Q2-R2, gain immédiat 285 kWh) et Q7-R5 (empêcher qu'on règle la référence sur un appareil) devant Q3/Q4."
+    },
+    {
+      "id": "I4",
+      "severity": "medium",
+      "title": "Tolérance 10 % vs principe 'référence jamais inférieure au mesuré'",
+      "evidence": "key_point Q7 dit jamais inférieure ; invariant autorise tracked <= ref*1.10 ; Q7-R4 dit delta négatif affiché en rouge alors que status='ok' sous 10 %.",
+      "fix": "Définir 3 zones : tracked<=ref (ok) ; ref<tracked<=1.10 ref (ok_within_tolerance, delta négatif visible, orange) ; >1.10 (tracked_exceeds_ref, error)."
+    },
+    {
+      "id": "I5",
+      "severity": "medium",
+      "title": "Enum status non alignée",
+      "evidence": "new_data_fields : no_reference|reference_too_low|ok|tracked_exceeds_ref ; Q7-R3 n'utilise que ok et tracked_exceeds_ref ; 'reference_too_low' jamais défini.",
+      "fix": "Définir ou supprimer reference_too_low (probable synonyme de reference < MIN_REFERENCE_W ou de tracked_exceeds_ref)."
+    },
+    {
+      "id": "I6",
+      "severity": "medium",
+      "title": "Vocabulaire catalogue contradictoire",
+      "evidence": "OQ3 dit '77 pending' ; reference_verification dit normal=77, pending=0 ; ignore note dit que Q2-R2 'a déjà produit son effet' alors que code_modified=false et que Q2-R2 n'est pas implémenté.",
+      "fix": "Corriger OQ3 (77 normal) ; reformuler la note : les 5 ignorés sont un état de départ, pas un résultat de Q2-R2."
+    },
+    {
+      "id": "I7",
+      "severity": "medium",
+      "title": "Ancres de code incohérentes dans le même document",
+      "evidence": "Q7-R3 cite engine/reference.py:155 (corrigé en :144) ; Q7-R6 cite overview.py:240-244 (corrigé en :242-244) ; D2 cite diagnostic.py:126-131 vs :132 ; coverage dit :150 pour coverage_pct.",
+      "fix": "Passer toutes les ancres en une seule source (anchors_corrected appliqué partout) + hash de commit."
+    },
+    {
+      "id": "I8",
+      "severity": "medium",
+      "title": "Q6 'ne jamais remplacer silencieusement' vs Q2-R1",
+      "evidence": "Q2-R1 : le scan bascule en ignored le plus récent des deux doublons, sans modale.",
+      "fix": "Soit marquer l'item 'pending_conflict' + alerte, soit documenter que Q2-R1 ne s'applique qu'au scan automatique et émet un avertissement Repairs."
+    },
+    {
+      "id": "I9",
+      "severity": "medium",
+      "title": "Emplacement de removal_grace_days",
+      "evidence": "S3 : triage.removal_grace_days ; new_data_fields : catalogue.settings.removal_grace_days. Valeur 90 j vs '3 mois' vs purge 12 mois.",
+      "fix": "Choisir un seul emplacement (settings global) ; nommer clairement archive_after_days=90 et purge_after_days=365."
+    },
+    {
+      "id": "I10",
+      "severity": "medium",
+      "title": "Vocabulaires de raison de repli/exclusion multiples",
+      "evidence": "state_missing, orphan, no_data_no_power, no_data, low_coverage selon les exigences.",
+      "fix": "Un seul enum reason: ok|state_missing|orphan|no_data|low_coverage|no_data_no_power avec table de précédence."
+    },
+    {
+      "id": "I11",
+      "severity": "medium",
+      "title": "QM6 remet en cause une décision approuvée",
+      "evidence": "Q1 approuvé (repli par fenêtre) et OQ1 decided ; QM6 demande si un vrai cumulatif doit basculer sur la puissance.",
+      "fix": "Trancher : repli total OK mais toujours visible (quality=degraded) ; pas de mixte."
+    }
+  ],
+  "tariff_check": {
+    "claim": "Euros cohérents : 0,18 €/kWh + abonnement 15,50 € au prorata.",
+    "computation": "375,085 x 0,18 = 67,52 ; 83,01 - 67,52 = 15,49 ≈ 15,50 -> l'abonnement est appliqué EN ENTIER.",
+    "issue": "Le 16/11 (mi-mois), un prorata devrait donner ~8 € d'abonnement (≈ 75,8 € au total). Soit la période 'month' n'est pas le mois calendaire en cours, soit le prorata n'est pas appliqué. Le constat 'aucun bug tarifaire' (F3) est donc à revérifier.",
+    "action": "Vérifier costs.py : quelle fenêtre et quel diviseur pour l'abonnement ; ajouter un test chiffré."
+  },
+  "ambiguities_to_resolve": [
+    "Numérotation des jours (ISO 1-7 ou Python 0-6) pour nth_weekday/weekday_of_week.",
+    "Définition de 'semaine 1 du mois' : semaine contenant le 1er, première semaine complète, ou ISO ?",
+    "Fuseau/DST : fenêtres Europe/Paris avec jours de 23 h / 25 h ; fin de plage inclusive ou exclusive (23:59:59 vs < 00:00).",
+    "delta.pct quand a=0 (division par zéro) -> null ?",
+    "Définition exacte de coverage (heures avec statistique / heures attendues ?) et traitement des trous en début/fin de fenêtre.",
+    "Q7-R2 : critère d'acceptation tautologique (reference_kwh == energy_coverage(...)['reference_kwh']) ; il faut une valeur attendue chiffrée.",
+    "Q7 sans Linky : aucun test réel possible -> fournir un capteur Linky simulé (template ou fixture) pour P8-P10.",
+    "Calcul par période depuis un index cumulatif : stockage ou statistiques HA long terme ? (QM5)",
+    "Weekend : price_hc/price_hp réutilisés pour week-end/semaine -> noms trompeurs ; jours fériés ?",
+    "Écart 1049 W (live) vs 1686,5 W (tracked_w overview) : deux métriques différentes ? préciser."
+  ],
+  "recommendations": [
+    {
+      "rank": 1,
+      "action": "Corriger le JSON (I1, I2, I6, I7) avant toute implémentation, sinon le 3e modèle et le dev liront un statut faux."
+    },
+    {
+      "rank": 2,
+      "action": "Exécuter d'abord le nettoyage catalogue Q2-R2 + revalidation Q5-R2 : gain immédiat (+285 kWh, 43 %) et faible risque."
+    },
+    {
+      "rank": 3,
+      "action": "Avancer Q7-R5 (détecteur de référence) en même temps que P8 : tant que l'aspirateur/plaque sont proposés comme référence, la réconciliation peut être faussée."
+    },
+    {
+      "rank": 4,
+      "action": "Sortir D3 (normal/pending) et D4 (active) en dette séparée mais en phase dédiée avant Q3/Q5 : Q5 et P2 supposent 'pending'. Recommandation QM1 : renommer en pending avec migration + alias lecture 'normal' pendant une version."
+    },
+    {
+      "rank": 5,
+      "action": "QM2 : faire respecter active=false seulement après une revue chiffrée (28/29 items concernés -> la conso chuterait massivement) ; sinon retirer le champ."
+    },
+    {
+      "rank": 6,
+      "action": "QM3 : garder 1,10 par défaut mais le rendre configurable (reference_tolerance_pct) ; ajouter une fenêtre minimale (>= 24 h) avant d'émettre error."
+    },
+    {
+      "rank": 7,
+      "action": "QM4 : exposer delta_kwh signé (déjà décidé Q7-R4) ; versionner le contrat API (champ additif, non cassant)."
+    },
+    {
+      "rank": 8,
+      "action": "QM5 : stocker des instantanés horodatés de l'index (ou utiliser statistics HA) ; sans cela pas de réconciliation par période."
+    },
+    {
+      "rank": 9,
+      "action": "QM7 : 12 mois acceptable, rendre configurable ; la re-détection prime déjà (Q5-R4)."
+    },
+    {
+      "rank": 10,
+      "action": "Ajouter les tests Q1 (repli, rebranchement) à P10 : absents aujourd'hui alors que Q1 est le cœur du bug."
+    }
+  ],
+  "answers_to_QM": {
+    "QM1": "Renommer normal->pending + migration, alias de lecture temporaire.",
+    "QM2": "Faire respecter active après chiffrage, sinon supprimer le champ ; décision humaine requise.",
+    "QM3": "1,10 OK par défaut, configurable, avec durée minimale.",
+    "QM4": "Oui, delta signé.",
+    "QM5": "Oui, stockage d'index horodaté ou statistiques HA.",
+    "QM6": "Garder A (déjà décidé) ; repli toujours signalé en degraded.",
+    "QM7": "12 mois OK, configurable.",
+    "QM8": "Dette séparée D3/D4, mais planifiée avant Q5."
+  },
+  "questions_for_user": [
+    {
+      "id": "UQ1",
+      "question": "Le prorata de l'abonnement doit-il s'appliquer au mois en cours (≈ 8 € au 16/11) ou l'abonnement est-il facturé entier ?"
+    },
+    {
+      "id": "UQ2",
+      "question": "Que veux-tu pour active=false : exclure du calcul, ou supprimer le champ ? (impact visible immédiat)"
+    },
+    {
+      "id": "UQ3",
+      "question": "Ton Linky de production expose-t-il un index kWh, une puissance W, ou les deux (U1/U2) ? Quelle intégration (Linky, ZLinky, Teleinfo) ?"
+    },
+    {
+      "id": "UQ4",
+      "question": "'1re semaine d'octobre' : semaine contenant le 1er, ou première semaine complète lun-dim ?"
+    },
+    {
+      "id": "UQ5",
+      "question": "OK pour passer l'ordre des phases : nettoyage catalogue + Q7-R5 avant Q3/Q4 ?"
+    }
+  ]
+}

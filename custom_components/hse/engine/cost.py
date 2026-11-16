@@ -78,6 +78,25 @@ def subscription_eur_month(settings: dict[str, Any]) -> float:
     return round(_safe_float(settings.get("subscription_eur_month")), 2)
 
 
+def subscription_prorata(settings: dict[str, Any], period: str) -> float:
+    """Abonnement proratisé selon la période.
+
+    Source unique : `costs.py` (total TTC) et `overview.py` (référence €) doivent
+    utiliser exactement le même prorata, sinon le total et la référence
+    n'expriment pas la même chose.
+    """
+    sub = subscription_eur_month(settings)
+    if period == "month":
+        return sub
+    if period == "day":
+        return round(sub / 30.0, 2)
+    if period == "week":
+        return round(sub * 7.0 / 30.0, 2)
+    if period == "year":
+        return round(sub * 12.0, 2)
+    return 0.0
+
+
 def cost_summary(
     energy_kwh: float,
     settings: dict[str, Any],

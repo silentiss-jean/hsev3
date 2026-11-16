@@ -24,7 +24,20 @@ _ENERGY_HINTS = ("index", "summation", "delivered", "consommation totale", "tota
 # Indices d'un appareil individuel (pas le compteur).
 _DEVICE_HINTS = ("clim", "ballon", "chauffe", "cumulus", "prise", "plug", "radiateur",
                  "heater", "socket", "tv", "lave", "four", "frigo", "fridge", "pompe",
-                 "ev", "wallbox", "light", "lumi")
+                 "ev", "wallbox", "light", "lumi",
+                 # D2 (2026-11-16) — appareils qui sortaient candidats avec le seul
+                 # bonus « total_energy » : aspirateur, plaque, etc. Sans cet ajout,
+                 # l'utilisateur pouvait régler la référence sur un aspirateur.
+                 "aspirateur", "plaque", "cuisson", "hotte", "robot", "repass",
+                 "seche", "sèche", "sech", "congelo", "freezer", "piscine", "spa",
+                 "garage", "cave", "ventilateur", "volet", "velux", "portail",
+                 "pompe_a_chaleur")
+
+# D2 / Q7-R5 — score minimal au-delà duquel un candidat est recevable SANS indice
+# de nom de compteur. « energy_index » (+10) + « total_energy » (+10) = 20 : ce
+# score ne prouve rien, sinon que l'entité est un cumulatif — ce qui est le cas
+# de presque tous les appareils du logement.
+MIN_CANDIDATE_SCORE = 25
 
 # Tolérances de cohérence appareils vs compteur.
 OVER_TOLERANCE = 1.10      # somme appareils > compteur +10 % => incohérent
@@ -45,17 +58,26 @@ def _tokens_hit(hay: str, tokens: tuple[str, ...]) -> list[str]:
     return hits
 
 
-def find_reference_candidates(entries: list[dict[str, Any]], limit: int = 8) -> list[dict[str, Any]]:
+def find_reference_candidates(
+    entries: list[dict[str, Any]],
+    limit: int = 8,
+    exclude: set[str] | None = None,
+) -> list[dict[str, Any]]:
     """
     entries : [{entity_id, name, platform, unit, device_class, state_class, state}]
+    exclude : entity_id déjà présents au catalogue — jamais proposés comme référence
+              (D2 / Q7-R5). Un appareil du catalogue n'est pas le compteur général.
     Retourne une liste triée par score décroissant :
       {entity_id, name, score, role, unit, reasons[]}
     role : energy_index | active_power | apparent_power
     """
     out: list[dict[str, Any]] = []
+    excluded = exclude or frozenset()
     for e in entries:
         eid = e.get("entity_id") or ""
         if not eid.startswith("sensor."):
+            continue
+        if eid in excluded:
             continue
         unit = e.get("unit")
         kind, _f, reason = classify(e.get("device_class"), unit)
@@ -96,6 +118,15 @@ def find_reference_candidates(entries: list[dict[str, Any]], limit: int = 8) -> 
             reasons.append("compteur périodique")
         if score <= 0:
             continue
+        # D2 / Q7-R5 — garde-fou. Un candidat n'est recevable que si son score
+        # repose sur un indice de compteur (nom ou intégration), ou s'il dépasse
+        # franchement le bruit. « total_energy » seul plafonne à 20 : l'aspirateur
+        # et la plaque sortaient à 20/20 avant ce garde-fou.
+        if not (strong or medium or score >= MIN_CANDIDATE_SCORE):
+            reasons.append(
+                f"rejeté: aucun indice de compteur (score {score} < {MIN_CANDIDATE_SCORE})"
+            )
+            continue
         out.append({
             "entity_id": eid, "name": e.get("name") or eid, "score": score,
             "role": role, "unit": unit, "reasons": reasons,
@@ -117,17 +148,24 @@ def coverage(reference_w: float | None, tracked_w: float | None) -> dict[str, An
     """
     if reference_w is None:
         return {"status": "no_reference", "reference_w": None, "tracked_w": tracked_w,
-                "untracked_w": None, "coverage_pct": None}
+                "untracked_w": None, "delta_w": None, "surplus_w": None, "coverage_pct": None}
     tracked = float(tracked_w or 0.0)
     if reference_w < MIN_REFERENCE_W:
         return {"status": "reference_too_low", "reference_w": round(reference_w, 1),
-                "tracked_w": round(tracked, 1), "untracked_w": None, "coverage_pct": None}
+                "tracked_w": round(tracked, 1), "untracked_w": None,
+                "delta_w": None, "surplus_w": None, "coverage_pct": None}
     status = "tracked_exceeds_ref" if tracked > reference_w * OVER_TOLERANCE else "ok"
+    # D5 (2026-11-16) — delta SIGNÉ. L'écrêtage à zéro rendait « conforme » et
+    # « le mesuré dépasse la référence » indiscernables dans les valeurs : seul le
+    # champ status les séparait. delta_w < 0 => dépassement, chiffré dans surplus_w.
+    delta_w = reference_w - tracked
     return {
         "status": status,
         "reference_w": round(reference_w, 1),
         "tracked_w": round(tracked, 1),
-        "untracked_w": round(max(reference_w - tracked, 0.0), 1),
+        "delta_w": round(delta_w, 1),
+        "untracked_w": round(max(delta_w, 0.0), 1),
+        "surplus_w": round(max(-delta_w, 0.0), 1),
         "coverage_pct": round(min(tracked / reference_w * 100.0, 999.0), 1),
     }
 
@@ -136,16 +174,24 @@ def energy_coverage(reference_kwh: float | None, tracked_kwh: float | None) -> d
     """Même logique sur l'énergie d'une période (plus fiable que l'instantané)."""
     if reference_kwh is None:
         return {"status": "no_reference", "reference_kwh": None, "tracked_kwh": tracked_kwh,
-                "untracked_kwh": None, "coverage_pct": None}
+                "untracked_kwh": None, "delta_kwh": None, "surplus_kwh": None,
+                "coverage_pct": None}
     tracked = float(tracked_kwh or 0.0)
     if reference_kwh <= 0.05:
         return {"status": "reference_too_low", "reference_kwh": round(reference_kwh, 3),
-                "tracked_kwh": round(tracked, 3), "untracked_kwh": None, "coverage_pct": None}
+                "tracked_kwh": round(tracked, 3), "untracked_kwh": None,
+                "delta_kwh": None, "surplus_kwh": None, "coverage_pct": None}
     status = "tracked_exceeds_ref" if tracked > reference_kwh * OVER_TOLERANCE else "ok"
+    # D5 / Q7-R4 — delta_kwh signé + surplus_kwh chiffré. untracked_kwh reste
+    # écrêté pour ne pas casser les lecteurs existants ; surplus_kwh dit, lui, de
+    # combien le mesuré dépasse la référence (0.0 en régime conforme).
+    delta_kwh = reference_kwh - tracked
     return {
         "status": status,
         "reference_kwh": round(reference_kwh, 3),
         "tracked_kwh": round(tracked, 3),
-        "untracked_kwh": round(max(reference_kwh - tracked, 0.0), 3),
+        "delta_kwh": round(delta_kwh, 3),
+        "untracked_kwh": round(max(delta_kwh, 0.0), 3),
+        "surplus_kwh": round(max(-delta_kwh, 0.0), 3),
         "coverage_pct": round(min(tracked / reference_kwh * 100.0, 999.0), 1),
     }

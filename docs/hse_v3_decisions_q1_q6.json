@@ -1,0 +1,1050 @@
+{
+  "schema": "hse-v3-decisions/2",
+  "generated_at": "2026-11-16T00:00:00+01:00",
+  "project": "HSE V3 — custom_components/hse",
+  "repo": "/Volumes/dev-218/dev/preprod/hsev3",
+  "source": "Réponses utilisateur Q1→Q6 du 16/11/2026 + Q7 (réconciliation compteur de référence / Linky) ajoutée le 16/11/2026 après vérification du code et de la préprod 192.168.3.67:8123",
+  "companion_doc": "docs/HSE_V3_DECISIONS_Q1_Q6.md",
+  "code_modified": false,
+  "context": {
+    "bug": "12 compteurs cumulatifs sensor.*_kwh_total supprimes de HA le 2026-04-08T19:00:00, encore 'selected' dans le catalogue",
+    "impact_kwh_month_missing": 285,
+    "impact_pct_of_real_month": 43,
+    "live_power_now_w": 1049,
+    "live_power_not_billed_w": 414,
+    "root_cause": "catalogue/manager.py n'itere que sur scan['candidates'] : aucune detection d'orphelin",
+    "tariff_ok": true,
+    "tariff_note": "Les euros sont coherents : energie x 0,18 EUR + abonnement 15,50 EUR prorata. Aucun bug tarifaire.",
+    "findings": [
+      {
+        "id": "F1",
+        "observation": "GET /api/hse/diagnostic renvoie repairs=0 alors que sensor.buanderie_aspirateur_power est a status='error' (escalade action_48h).",
+        "consequence": "La chaine catalogue/manager -> repairs ne cree aucune issue : les alertes du cycle de vie sont invisibles.",
+        "phase": "P2",
+        "requirements": [
+          "Q5-R1",
+          "Q5-R3"
+        ]
+      },
+      {
+        "id": "F2",
+        "observation": "Les 12 compteurs _kwh_total ont ete supprimes le 2026-04-08T19:00:00 (832 lignes horaires, nb_chutes=0, somme_hausses == MAX-MIN).",
+        "consequence": "Les compteurs etaient monotones : l'affirmation anterieure 'remise a zero' est fausse et doit etre retiree du JSON de bug (P0)."
+      },
+      {
+        "id": "F3",
+        "observation": "day == week == 16,75 kWh un lundi : normal, pas un bug. Les euros sont coherents (0,18 EUR/kWh + abonnement 15,50 EUR prorata).",
+        "consequence": "Aucun correctif tarifaire necessaire."
+      }
+    ],
+    "reference_verification": {
+      "date": "2026-11-16",
+      "preprod_url": "http://192.168.3.67:8123",
+      "entities_total": 253,
+      "cumulative_energy_indexes": 19,
+      "linky_present": false,
+      "note": "Préprod sans Linky : les valeurs de référence ne sont pas testables ici. Les défauts D1 et D2 sont en revanche constatés sur le code et l'API, indépendamment du Linky.",
+      "settings": {
+        "reference_entity_id": "",
+        "reference_energy_entity_id": null
+      },
+      "api_observed": {
+        "GET /api/hse/diagnostic": {
+          "reference.configured": [],
+          "candidates_score": 20,
+          "candidates": [
+            "sensor.buanderie_aspirateur_total_energy",
+            "sensor.plaque_cuisine_total_energy",
+            "sensor.buanderie_aspirateur_power",
+            "sensor.plaque_cuisine_power"
+          ]
+        },
+        "GET /api/hse/overview": {
+          "reference_sensor": null,
+          "reference_consumption": null,
+          "quality.level": "warning",
+          "quality.notes": [
+            "no_reference_configured"
+          ],
+          "coverage_power.status": "no_reference",
+          "tracked_w": 1686.5
+        },
+        "GET /api/hse/costs": {
+          "reference_key_present": false,
+          "total_kwh": 375.085,
+          "total_ttc_eur": 83.01,
+          "items": 29
+        }
+      },
+      "false_positive_root_cause": "find_reference_candidates lit TOUTES les entités de HA (api/views/diagnostic.py:132). _ENERGY_HINTS contient 'total_energy' (+10) et tout capteur d'appareil exposant un index cumulatif marque 20 sans qu'aucun indice d'appareil ne le pénalise : 'aspirateur' et 'plaque' sont absents de _DEVICE_HINTS (engine/reference.py:25-27).",
+      "cost_gap": "api/views/costs.py n'appelle jamais energy_coverage : ref_ids sert uniquement à exclure la référence de la somme (costs.py:85). La facture n'est donc jamais réconciliée avec le Linky.",
+      "options_flow_gap": "options_flow.py n'expose que reference_entity_id (l.31 et 45-48) : reference_energy_entity_id n'est pas réglable depuis l'UI.",
+      "catalogue": {
+        "total": 111,
+        "selected": 29,
+        "normal": 77,
+        "ignored": 5,
+        "pending": 0,
+        "ignored_entity_ids": [
+          "sensor.salon_tv_today_energy",
+          "sensor.salon_tv_month_energy",
+          "sensor.clim_appart_1_kwh_total",
+          "sensor.ballon_buanderie_kwh_total",
+          "sensor.cuisine_chauffe_eau_kwh_total"
+        ]
+      },
+      "active_field": {
+        "selected_active_true": 1,
+        "selected_active_false": 28,
+        "lu_par_le_code": false
+      },
+      "defaults_policy": "normal",
+      "anchors_corrected": {
+        "api/views/diagnostic.py:125": "api/views/diagnostic.py:132",
+        "engine/reference.py:155": "engine/reference.py:144",
+        "engine/reference.py:156-157": "engine/reference.py:149",
+        "api/views/overview.py:134-145": "api/views/overview.py:135-141",
+        "api/views/overview.py:240-244": "api/views/overview.py:242-244",
+        "engine/sources.py:78-83": "engine/sources.py:81"
+      }
+    }
+  },
+  "decisions": [
+    {
+      "id": "Q1",
+      "topic": "Politique de repli compteur -> puissance",
+      "answer": "Oui, mais par fenetre de calcul et avec cycle de vie complet (etats, alertes, suppression auto ou manuelle).",
+      "key_point": "Un capteur debranche puis rebranche doit etre repris en compte automatiquement : le repli ne modifie JAMAIS le catalogue, il se decide a chaque periode.",
+      "status": "approved"
+    },
+    {
+      "id": "Q2",
+      "topic": "Nettoyage du catalogue et empechement structurel",
+      "answer": "Oui pour le remplacement, precede d'un invariant qui interdit deux sources d'energie selectionnees pour un meme device_id.",
+      "key_point": "Les mesures doivent refleter les vraies valeurs actives.",
+      "status": "approved"
+    },
+    {
+      "id": "Q3",
+      "topic": "Périodes à la demande et comparaison",
+      "answer": "Implementer custom_week_start_day (jeudi->jeudi, vendredi->jeudi) ET un systeme de plages arbitraires comparables entre elles.",
+      "examples": [
+        "2 mardis du meme mois",
+        "mardi d'octobre vs mardi de novembre",
+        "1re semaine d'octobre",
+        "vendredi de la 1re semaine d'octobre",
+        "periode a cheval septembre/octobre",
+        "jeudi soir ou vendredi de la semaine suivante"
+      ],
+      "status": "approved"
+    },
+    {
+      "id": "Q4",
+      "topic": "Mode weekend (BS-08)",
+      "answer": "Le documenter (doc backend + contrat API + UI) et le rattacher explicitement à Q3.",
+      "weekend_definition": "samedi + dimanche calendaires fixes, independamment de custom_week_start_day",
+      "status": "approved"
+    },
+    {
+      "id": "Q5",
+      "topic": "Garde-fou orphelins",
+      "answer": "Oui, integre au cycle de vie de Q1 : detection d'orphelin + revalidation avant calcul + escalade.",
+      "status": "approved"
+    },
+    {
+      "id": "Q6",
+      "topic": "Doublon d'integration",
+      "answer": "Choix laisse a l'utilisateur au moment de la selection : avertissement + modale 'garder / remplacer'.",
+      "default": "avertir et proposer, ne jamais remplacer silencieusement",
+      "status": "approved"
+    },
+    {
+      "id": "Q7",
+      "topic": "Réconciliation avec le compteur de référence (Linky / index facturé)",
+      "answer": "Deux références distinctes : reference_energy_entity_id (index cumulatif kWh) comme référence de FACTURATION, et reference_entity_id (puissance W) comme référence INSTANTANÉE. La réconciliation se fait sur l'index.",
+      "choice": "A (index) + C (puissance)",
+      "key_point": "Le compteur de référence ne doit jamais être inférieur à la consommation mesurée : si mesuré > référence × 1,10, c'est une anomalie structurelle (doublon, mauvaise conversion, compteur figé, mauvaise référence), pas une précision. L'écart doit être calculé ET affiché, jamais masqué.",
+      "invariant": "tracked_kwh <= reference_kwh * 1.10 (OVER_TOLERANCE, engine/reference.py:30)",
+      "rationale": "La facture est un cumul d'énergie : seul un index en kWh peut être comparé à une facture. La puissance en W ne se compare pas à une facture mais détecte en direct un dépassement ou un capteur bloqué. Les deux champs existent déjà (storage/manager.py:57 et 59) — rien à créer, à part la réconciliation et le garde-fou du détecteur.",
+      "status": "approved"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "Q1-R1",
+      "decision": "Q1",
+      "priority": "P0",
+      "statement": "has_live_energy(device_key, window) : une source d'energie n'est retenue que si l'entite existe, si statistics_meta est present, si >= 1 ligne de statistique existe sur la fenetre et si coverage >= 0,90.",
+      "files": [
+        "custom_components/hse/engine/sources.py"
+      ],
+      "anchor": "engine/sources.py:126 (if device_key not in energy_by_device)",
+      "acceptance": [
+        "Un compteur sans donnees sur la fenetre n'apparait jamais dans energy_meter.",
+        "La puissance du meme device_id devient eligible a energy_from_power des que le compteur est mort.",
+        "Aucun repli ne modifie le fichier catalogue."
+      ]
+    },
+    {
+      "id": "Q1-R2",
+      "decision": "Q1",
+      "priority": "P0",
+      "statement": "Resolution par fenetre : counter si compteur vivant et couvert ; sinon power x duree avec fallback_used=true et fallback_reason ; sinon exclusion avec reason=no_data_no_power.",
+      "files": [
+        "custom_components/hse/engine/sources.py",
+        "custom_components/hse/engine/calculation.py"
+      ],
+      "acceptance": [
+        "Un capteur debranche 3 semaines puis rebranche repasse automatiquement sur le compteur la periode suivante.",
+        "fallback_reason vaut 'no_data' ou 'low_coverage'."
+      ]
+    },
+    {
+      "id": "Q1-R3",
+      "decision": "Q1",
+      "priority": "P0",
+      "statement": "Chaque reponse de calcul expose quality (ok|degraded), sources (kind, kwh, fallback_used, fallback_reason), fallback_used[] et excluded[].",
+      "files": [
+        "custom_components/hse/api/views/costs.py",
+        "custom_components/hse/engine/period_stats.py"
+      ],
+      "acceptance": [
+        "GET /api/hse/costs renvoie quality='degraded' des qu'un repli a eu lieu.",
+        "L'UI affiche une pastille + la liste des capteurs en repli."
+      ]
+    },
+    {
+      "id": "Q2-R1",
+      "decision": "Q2",
+      "priority": "P1",
+      "statement": "Invariant : au plus une source d'energie selectionnee par device_id.",
+      "files": [
+        "custom_components/hse/api/views/catalogue.py",
+        "custom_components/hse/catalogue/manager.py"
+      ],
+      "anchor": "api/views/catalogue.py:183, 252, 303, 359 (toutes les ecritures de triage.policy)",
+      "acceptance": [
+        "Selection d'un second compteur sur un device deja equipe -> 409 Conflict avec le message du conflit.",
+        "Le scan bascule en 'ignored' le plus recent des deux en cas de doublon detecte.",
+        "Test dedie : 2 compteurs meme device_id -> 1 retenu + 1 avertissement multiple_energy_same_device."
+      ]
+    },
+    {
+      "id": "Q2-R2",
+      "decision": "Q2",
+      "priority": "P1",
+      "statement": "Nettoyage du catalogue : remplacer les 7 _kwh_total morts par les _total_energy vivants et de-selectionner les 5 sans compteur.",
+      "mapping": [
+        {
+          "from": "sensor.clim_appart_2_kwh_total",
+          "to": "sensor.clim_appart_2_total_energy"
+        },
+        {
+          "from": "sensor.four_cuisine_kwh_total",
+          "to": "sensor.four_cuisine_total_energy"
+        },
+        {
+          "from": "sensor.frigo_prise_kwh_total",
+          "to": "sensor.frigo_prise_total_energy"
+        },
+        {
+          "from": "sensor.plaque_cuisine_kwh_total",
+          "to": "sensor.plaque_cuisine_total_energy"
+        },
+        {
+          "from": "sensor.prise_bitaxe_kwh_total",
+          "to": "sensor.prise_bitaxe_total_energy"
+        },
+        {
+          "from": "sensor.prise_datac_buanderie_kwh_total",
+          "to": "sensor.prise_datac_buanderie_total_energy"
+        },
+        {
+          "from": "sensor.prise_micro_onde_kwh_total",
+          "to": "sensor.prise_micro_onde_total_energy"
+        },
+        {
+          "from": "sensor.buanderie_aspirateur_kwh_total",
+          "to": null,
+          "note": "buanderie_aspirateur_total_energy existe mais indisponible ; power indisponible aussi -> aucune source"
+        },
+        {
+          "from": "sensor.cafe_prise_kwh_total",
+          "to": null,
+          "note": "aucun compteur ET cafe_prise_power state_missing -> aucune source"
+        },
+        {
+          "from": "sensor.chambre_radiateur_current_consumption_kwh_total",
+          "to": null,
+          "note": "aucun compteur ; repli sur sensor.chambre_radiateur_current_consumption (0,0 W)"
+        },
+        {
+          "from": "sensor.salon_radiateur_canape_current_consumption_kwh_total",
+          "to": null,
+          "note": "aucun compteur ; repli sur sensor.salon_radiateur_canape_current_consumption (8,3 W)"
+        },
+        {
+          "from": "sensor.salon_tv_current_kwh_total",
+          "to": null,
+          "note": "aucun compteur cumulatif (month_energy/today_energy = period counters exclus) ; repli sur sensor.salon_tv_current_power (123,4 W)"
+        }
+      ],
+      "source_of_truth": "GET /api/hse/diagnostic sur 192.168.3.67:8123 -> 12 items energy_meter avec reason='state_missing' ; verifies un par un via GET /api/states/<entity_id> (404 = supprimee)",
+      "files": [
+        "custom_components/hse/catalogue/*.json"
+      ],
+      "acceptance": [
+        "Aucun _kwh_total orphelin ne reste selected.",
+        "Aucun device_id n'a deux sources d'energie selected.",
+        "Le mois affiche ~658 kWh au lieu de 374 kWh."
+      ]
+    },
+    {
+      "id": "Q3-R1",
+      "decision": "Q3",
+      "priority": "P2",
+      "statement": "Implementer custom_week_start_day dans window_for_period pour que 'week' demarre le jour choisi.",
+      "files": [
+        "custom_components/hse/time_utils.py",
+        "custom_components/hse/engine/period_stats.py"
+      ],
+      "anchor": "time_utils.py:window_for_period ; catalogue/schema.py:CatalogueSettings (champs declares mais non lus)",
+      "acceptance": [
+        "custom_week_start_day='thu' -> la semaine va du jeudi 00:00 au mercredi 23:59:59.",
+        "period_stats lit catalogue.settings.custom_week_*."
+      ]
+    },
+    {
+      "id": "Q3-R2",
+      "decision": "Q3",
+      "priority": "P2",
+      "statement": "Nouveau module engine/ranges.py exposant resolve_range(spec, tz) -> (start_utc, end_utc).",
+      "kinds": [
+        "absolute {from,to}",
+        "nth_weekday {nth,weekday,month,year}",
+        "weekday_of_week {weekday,week,month,year}",
+        "week_start {day,time,offset}",
+        "month_week {month,year,week}"
+      ],
+      "files": [
+        "custom_components/hse/engine/ranges.py"
+      ],
+      "acceptance": [
+        "nth_weekday(nth=1,weekday=2,month=10,year=2026) -> mardi 06/10/2026.",
+        "weekday_of_week(weekday=5,week=1,month=10,year=2026) -> vendredi 02/10/2026.",
+        "week_start(day='thu',offset=-1) -> jeudi precedent 00:00 au mercredi suivant 23:59:59."
+      ]
+    },
+    {
+      "id": "Q3-R3",
+      "decision": "Q3",
+      "priority": "P2",
+      "statement": "GET /api/hse/costs?period=range&from=...&to=... et POST /api/hse/compare {a,b,include_cost}.",
+      "files": [
+        "custom_components/hse/api/views/costs.py"
+      ],
+      "acceptance": [
+        "/compare renvoie a{kwh,eur}, b{kwh,eur}, delta{kwh,eur,pct}.",
+        "delta.pct = (b-a)/a*100 arrondi a 1 decimale.",
+        "Les deux periodes affichent leur qualite (ok|degraded)."
+      ]
+    },
+    {
+      "id": "Q4-R1",
+      "decision": "Q4",
+      "priority": "P3",
+      "statement": "Documenter le mode weekend dans docs/backend/05_settings.md, docs/architecture/API_CONTRACT.md et l'UI de configuration.",
+      "files": [
+        "docs/backend/05_settings.md",
+        "docs/architecture/API_CONTRACT.md"
+      ],
+      "acceptance": [
+        "mode enum documente : flat | hphc | weekend.",
+        "weekend exige price_hc_ttc_kwh (week-end) et price_hp_ttc_kwh (semaine).",
+        "Regle 'samedi + dimanche calendaires' ecrite explicitement."
+      ]
+    },
+    {
+      "id": "Q5-R1",
+      "decision": "Q5",
+      "priority": "P1",
+      "statement": "Balayage des orphelins : tout item selected absent du scan 2 fois de suite (ou 404) passe a orphan=true + issue Repairs.",
+      "files": [
+        "custom_components/hse/catalogue/manager.py",
+        "custom_components/hse/repairs.py",
+        "custom_components/hse/api/views/diagnostic.py"
+      ],
+      "anchor": "catalogue/manager.py:110 (fin de boucle, avant le nettoyage ligne 112)",
+      "acceptance": [
+        "Une entite supprimee de HA est detectee en <= 2 scans.",
+        "L'issue Repairs est creee et visible dans Diagnostic.",
+        "La recreation de l'entite remet orphan=false et escalade=none."
+      ]
+    },
+    {
+      "id": "Q5-R2",
+      "decision": "Q5",
+      "priority": "P1",
+      "statement": "Revalidation avant calcul : un item selected absent de hass.states n'entre pas dans energy_by_device.",
+      "files": [
+        "custom_components/hse/engine/sources.py"
+      ],
+      "acceptance": [
+        "Un _kwh_total a 404 ne bloque plus la puissance du meme device_id.",
+        "L'exclusion est tracee avec reason='orphan'."
+      ]
+    },
+    {
+      "id": "Q5-R3",
+      "decision": "Q5",
+      "priority": "P2",
+      "statement": "removal_mode applique selon l'etat reel de l'entite : manual si l'entite est encore presente dans HA (panne / capteur debranche / 0 W) ; auto-archive seulement si l'entite a disparu de HA depuis 3 mois. Dans les deux cas, la re-selection reste manuelle.",
+      "files": [
+        "custom_components/hse/catalogue/manager.py",
+        "custom_components/hse/repairs.py"
+      ],
+      "default": "manual",
+      "acceptance": [
+        "Une entite indisponible mais presente dans hass.states n'est jamais supprimee.",
+        "Une entite absente de hass.states depuis > 3 mois passe automatiquement en ignored(removed).",
+        "Une entite qui reapparait repasse en 'pending' et attend une decision.",
+        "Aucun item ne passe a selected sans action explicite."
+      ],
+      "policy": {
+        "present_mais_indisponible": "manual — reste selectionne, degrade, alerte a 48h. Aucune suppression (panne != disparition).",
+        "absent_de_ha_moins_de_3_mois": "manual — reste liste comme orphelin, visible, rien n'est supprime.",
+        "absent_de_ha_plus_de_3_mois": "auto-archive — deplace dans 'ignored' (reason='removed'), retire des calculs.",
+        "auto": "archive uniquement ; jamais de passage en 'selected'."
+      }
+    },
+    {
+      "id": "Q5-R4",
+      "decision": "Q5",
+      "priority": "P2",
+      "statement": "Retention des items 'ignored(removed)' : la detection prime sur la purge. Si l'entite reapparait dans HA, la ligne repasse en 'pending' (note 'reapparu le ...') au lieu d'attendre une purge. Les lignes jamais reapparues sont purgees apres 12 mois, pas 90 jours.",
+      "files": [
+        "custom_components/hse/catalogue/manager.py",
+        "custom_components/hse/catalogue/models.py"
+      ],
+      "anchor": "catalogue/manager.py (fin de _catalogue_scan / apres la boucle de revalidation)",
+      "rationale": "La retention decide si un capteur disparu peut etre re-detecte : purger au bout de 90 jours fait reapparaitre l'entite en 'pending' (bien), mais conserver la ligne 'ignored' sans re-detection la bloque indefiniment (mal). La re-detection a l'entree du scan est plus sure qu'une purge a echeance.",
+      "acceptance": [
+        "Une entite ignored(removed) qui reapparait dans hass.states repasse a 'pending' lors du scan suivant.",
+        "Le passage en pending est trace (date de reapparition).",
+        "Les lignes ignored jamais reapparues sont purgees apres 12 mois.",
+        "La purge ne touche jamais un item selected, ignored-by-user ni pending."
+      ]
+    },
+    {
+      "id": "Q6-R1",
+      "decision": "Q6",
+      "priority": "P1",
+      "statement": "PATCH /api/hse/catalogue/<entity_id> avec conflit de device -> 409 {conflict,with,integration,choices:[keep,replace]}.",
+      "files": [
+        "custom_components/hse/api/views/catalogue.py"
+      ],
+      "acceptance": [
+        "Selection d'un capteur d'une autre integration sur un device deja selectionne -> 409, pas d'ecriture.",
+        "resolve='replace' bascule l'ancien en ignored et le nouveau en selected.",
+        "resolve='keep' laisse l'existant et passe le nouveau en ignored.",
+        "selected_integration et selected_entity_id sont enregistres dans triage."
+      ]
+    },
+    {
+      "id": "Q7-R1",
+      "decision": "Q7",
+      "priority": "P0",
+      "statement": "La réconciliation de facturation s'appuie exclusivement sur reference_energy_entity_id, qui doit être un index cumulatif (device_class=energy, state_class ∈ {total, total_increasing}, unité kWh). reference_entity_id (W) ne peut jamais servir de base de facturation.",
+      "files": [
+        "custom_components/hse/engine/reference.py",
+        "custom_components/hse/storage/manager.py",
+        "custom_components/hse/api/views/costs.py"
+      ],
+      "anchor": "storage/manager.py:57 (reference_entity_id) et :59 (reference_energy_entity_id)",
+      "acceptance": [
+        "reference_energy_entity_id pointant un capteur non cumulatif est refusé à l'écriture (422) avec message explicite.",
+        "reference_entity_id seul renseigné -> aucune réconciliation, quality.notes contient 'no_energy_reference'.",
+        "Les deux champs restent indépendants et configurables séparément."
+      ]
+    },
+    {
+      "id": "Q7-R2",
+      "decision": "Q7",
+      "priority": "P0",
+      "statement": "_build_costs_data expose un bloc 'reference' par période : reference_kwh, reference_eur, tracked_kwh, delta_kwh (signé), untracked_kwh, surplus_kwh, status, coverage_pct.",
+      "files": [
+        "custom_components/hse/api/views/costs.py"
+      ],
+      "anchor": "api/views/costs.py:59-61 (ref_ids construits mais jamais valorisés) — aucun appel à energy_coverage",
+      "acceptance": [
+        "GET /api/hse/costs renvoie un objet 'reference' non nul dès que reference_energy_entity_id est renseigné.",
+        "reference.reference_kwh == energy_coverage(reference_kwh, total_kwh)['reference_kwh']",
+        "reference.eur applique le même tarif que total_ttc_eur, abonnement compris au prorata.",
+        "Sans reference_energy_entity_id, reference vaut null et quality.notes contient 'no_energy_reference'."
+      ]
+    },
+    {
+      "id": "Q7-R3",
+      "decision": "Q7",
+      "priority": "P0",
+      "statement": "Invariant : si tracked_kwh > reference_kwh * 1,10 (OVER_TOLERANCE) alors status='tracked_exceeds_ref', quality.level='error', note 'tracked_exceeds_reference'. En dessous de 10 %, status='ok' sans alerte.",
+      "files": [
+        "custom_components/hse/engine/reference.py",
+        "custom_components/hse/api/views/overview.py",
+        "custom_components/hse/api/views/costs.py"
+      ],
+      "anchor": "engine/reference.py:30 (OVER_TOLERANCE) et :155 (status calculé)",
+      "acceptance": [
+        "tracked = 1,05 x reference -> status ok, aucune note d'erreur.",
+        "tracked = 1,11 x reference -> status tracked_exceeds_ref ET quality.level error.",
+        "L'erreur est émise sur /api/hse/costs en plus de /api/hse/overview (aujourd'hui /costs l'ignore)."
+      ]
+    },
+    {
+      "id": "Q7-R4",
+      "decision": "Q7",
+      "priority": "P0",
+      "statement": "delta_kwh = reference_kwh - tracked_kwh, signé. untracked_kwh = max(delta,0). surplus_kwh = max(-delta,0). Aucun écrêtage silencieux : un delta négatif est affiché comme négatif, jamais ramené à 0.",
+      "files": [
+        "custom_components/hse/engine/reference.py",
+        "custom_components/hse/api/views/overview.py",
+        "custom_components/hse/api/views/costs.py"
+      ],
+      "anchor": "engine/reference.py:149 (max(reference - tracked, 0) écrête l'anomalie)",
+      "acceptance": [
+        "untracked_kwh + surplus_kwh == |delta_kwh|.",
+        "delta_kwh négatif -> surplus_kwh > 0 et status tracked_exceeds_ref.",
+        "L'UI affiche un delta négatif en rouge, jamais à 0."
+      ]
+    },
+    {
+      "id": "Q7-R5",
+      "decision": "Q7",
+      "priority": "P1",
+      "statement": "Durcissement de find_reference_candidates : un candidat dont le score provient uniquement de _ENERGY_HINTS (score 20) n'est jamais proposé ; un candidat doit porter un token _STRONG ou _MEDIUM, ou atteindre un score >= 25 ; toute entité déjà présente dans le catalogue, quel que soit son état, est exclue.",
+      "files": [
+        "custom_components/hse/engine/reference.py",
+        "custom_components/hse/api/views/diagnostic.py"
+      ],
+      "anchor": "engine/reference.py:48-104 (score) ; api/views/diagnostic.py:132 (toutes les entités de HA)",
+      "acceptance": [
+        "sensor.buanderie_aspirateur_total_energy et sensor.plaque_cuisine_total_energy ne figurent plus dans candidates.",
+        "Un sensor.zlinky_*_index (token _STRONG) reste proposé en tête.",
+        "Une entité présente dans le catalogue n'apparaît jamais dans candidates.",
+        "Tout candidat porte un champ verdict ∈ {propose, rejete_device, rejete_periodique, deja_au_catalogue}."
+      ]
+    },
+    {
+      "id": "Q7-R6",
+      "decision": "Q7",
+      "priority": "P1",
+      "statement": "overview expose reference_consumption par période dès que reference_energy_entity_id est renseigné, et reference_sensor reste non nul même sans reference_entity_id.",
+      "files": [
+        "custom_components/hse/api/views/overview.py"
+      ],
+      "anchor": "api/views/overview.py:135-141 (calcul) et :240-244 (exposition conditionnée à ref_energy_id)",
+      "acceptance": [
+        "reference_consumption != null quand reference_energy_entity_id est renseigné (aujourd'hui null).",
+        "reference_sensor.status == 'no_power_reference' quand seule la référence d'énergie est configurée.",
+        "quality.notes ne contient 'no_reference_configured' que si les DEUX références sont absentes."
+      ]
+    },
+    {
+      "id": "Q7-R7",
+      "decision": "Q7",
+      "priority": "P1",
+      "statement": "options_flow expose reference_energy_entity_id en plus de reference_entity_id ; les deux sont persistés via HseStorageManager.",
+      "files": [
+        "custom_components/hse/options_flow.py",
+        "custom_components/hse/api/views/settings.py"
+      ],
+      "anchor": "options_flow.py:31 et 45-48 (seul reference_entity_id est exposé)",
+      "acceptance": [
+        "La configuration UI permet de saisir un index kWh.",
+        "PUT /api/hse/settings/pricing accepte reference_energy_entity_id et le persiste.",
+        "Après sauvegarde, GET /api/hse/settings/pricing renvoie la valeur."
+      ]
+    },
+    {
+      "id": "Q7-R8",
+      "decision": "Q7",
+      "priority": "P2",
+      "statement": "GET /api/hse/diagnostic expose reference.configured (ids réellement configurés) et une liste candidates filtrée par Q7-R5, chaque entrée portant un verdict explicite.",
+      "files": [
+        "custom_components/hse/api/views/diagnostic.py"
+      ],
+      "anchor": "api/views/diagnostic.py:86-87 et 132,146-149",
+      "acceptance": [
+        "reference.configured == [] quand rien n'est configuré (constat du 16/11/2026).",
+        "Chaque entrée de candidates porte un verdict explicite.",
+        "Un candidat rejeté n'est jamais présenté comme utilisable."
+      ]
+    }
+  ],
+  "phases": [
+    {
+      "phase": "P0",
+      "content": "Corriger le JSON de bug (retrait de l'affirmation 'remise a zero')",
+      "requirements": []
+    },
+    {
+      "phase": "P1",
+      "content": "has_live_energy + repli par fenetre + quality",
+      "requirements": [
+        "Q1-R1",
+        "Q1-R2",
+        "Q1-R3",
+        "Q5-R2"
+      ]
+    },
+    {
+      "phase": "P2",
+      "content": "Balayage orphelins + escalade no_data/low_coverage + removal_mode (manuel si panne, auto-archive si disparu >3 mois) + re-detection des items archives",
+      "requirements": [
+        "Q5-R1",
+        "Q5-R3",
+        "Q5-R4"
+      ]
+    },
+    {
+      "phase": "P3",
+      "content": "Invariant UNIQUE(device_id) + 409 + modale Q6",
+      "requirements": [
+        "Q2-R1",
+        "Q6-R1"
+      ]
+    },
+    {
+      "phase": "P4",
+      "content": "Nettoyage du catalogue",
+      "requirements": [
+        "Q2-R2"
+      ]
+    },
+    {
+      "phase": "P5",
+      "content": "custom_week_start_day operationnel",
+      "requirements": [
+        "Q3-R1"
+      ]
+    },
+    {
+      "phase": "P6",
+      "content": "ranges.py + period=range + /api/hse/compare",
+      "requirements": [
+        "Q3-R2",
+        "Q3-R3"
+      ]
+    },
+    {
+      "phase": "P7",
+      "content": "Documentation mode weekend + 3e option UI",
+      "requirements": [
+        "Q4-R1"
+      ]
+    },
+    {
+      "phase": "P8",
+      "content": "Réconciliation du compteur de référence dans les coûts (référence = index kWh) + delta signé",
+      "requirements": [
+        "Q7-R1",
+        "Q7-R2",
+        "Q7-R3",
+        "Q7-R4",
+        "Q7-R6"
+      ],
+      "files": [
+        "api/views/costs.py",
+        "engine/reference.py",
+        "api/views/overview.py"
+      ]
+    },
+    {
+      "phase": "P9",
+      "content": "Durcissement du détecteur de référence + exclusion des entités du catalogue + exposition de reference_energy_entity_id dans l'options flow + verdicts diagnostic",
+      "requirements": [
+        "Q7-R5",
+        "Q7-R7",
+        "Q7-R8"
+      ],
+      "files": [
+        "engine/reference.py",
+        "api/views/diagnostic.py",
+        "options_flow.py"
+      ],
+      "depends_on": [
+        "P8"
+      ]
+    },
+    {
+      "phase": "P10",
+      "content": "Tests non-régression (double comptage, plages, orphelins, réconciliation)",
+      "requirements": [
+        "Q2-R1",
+        "Q3-R2",
+        "Q5-R1",
+        "Q7-R3",
+        "Q7-R5"
+      ],
+      "files": [
+        "tests/"
+      ],
+      "depends_on": [
+        "P8",
+        "P9"
+      ]
+    }
+  ],
+  "new_data_fields": {
+    "catalogue.settings": {
+      "custom_week_enabled": "bool",
+      "custom_week_start_day": "mon|tue|wed|thu|fri|sat|sun",
+      "custom_week_start_time": "HH:MM",
+      "fallback_policy": {
+        "enabled": "bool",
+        "min_coverage_ratio": "float (0.90)",
+        "mark_quality_degraded": "bool"
+      },
+      "removal_mode": "auto|manual",
+      "reference_entity_id": "entity_id|null — puissance W (référence instantanée)",
+      "reference_energy_entity_id": "entity_id|null — index kWh (référence de FACTURATION)",
+      "removal_grace_days": "int (90) — délai avant auto-archive"
+    },
+    "catalogue.items[id].health": {
+      "first_unavailable_at": "iso|null",
+      "last_ok_at": "iso|null",
+      "escalation": "none|warning_15m|error_24h|action_48h",
+      "last_data_at": "iso|null",
+      "data_coverage_ratio": "float",
+      "orphan_scan_count": "int",
+      "orphan": "bool",
+      "orphan_since": "iso|null — 1re absence constatée",
+      "reappeared_at": "iso|null — date de réapparition"
+    },
+    "catalogue.items[id].triage": {
+      "policy": "selected|ignored|removed|pending",
+      "mute_until": "iso|null",
+      "removal_mode": "auto|manual",
+      "selected_integration": "integration domain",
+      "selected_entity_id": "entity_id"
+    },
+    "api /api/hse/costs -> reference": {
+      "reference_kwh": "float|null",
+      "reference_eur": "float|null",
+      "tracked_kwh": "float",
+      "delta_kwh": "float (signé : reference - tracked)",
+      "untracked_kwh": "float (max(delta,0))",
+      "surplus_kwh": "float (max(-delta,0) — anomalie)",
+      "status": "no_reference|reference_too_low|ok|tracked_exceeds_ref",
+      "coverage_pct": "float|null"
+    }
+  },
+  "open_questions": [
+    {
+      "id": "OQ1",
+      "question": "low_coverage : repli TOTAL sur la fenetre (seuil 0,90) ou APPORT MIXTE compteur+puissance ?",
+      "explication": "Pour une periode donnee, on mesure la 'couverture' = part des pas de temps ou le compteur cumulatif a repondu des qu'on a un relevé. Exemple : en septembre, le compteur du four a repondu 8 jours sur 10 (80 %). Deux options : (A) repli total — si couverture >= 0,90 on prend le compteur pour TOUTE la periode, sinon on prend la puissance pour TOUTE la periode ; (B) apport mixte — on additionne les 8 jours de compteur + on integre la puissance sur les 2 jours manquants.",
+      "enjeu": "Le mixte est plus 'exact' en theorie mais il colle deux qualites de mesure : le compteur et l'integration de puissance n'ont pas la meme precision. Le raccord cree un saut inexpliquable (ex. +0,4 kWh pile au milieu du mois) que personne ne saura justifier. Le repli total donne un chiffre entierement compteur OU entierement puissance : tracable, reproductible, defendable.",
+      "recommendation": "A — repli total, seuil 0,90. Un seul type de source par periode.",
+      "blocking": false,
+      "decision": "A — repli total, seuil 0,90. Un seul type de source par période.",
+      "status": "decided",
+      "decided_at": "2026-11-16",
+      "rationale": "Un chiffre entièrement compteur ou entièrement puissance se défend ; un chiffre mixte ne se justifie pas (raccord inexplicable)."
+    },
+    {
+      "id": "OQ2",
+      "question": "removal_mode :",
+      "decision": "manuel si l'entite est encore presente dans HA (panne, capteur debranche) ; auto-archive si elle a disparu de HA depuis 3 mois. Re-selection toujours manuelle.",
+      "status": "decided"
+    },
+    {
+      "id": "OQ3",
+      "question": "Retention des items archives : que sont-ils, et faut-il les purger ?",
+      "explication": "Un 'item archive' = une ligne du catalogue passee en 'ignored' avec reason='removed'. C'est la memoire de dedoublonnage : elle empeche qu'un capteur deja ecarte revienne tout seul dans la selection. Aujourd'hui : 111 items au catalogue, dont 29 selected, 77 pending, 5 ignored.",
+      "enjeu": "Ce n'est pas une question de taille (5 lignes = ~1 Ko). C'est une question de comportement : si la ligne est conservee, l'entite qui revient reste bloquee en 'ignored' ; si elle est purged, l'entite revient en 'pending' et peut etre re-selectionnee.",
+      "recommendation": "Ne pas purger a 90 jours. Detection d'abord : si l'entite reapparait, la ligne repasse en 'pending' automatiquement. Purge a 12 mois seulement pour les lignes jamais reapparues.",
+      "status": "decided",
+      "linked_requirement": "Q5-R4"
+    }
+  ],
+  "non_goals": [
+    "Aucune modification de code effectuée dans ce document — spécification uniquement.",
+    "Le JSON de bug précédent contient encore l'affirmation erronée « les compteurs se remettent à zéro » — à corriger en P0.",
+    "Le mode weekend reste non appliqué en préprod (mode constaté : flat).",
+    "La réconciliation Linky n'est pas testable sur la préprod : aucun capteur Linky/Zlinky/Téléinfo n'y existe (253 entités, 19 index cumulatifs, tous des appareils).",
+    "Ce document ne choisit pas le capteur de référence à ta place : il définit ce qu'il doit être et comment le vérifier."
+  ],
+  "revised_at": "2026-11-16T00:00:00+01:00",
+  "revision": 2,
+  "filename_note": "Nom de fichier historique (q1_q6) : le document couvre désormais Q1→Q7. Fichier unique et faisant autorité — ne pas utiliser d'autre version.",
+  "status": "consolidated",
+  "open_questions_remaining": 0,
+  "constat": {
+    "date": "2026-11-16",
+    "objet": "État réel du mécanisme de référence HSE V3, constaté avant toute implémentation Q7",
+    "methode": [
+      "Lecture du code source (ancres fichier:ligne vérifiées par grep/sed ce jour)",
+      "Appels HTTP réels sur la préprod http://192.168.3.67:8123 avec le token HASS_PREPROD_TOKEN"
+    ],
+    "code_state": {
+      "champs_reference_existants": {
+        "storage_manager": "storage/manager.py:57 (reference_entity_id, W) et :59 (reference_energy_entity_id, kWh)",
+        "settings_api": "api/views/settings.py:35-37 (setdefault + reference_note)",
+        "options_flow": "options_flow.py:31 et :45-48 (formulaire)",
+        "verdict": "Les deux champs existent et sont persistés. Rien à créer côté stockage."
+      },
+      "detection": {
+        "fonction": "engine/reference.py:48 find_reference_candidates(entries)",
+        "listes": "engine/reference.py:20 _STRONG (linky, zlinky, lixee, teleinfo…), :21 _MEDIUM, :23 _ENERGY_HINTS, :25 _DEVICE_HINTS",
+        "seuils": "engine/reference.py:30 OVER_TOLERANCE = 1.10 ; :31 MIN_REFERENCE_W = 50.0",
+        "alimentation": "api/views/diagnostic.py:126-131 construit entries depuis hass.states.async_all('sensor') — TOUTES les entités, pas seulement les non-cataloguées",
+        "verdict": "Le détecteur balaie l'intégralité des capteurs de HA, sans exclure ceux déjà présents au catalogue."
+      },
+      "coverage": {
+        "energie": "engine/reference.py:135 energy_coverage(reference_kwh, tracked_kwh)",
+        "statut": "engine/reference.py:144 tracked > reference × 1,10 → 'tracked_exceeds_ref'",
+        "ecratage": "engine/reference.py:149 untracked_kwh = max(reference - tracked, 0.0) — négatif écrêté à 0",
+        "puissance": "engine/reference.py:107 coverage(reference_w, tracked_w), même logique, :130 même écrêtage",
+        "plafond": "engine/reference.py:150 coverage_pct = min(tracked/reference*100, 999.0)"
+      },
+      "consommation": {
+        "overview": "api/views/overview.py:27 importe coverage + energy_coverage ; :131-133 delta_w ; :139 energy_cov par période",
+        "reference_consumption": "api/views/overview.py:242-244 ... if ref_energy_id else None — null est STRUCTUREL quand aucun index kWh n'est configuré",
+        "couts": "api/views/costs.py n'importe PAS engine.reference (imports :1-28) et n'appelle jamais energy_coverage"
+      },
+      "exclusion_anti_double_comptage": {
+        "sources": "engine/sources.py:66-68 construit ref_ids ; :81 'if eid in ref_ids' écarte la référence du calcul",
+        "costs": "api/views/costs.py:60 relit ref_ids ; :85 'if eid in plan.reference_ids: continue'",
+        "overview": "api/views/overview.py:227 states_devices exclut ref_ids pour by_type",
+        "diagnostic": "api/views/diagnostic.py:86-87 ref_ids = les deux champs de référence",
+        "verdict": "L'exclusion fonctionne : la référence n'est jamais comptée deux fois. C'est du code déjà livré, pas une hypothèse."
+      }
+    },
+    "live_preprod": {
+      "entities_ha_total": 253,
+      "capteurs_energie_cumulatifs": 19,
+      "linky_present": false,
+      "linky_note": "Aucune entité ne correspond à linky, zlinky, lixee, teleinfo, leexi, enedis, compteur, grid, reseau. La préprod n'a pas de compteur général.",
+      "catalogue_total": 111,
+      "catalogue_status": {
+        "selected": 29,
+        "normal": 77,
+        "ignored": 5
+      },
+      "catalogue_pending": 0,
+      "catalogue_ignored": [
+        "sensor.salon_tv_today_energy",
+        "sensor.salon_tv_month_energy",
+        "sensor.clim_appart_1_kwh_total",
+        "sensor.ballon_buanderie_kwh_total",
+        "sensor.cuisine_chauffe_eau_kwh_total"
+      ],
+      "catalogue_ignored_note": "Les 5 items ignorés sont tous des doublons d'énergie (today/month/kwh_total). La politique de dédoublonnage Q2-R2 a donc déjà produit son effet.",
+      "active_field": {
+        "selected_avec_active_true": 1,
+        "selected_avec_active_false": 28
+      },
+      "settings_reference": {
+        "reference_entity_id": "",
+        "reference_energy_entity_id": null
+      },
+      "diagnostic_reference": {
+        "configured": []
+      },
+      "diagnostic_candidates": [
+        {
+          "entity_id": "sensor.buanderie_aspirateur_total_energy",
+          "score": 20,
+          "role": "energy_index",
+          "faux_positif": true
+        },
+        {
+          "entity_id": "sensor.plaque_cuisine_total_energy",
+          "score": 20,
+          "role": "energy_index",
+          "faux_positif": true
+        },
+        {
+          "entity_id": "sensor.buanderie_aspirateur_power",
+          "score": 5,
+          "role": "active_power",
+          "faux_positif": true
+        },
+        {
+          "entity_id": "sensor.plaque_cuisine_power",
+          "score": 5,
+          "role": "active_power",
+          "faux_positif": true
+        }
+      ],
+      "overview": {
+        "reference_sensor": null,
+        "reference_consumption": null,
+        "coverage_power_status": "no_reference",
+        "tracked_w": 1686.5,
+        "quality_level": "warning",
+        "quality_notes": [
+          "no_reference_configured"
+        ],
+        "sources_total": 29,
+        "sources_ok": 27
+      },
+      "costs": {
+        "items": 29,
+        "total_kwh": 375.085,
+        "total_ttc_eur": 83.01,
+        "cle_reference": null
+      }
+    },
+    "defects": [
+      {
+        "id": "D1",
+        "severite": "critique",
+        "titre": "Aucune réconciliation dans /api/hse/costs",
+        "preuve": "api/views/costs.py:1-28 n'importe pas engine.reference ; aucun appel à energy_coverage dans le fichier",
+        "effet": "untracked_kwh n'est jamais exposé par les coûts ; un dépassement mesuré > référence n'apparaît pas dans la vue de facturation"
+      },
+      {
+        "id": "D2",
+        "severite": "critique",
+        "titre": "Détecteur de référence alimenté par tous les capteurs",
+        "preuve": "api/views/diagnostic.py:126-131 → find_reference_candidates ; engine/reference.py:25 _DEVICE_HINTS ne connaît ni aspirateur ni plaque ; total_energy donne +10 via _ENERGY_HINTS",
+        "effet": "L'aspirateur et la plaque sortent candidats energy_index avec score 20. Un utilisateur qui suit la reco du diagnostic règle la référence sur un appareil."
+      },
+      {
+        "id": "D3",
+        "severite": "majeur",
+        "titre": "Valeur 'normal' non prévue par le contrat d'API",
+        "preuve": "catalogue/defaults.py:51-59 pose triage.policy='normal' par défaut ; api/views/catalogue.py:25 _VALID_STATUS = ('all','selected','ignored','pending') ; :104 policy = triage.policy or 'pending'",
+        "effet": "status=normal → 422 ; status=pending → 0 résultat. Les 77 items non classés sont inaccessibles par filtre : ils ne sont visibles que via status=all."
+      },
+      {
+        "id": "D4",
+        "severite": "majeur",
+        "titre": "enrichment.active écrit mais jamais lu",
+        "preuve": "28 des 29 items selected ont active=false ; api/views/costs.py:83-85 ne teste que reference_ids, jamais active ; aucun lecteur de active dans catalogue/ ni engine/",
+        "effet": "Le champ suggère qu'on peut désactiver un item sans le supprimer. En réalité il est ignoré par les calculs : les 28 items restent comptés."
+      },
+      {
+        "id": "D5",
+        "severite": "majeur",
+        "titre": "Delta écrêté à zéro des deux côtés",
+        "preuve": "engine/reference.py:130 (puissance) et :149 (énergie) : max(reference - tracked, 0.0)",
+        "effet": "Un dépassement ne se voit que dans le champ status, jamais dans une valeur. Aucun delta_kwh signé n'existe aujourd'hui."
+      },
+      {
+        "id": "D6",
+        "severite": "mineur",
+        "titre": "reference_consumption null par conception",
+        "preuve": "api/views/overview.py:242-244 : l'objet n'est construit que si ref_energy_id est renseigné, sinon None",
+        "effet": "Ce n'est pas un bug mais une conséquence de l'absence d'index kWh. À documenter pour ne pas être pris pour une régression."
+      }
+    ],
+    "schema_divergences": [
+      {
+        "id": "S1",
+        "sujet": "Vocabulaire des états",
+        "spec": "pending | selected | ignored",
+        "code": "normal | selected | ignored",
+        "impact": "Élevé — 77 items concernés, filtre API inutilisable"
+      },
+      {
+        "id": "S2",
+        "sujet": "Champs de santé",
+        "spec": "health.reason, health.orphan, health.orphan_since, health.reappeared_at",
+        "code": "defaults.py:42-49 ne pose que first_unavailable_at, last_ok_at, escalation",
+        "impact": "Moyen — les champs Q5 sont à créer, pas à modifier"
+      },
+      {
+        "id": "S3",
+        "sujet": "Grâce de suppression",
+        "spec": "triage.removal_grace_days = 90",
+        "code": "absent ; triage ne contient que policy, mute_until, note, updated_at",
+        "impact": "Moyen — champ à créer"
+      },
+      {
+        "id": "S4",
+        "sujet": "Sens du mot pending",
+        "spec": "état d'attente de décision utilisateur",
+        "code": "état par défaut d'un item nouvellement scanné s'appelait normal",
+        "impact": "Élevé — toute la spec P2/P5 parle de pending alors que le code écrit normal"
+      }
+    ],
+    "unknowns": [
+      {
+        "id": "U1",
+        "question": "Le Linky de production expose-t-il un index kWh cumulatif, une puissance W, ou les deux ?",
+        "pourquoi": "La préprod n'a aucune entité Linky (253 entités, 0 correspondance). Le choix index+pissance est fait par conception, pas par observation."
+      },
+      {
+        "id": "U2",
+        "question": "Le Linky expose-t-il un index par période (jour/mois) en plus du cumulatif ?",
+        "pourquoi": "Détermine si reference_kwh par période vient d'un capteur dédié ou d'un delta d'index."
+      },
+      {
+        "id": "U3",
+        "question": "Quelle est la sémantique voulue de enrichment.active ?",
+        "pourquoi": "Aujourd'hui le champ existe, est affiché, et n'a aucun effet. Soit il doit piloter les calculs, soit il doit disparaître."
+      }
+    ]
+  },
+  "questions_to_model": [
+    {
+      "id": "QM1",
+      "sujet": "Vocabulaire des états",
+      "contexte": "defaults.py:54 écrit 'normal' ; catalogue.py:25 n'accepte que all/selected/ignored/pending. status=normal renvoie 422, status=pending renvoie 0.",
+      "question": "Faut-il renommer 'normal' en 'pending' partout (avec migration des 77 items), ou ajouter 'pending' comme alias accepté ?",
+      "enjeu": "Un renomage touche l'UI, l'API et la persistance ; un alias laisse deux mots pour la même chose."
+    },
+    {
+      "id": "QM2",
+      "sujet": "enrichment.active",
+      "contexte": "28/29 items selected ont active=false et sont quand même comptés (costs.py:83-85).",
+      "question": "active doit-il exclure du calcul, ou être retiré du schéma ?",
+      "enjeu": "Si on le fait respecter, la consommation affichée change du jour au lendemain."
+    },
+    {
+      "id": "QM3",
+      "sujet": "Tolérance de dépassement",
+      "contexte": "OVER_TOLERANCE = 1,10 (reference.py:30).",
+      "question": "10 % est-il le bon seuil pour un Linky, sachant qu'un décalage d'indexation peut créer un écart ponctuel ?",
+      "enjeu": "Trop bas = fausses alertes ; trop haut = dépassements réels noyés."
+    },
+    {
+      "id": "QM4",
+      "sujet": "Exposition du delta",
+      "contexte": "Delta écrêté à 0 (reference.py:130 et :149).",
+      "question": "Faut-il exposer un delta_kwh signé en plus du status, ou garder l'écrêtage et ne signaler que le statut ?",
+      "enjeu": "Un delta signé permet de dimensionner l'anomalie, mais change le contrat d'API."
+    },
+    {
+      "id": "QM5",
+      "sujet": "Index de référence par période",
+      "contexte": "overview.py:242-244 construit reference_consumption par période depuis periods[p]['reference_kwh'].",
+      "question": "Si le Linky n'expose qu'un cumulatif, les périodes doivent-elles être dérivées par différence d'index (nécessite un stockage d'index horodaté) ?",
+      "enjeu": "Sans stockage d'index, aucune réconciliation par jour/mois n'est possible."
+    },
+    {
+      "id": "QM6",
+      "sujet": "low_coverage",
+      "contexte": "Option A (repli total) retenue dans ce document.",
+      "question": "Confirmer A, ou préférer un comportement par compteur (A pour les compteurs non cumulatifs, C pour les vrais cumulatifs) ?",
+      "enjeu": "Un compteur réellement cumulatif ne devrait pas basculer sur la puissance."
+    },
+    {
+      "id": "QM7",
+      "sujet": "Purge des items ignorés",
+      "contexte": "Purge à 12 mois pour les ignored(removed) jamais réapparus.",
+      "question": "12 mois est-il cohérent avec la durée de rétention attendue côté utilisateur ?",
+      "enjeu": "Trop court = un capteur temporairement absent est oublié ; trop long = le catalogue enfle."
+    },
+    {
+      "id": "QM8",
+      "sujet": "Périmètre Q7 vs dette existante",
+      "contexte": "D3 (normal) et D4 (active) sont indépendants de Q7 mais bloquent sa lisibilité.",
+      "question": "Faut-il traiter D3 et D4 dans la même passe que Q7, ou les sortir en dette séparée ?",
+      "enjeu": "Les mélanger augmente le risque de régression sur un lot déjà livré."
+    }
+  ]
+}
