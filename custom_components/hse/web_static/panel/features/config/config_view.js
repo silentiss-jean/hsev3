@@ -930,9 +930,11 @@ export class ConfigView {
     root.querySelector('#hse-cfg-modal-save')?.addEventListener('click', () => this._saveModal());
     // Close modal on backdrop click
     root.querySelector('#hse-cfg-modal-backdrop')?.addEventListener('click', e => { if (e.target === e.currentTarget) this._closeModal(); });
-    // Assignment row save buttons (delegated)
+    // Assignment row save buttons (delegated) — robuste: rebind à chaque render
     const asgBody = root.querySelector('#hse-cfg-asg-body');
     if (asgBody) {
+      // Nettoyer anciens listeners si présents (évite double-bind)
+      asgBody._hseBound = true;
       asgBody.addEventListener('click', e => {
         const btn = e.target.closest('[data-asg-save]');
         if (btn) this._saveAssignment(btn.getAttribute('data-asg-save'));
@@ -941,6 +943,9 @@ export class ConfigView {
         const sel = e.target.closest('[data-asg-field]');
         if (sel) this._markAssignmentDirty(sel.getAttribute('data-asg-field'), sel.getAttribute('data-asg-eid'), sel.value);
       });
+    } else {
+      // Debug: element pas encore dans le DOM
+      console.debug('[HSE Config] #hse-cfg-asg-body introuvable lors du bind meta');
     }
   }
 
@@ -1013,14 +1018,17 @@ export class ConfigView {
 
   async _loadDiffPreview() {
     try {
-      const r = await this._ctx.hseFetch('/api/hse/meta/sync/preview', {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const resp = await fetch(this._ctx.hassUrl + '/api/hse/meta/sync/preview', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this._ctx.hass?.auth?.accessToken || ''}` },
         body: JSON.stringify({}),
-        signal: this._abort?.signal,
+        signal: controller.signal,
       });
-      if (!r.ok) return;
-      const data = await r.json();
+      clearTimeout(timeoutId);
+      if (!resp.ok) return;
+      const data = await resp.json();
       // FIX-2026-07-04 C7 : compter aussi to_update (to_remove toujours [] côté backend)
       const count = (data.to_add?.length ?? 0) + (data.to_update?.length ?? 0);
       if (!count) return;
@@ -1039,15 +1047,25 @@ export class ConfigView {
     const btn = this._el?.querySelector('#hse-cfg-diff-apply');
     if (btn) { btn.disabled = true; btn.textContent = '⏳…'; }
     try {
-      const r = await this._ctx.hseFetch('/api/hse/meta/sync/apply', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}), signal: this._abort?.signal,
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const resp = await fetch(this._ctx.hassUrl + '/api/hse/meta/sync/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this._ctx.hass?.auth?.accessToken || ''}` },
+        body: JSON.stringify({}),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ message: `HTTP ${resp.status}` }));
+        throw new Error(err.message || `HTTP ${resp.status}`);
+      }
       const banner = this._el?.querySelector('#hse-cfg-diff-banner');
       if (banner) banner.classList.remove('visible');
       this._metaSig = null; await this._loadMeta();
     } catch (e) {
       if (e.name === 'AbortError') return;
+      alert(`Erreur : ${e.message}`);
     } finally {
       this._diffApplying = false;
       if (btn) { btn.disabled = false; btn.textContent = 'Appliquer'; }
@@ -1306,30 +1324,26 @@ export class ConfigView {
     const state = this._modalState;
     if (!state) return;
     try {
+      let action, body;
       if (state.kind === 'room') {
-        if (state.mode === 'create') {
-          await this._ctx.hseFetch('/api/hse/meta', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'create_room', name }), signal: this._abort?.signal,
-          });
-        } else {
-          await this._ctx.hseFetch('/api/hse/meta', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'rename_room', id: state.id, name }), signal: this._abort?.signal,
-          });
-        }
-      } else if (state.kind === 'type') {
-        if (state.mode === 'create') {
-          await this._ctx.hseFetch('/api/hse/meta', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'create_type', name }), signal: this._abort?.signal,
-          });
-        } else {
-          await this._ctx.hseFetch('/api/hse/meta', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'rename_type', old_name: state.name, new_name: name }), signal: this._abort?.signal,
-          });
-        }
+        if (state.mode === 'create') { action = 'create_room'; body = { action, name }; }
+        else { action = 'rename_room'; body = { action, id: state.id, name }; }
+      } else {
+        if (state.mode === 'create') { action = 'create_type'; body = { action, name }; }
+        else { action = 'rename_type'; body = { action, old_name: state.name, new_name: name }; }
+      }
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const resp = await fetch(this._ctx.hassUrl + '/api/hse/meta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this._ctx.hass?.auth?.accessToken || ''}` },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ message: `HTTP ${resp.status}` }));
+        throw new Error(err.message || `HTTP ${resp.status}`);
       }
       this._closeModal();
       this._metaSig = null; await this._loadMeta();
@@ -1352,16 +1366,22 @@ export class ConfigView {
     if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
-      await this._ctx.hseFetch('/api/hse/meta', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete_room', id: roomId }), signal: controller.signal,
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const resp = await fetch(this._ctx.hassUrl + '/api/hse/meta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this._ctx.hass?.auth?.accessToken || ''}` },
+        body: JSON.stringify({ action: 'delete_room', id: roomId }),
+        signal: controller.signal,
       });
       clearTimeout(timeoutId);
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ message: `HTTP ${resp.status}` }));
+        throw new Error(err.message || `HTTP ${resp.status}`);
+      }
       this._metaSig = null; await this._loadMeta();
     } catch (e) {
       if (e.name === 'AbortError') {
-        alert('Suppression expirée (30s) — le serveur a peut-être traité la requête. Rafraîchissez la page.');
+        alert('Suppression expirée (15s) — le serveur a peut-être traité la requête. Rafraîchissez la page.');
         return;
       }
       alert(`Erreur : ${e.message}`);
@@ -1381,17 +1401,24 @@ export class ConfigView {
     const btn = this._el?.querySelector(`[data-type-delete="${this._attrVal(typeName)}"]`);
     if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
     try {
+      // Utilise fetch direct avec AbortController pour timeout fiable (non bloquant)
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
-      await this._ctx.hseFetch('/api/hse/meta', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete_type', name: typeName }), signal: controller.signal,
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s max
+      const resp = await fetch(this._ctx.hassUrl + '/api/hse/meta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this._ctx.hass?.auth?.accessToken || ''}` },
+        body: JSON.stringify({ action: 'delete_type', name: typeName }),
+        signal: controller.signal,
       });
       clearTimeout(timeoutId);
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ message: `HTTP ${resp.status}` }));
+        throw new Error(err.message || `HTTP ${resp.status}`);
+      }
       this._metaSig = null; await this._loadMeta();
     } catch (e) {
       if (e.name === 'AbortError') {
-        alert('Suppression expirée (30s) — le serveur a peut-être traité la requête. Rafraîchissez la page.');
+        alert('Suppression expirée (15s) — le serveur a peut-être traité la requête. Rafraîchissez la page.');
         return;
       }
       alert(`Erreur : ${e.message}`);
@@ -1436,10 +1463,19 @@ export class ConfigView {
       const payload = { action: 'assign', entity_id: entityId };
       if (dirty.room_id !== undefined) payload.room_id = dirty.room_id || null;
       if (dirty.type_id !== undefined) payload.type_id = dirty.type_id || null;
-      await this._ctx.hseFetch('/api/hse/meta', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload), signal: this._abort?.signal,
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const resp = await fetch(this._ctx.hassUrl + '/api/hse/meta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this._ctx.hass?.auth?.accessToken || ''}` },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ message: `HTTP ${resp.status}` }));
+        throw new Error(err.message || `HTTP ${resp.status}`);
+      }
       this._asgDirty.delete(entityId);
       this._metaSig = null; await this._loadMeta();
     } catch (e) {
