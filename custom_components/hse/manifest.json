@@ -1,7 +1,7 @@
 {
   "domain": "hse",
   "name": "Home Suivi Élec V3",
-  "version": "3.0.104",
+  "version": "3.0.105",
   "documentation": "https://github.com/silentiss-jean/hsev3",
   "issue_tracker": "https://github.com/silentiss-jean/hsev3/issues",
   "codeowners": ["@silentiss-jean"],
