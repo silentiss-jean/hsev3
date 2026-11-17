@@ -4,7 +4,7 @@ HSE V3 — Constantes métier.
 from __future__ import annotations
 
 DOMAIN = "hse"
-VERSION = "3.0.0"
+VERSION = "3.0.105"
 
 # ── Storage keys ─────────────────────────────────────────────────────────────
 STORAGE_KEY_CATALOGUE = f"{DOMAIN}.catalogue"
