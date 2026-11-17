@@ -126,10 +126,17 @@ class HseMetaView(HseBaseView):
             name = (body.get("name") or "").strip()
             if not name:
                 return self.json_error("name requis", HTTPStatus.UNPROCESSABLE_ENTITY)
+            # FIX bug #3: vérifier dans meta["types"] ET dans les assignments
+            # Les types peuvent être calculés dynamiquement depuis les assignments
             types_list = meta.setdefault("types", [])
-            if name not in types_list:
+            type_in_meta = name in types_list
+            # Compter les assignments qui référencent ce type
+            affected_count = sum(1 for asn in assignments.values() if isinstance(asn, dict) and asn.get("type_id") == name)
+            if not type_in_meta and affected_count == 0:
                 return self.json_error(f"Type '{name}' introuvable", HTTPStatus.NOT_FOUND)
-            types_list.remove(name)
+            # Retirer de meta["types"] si présent
+            if type_in_meta:
+                types_list.remove(name)
             # Nettoyer les assignments qui référencent ce type supprimé (HSE-12)
             for asn in assignments.values():
                 if isinstance(asn, dict) and asn.get("type_id") == name:
@@ -137,7 +144,7 @@ class HseMetaView(HseBaseView):
             saved = await mgr.async_save_meta(meta_store)
             if not saved:
                 return self.json_error("Échec de sauvegarde des métadonnées", HTTPStatus.INTERNAL_SERVER_ERROR)
-            return self.json_ok({"deleted": name})
+            return self.json_ok({"deleted": name, "assignments_cleaned": affected_count})
 
         if action == "rename_type":
             old_name = (body.get("old_name") or "").strip()
