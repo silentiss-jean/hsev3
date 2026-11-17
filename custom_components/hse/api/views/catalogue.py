@@ -20,6 +20,7 @@ from homeassistant.core import HomeAssistant
 from ..base import HseBaseView
 from ...storage.manager import HseStorageManager
 from ...sensors.quality_scorer import score_item
+from ...engine.sources import find_energy_index_conflict, _is_energy_index
 
 _VALID_ACTIONS = ("select", "ignore", "reset")
 # D3 — vocabulaire unifié. `pending` = non trié (valeur de référence).
@@ -75,6 +76,34 @@ def _find_item_key(items: dict, entity_id: str) -> str | None:
         if isinstance(v, dict) and (v.get("source") or {}).get("entity_id") == entity_id:
             return k
     return None
+
+
+def _energy_conflict_error(
+    items: dict, entity_id: str, key: str
+) -> dict[str, Any] | None:
+    """DELTA-070 — refuse la sélection d'un 2e index d'énergie du même appareil.
+
+    Un Linky expose plusieurs index kWh cumulatifs (total + tranches base/HP/HC)
+    sur le MÊME device_id. Sélectionner deux d'entre eux double-compte. On
+    s'appuie sur les métadonnées stockées dans `source` (kind/state_class/
+    device_id) : pas d'accès hass requis ici, tout est dans le catalogue.
+    """
+    item = items.get(key)
+    if not isinstance(item, dict):
+        return None
+    src = item.get("source") or {}
+    conflict = find_energy_index_conflict(
+        items,
+        entity_id,
+        src.get("device_id"),
+        src.get("state_class"),
+    )
+    if conflict is None:
+        return None
+    return {
+        "status": conflict["status"],
+        "message": conflict["message"],
+    }
 
 
 class HseCatalogueView(HseBaseView):
@@ -249,6 +278,9 @@ class HseCatalogueBulkView(HseBaseView):
         processed = 0
         errors: list[str] = []
         keys_to_delete: list[str] = []
+        # DELTA-070 — devices dont un index d'énergie vient d'être activé dans ce
+        # batch : empêche d'activer deux index cumulatifs du même appareil.
+        activated_energy_devices: dict[str, str] = {}
 
         for eid in entity_ids:
             key = _find_item_key(items, eid)
@@ -256,6 +288,25 @@ class HseCatalogueBulkView(HseBaseView):
                 errors.append(f"{eid}: non trouvé")
                 continue
             if action == "activate":
+                src = items[key].get("source") or {}
+                device_id = src.get("device_id")
+                state_class = src.get("state_class")
+                # Conflit avec un item DÉJÀ sélectionné (hors batch) ?
+                conflict = _energy_conflict_error(items, eid, key)
+                if conflict is not None:
+                    errors.append(conflict["message"])
+                    continue
+                # Conflit avec un item activé plus tôt dans CE batch ?
+                if device_id and _is_energy_index("energy", state_class):
+                    if device_id in activated_energy_devices:
+                        errors.append(
+                            f"{eid} est un index d'énergie du même appareil "
+                            f"(device_id={device_id}) que "
+                            f"{activated_energy_devices[device_id]}, déjà activé "
+                            f"dans cette sélection. Choisir un seul index par appareil."
+                        )
+                        continue
+                    activated_energy_devices[device_id] = eid
                 items[key].setdefault("enrichment", {})["active"] = True
                 items[key].setdefault("triage", {})["policy"] = "selected"
                 processed += 1
@@ -308,6 +359,12 @@ class HseCatalogueTriageView(HseBaseView):
             return self.json_error(f"{entity_id} non trouvé dans le catalogue", HTTPStatus.NOT_FOUND)
 
         new_policy = {"select": "selected", "ignore": "ignored", "reset": "pending"}[action]
+        # DELTA-070 — anti double comptage : refuser un 2e index d'énergie cumulatif
+        # du même appareil (ex. Linky total + tranche base/HP/HC).
+        if new_policy == "selected":
+            conflict = _energy_conflict_error(items, entity_id, key)
+            if conflict is not None:
+                return self.json_error(conflict["message"], conflict["status"])
         items[key].setdefault("triage", {})["policy"] = new_policy
         # Sync enrichment.active avec triage.policy (HSE-10)
         items[key].setdefault("enrichment", {})["active"] = (new_policy == "selected")
@@ -350,6 +407,9 @@ class HseCatalogueTriageBulkView(HseBaseView):
 
         processed = 0
         errors: list[str] = []
+        # DELTA-070 — devices dont un index d'énergie vient d'être sélectionné
+        # dans ce batch (intra-batch) pour bloquer les doublons.
+        activated_energy_devices: dict[str, str] = {}
         for entry in bulk_items:
             if not isinstance(entry, dict):
                 errors.append("entrée invalide (non-dict)")
@@ -364,6 +424,25 @@ class HseCatalogueTriageBulkView(HseBaseView):
                 errors.append(f"{eid}: non trouvé")
                 continue
             new_policy = {"select": "selected", "ignore": "ignored", "reset": "pending"}[action]
+            if new_policy == "selected":
+                # Conflit avec un item déjà sélectionné hors batch ?
+                conflict = _energy_conflict_error(items, eid, key)
+                if conflict is not None:
+                    errors.append(conflict["message"])
+                    continue
+                # Conflit intra-batch (même device, deux index d'énergie) ?
+                src = items[key].get("source") or {}
+                device_id = src.get("device_id")
+                if device_id and _is_energy_index("energy", src.get("state_class")):
+                    if device_id in activated_energy_devices:
+                        errors.append(
+                            f"{eid} est un index d'énergie du même appareil "
+                            f"(device_id={device_id}) que "
+                            f"{activated_energy_devices[device_id]}, déjà sélectionné "
+                            f"dans ce lot. Choisir un seul index par appareil."
+                        )
+                        continue
+                    activated_energy_devices[device_id] = eid
             items[key].setdefault("triage", {})["policy"] = new_policy
             # Sync enrichment.active avec triage.policy (HSE-10)
             items[key].setdefault("enrichment", {})["active"] = (new_policy == "selected")
