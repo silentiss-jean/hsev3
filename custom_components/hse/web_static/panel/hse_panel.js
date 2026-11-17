@@ -48,7 +48,7 @@ class HsePanel extends HTMLElement {
       boxSizing: 'border-box',
       width: '100%',
       height: '100vh',
-      overflow: 'hidden',
+      overflow: 'auto',
     });
     // dvh = hauteur réellement visible (barres navigateur) ; ignoré si non supporté
     if (window.CSS && CSS.supports && CSS.supports('height', '100dvh')) {
@@ -114,11 +114,16 @@ class HsePanel extends HTMLElement {
 
   /**
    * HA appelle set hass() à chaque changement d'état.
-   * On ne s'intéresse qu'au token d'accès.
+   * FIX bug #1: fallback sur hass.auth.accessToken (LitElement) si data.access_token absent.
    */
   set hass(hass) {
-    const token = hass && hass.auth && hass.auth.data && hass.auth.data.access_token;
-    if (!token) return;
+    const token = (hass && hass.auth && hass.auth.data && hass.auth.data.access_token)
+      || (hass && hass.auth && hass.auth.accessToken)
+      || null;
+    if (!token) {
+      console.warn('[HSE Panel] set hass() sans token — hass.auth:', hass?.auth ? Object.keys(hass.auth) : 'absent');
+      return;
+    }
     this._token = token;
     // Si l'iframe est déjà prête, envoyer immédiatement
     if (this._iframeReady) {

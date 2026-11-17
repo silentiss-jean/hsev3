@@ -27,9 +27,10 @@
  * @throws {HseFetchError}       - Si réponse HTTP non-ok (4xx / 5xx)
  */
 export async function hseFetch(path, options = {}) {
-  const token = window.__hseToken;
+  // FIX bug #1: fallback sur hassAuthToken si __hseToken absent
+  const token = window.__hseToken || window.hassAuthToken;
   if (!token) {
-    throw new HseFetchError('HSE : __hseToken non initialisé — shell non chargé ?', 0);
+    throw new HseFetchError('HSE : token non initialisé — shell non chargé ou token manquant', 0);
   }
 
   const headers = {
@@ -42,6 +43,30 @@ export async function hseFetch(path, options = {}) {
     ...options,
     headers,
   });
+
+  // FIX: si 401, tenter de récupérer le token depuis le localStorage HA
+  if (response.status === 401 && !window.__hseToken) {
+    try {
+      const hassTokens = localStorage.getItem('hassTokens');
+      if (hassTokens) {
+        const parsed = JSON.parse(hassTokens);
+        const fallbackToken = parsed.access_token;
+        if (fallbackToken) {
+          console.warn('[HSE Fetch] 401 sans __hseToken — retry avec token localStorage');
+          window.__hseToken = fallbackToken;
+          const retryResp = await fetch(path, {
+            ...options,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${fallbackToken}`,
+              ...options.headers,
+            },
+          });
+          if (retryResp.ok) return retryResp;
+        }
+      }
+    } catch (_) {}
+  }
 
   if (!response.ok) {
     // Lecture directe — le body n'a pas encore été consommé à ce stade (DELTA-031a)

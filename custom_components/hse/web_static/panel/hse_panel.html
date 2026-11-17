@@ -129,14 +129,24 @@
     // Timeout de sécurité : si le token n'arrive pas en 10s, afficher une erreur
     const authTimeout = setTimeout(() => {
       showError('Token HA non reçu après 10 secondes. Rechargez la page.');
+      console.warn('[HSE Panel] Token timeout — postMessage hse-auth jamais reçu du parent');
     }, 10_000);
 
     // Étape 2 : attendre le token HA
     window.addEventListener('message', async function onAuth(event) {
-      // Sécurité : on n'accepte que les messages de notre parent (hse_panel.js)
-      if (event.source !== window.parent) return;
+      // FIX bug #1: accepter aussi depuis window.parent (origine = même origine HA)
+      if (event.source !== window.parent) {
+        console.warn('[HSE Panel] Message ignoré — source != parent:', event.source);
+        return;
+      }
       const msg = event.data;
-      if (!msg || msg.type !== 'hse-auth' || !msg.token) return;
+      if (!msg || msg.type !== 'hse-auth' || !msg.token) {
+        if (msg && msg.type === 'hse-auth' && !msg.token) {
+          console.error('[HSE Panel] hse-auth reçu mais token vide !');
+        }
+        return;
+      }
+      console.debug('[HSE Panel] Token reçu via postMessage:', msg.token.slice(0, 20) + '…');
 
       // On n'accepte qu'un seul message hse-auth
       window.removeEventListener('message', onAuth);

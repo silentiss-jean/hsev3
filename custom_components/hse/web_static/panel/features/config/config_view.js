@@ -229,6 +229,28 @@ export class ConfigView {
     this._el.appendChild(root);
     this._bindTabs(root); this._bindAppareilsEvents(root);
     // FIX: _bindMetaEvents() sera appelé dans _renderMeta() pour rebinder après chaque re-render
+    // FIX bug #2: utiliser la délégation d'événements sur #hse-cfg-meta-body (persiste) au lieu de #hse-cfg-asg-body (détruit au render)
+    const metaBody = this._el?.querySelector('#hse-cfg-meta-body');
+    if (metaBody) {
+      metaBody.addEventListener('click', e => {
+        const saveBtn = e.target.closest('[data-asg-save]');
+        if (saveBtn && !saveBtn.disabled) {
+          this._saveAssignment(saveBtn.getAttribute('data-asg-save'));
+          return;
+        }
+        const delBtn = e.target.closest('[data-room-delete], [data-type-delete]');
+        if (delBtn) {
+          // Les listeners spécifiques sont déjà bindés par _bindMetaListEvents()
+          return;
+        }
+      });
+      metaBody.addEventListener('change', e => {
+        const sel = e.target.closest('[data-asg-field]');
+        if (sel) {
+          this._markAssignmentDirty(sel.getAttribute('data-asg-field'), sel.getAttribute('data-asg-eid'), sel.value);
+        }
+      });
+    }
   }
 
   _bindTabs(root) {
@@ -930,23 +952,9 @@ export class ConfigView {
     root.querySelector('#hse-cfg-modal-save')?.addEventListener('click', () => this._saveModal());
     // Close modal on backdrop click
     root.querySelector('#hse-cfg-modal-backdrop')?.addEventListener('click', e => { if (e.target === e.currentTarget) this._closeModal(); });
-    // Assignment row save buttons (delegated) — robuste: rebind à chaque render
-    const asgBody = root.querySelector('#hse-cfg-asg-body');
-    if (asgBody) {
-      // Nettoyer anciens listeners si présents (évite double-bind)
-      asgBody._hseBound = true;
-      asgBody.addEventListener('click', e => {
-        const btn = e.target.closest('[data-asg-save]');
-        if (btn) this._saveAssignment(btn.getAttribute('data-asg-save'));
-      });
-      asgBody.addEventListener('change', e => {
-        const sel = e.target.closest('[data-asg-field]');
-        if (sel) this._markAssignmentDirty(sel.getAttribute('data-asg-field'), sel.getAttribute('data-asg-eid'), sel.value);
-      });
-    } else {
-      // Debug: element pas encore dans le DOM
-      console.debug('[HSE Config] #hse-cfg-asg-body introuvable lors du bind meta');
-    }
+    // FIX bug #2: suppression des listeners sur #hse-cfg-asg-body (détruit au render)
+    // La délégation d'événements est maintenant gérée dans _buildDOM() sur #hse-cfg-meta-body (persiste)
+    console.debug('[HSE Config] _bindMetaEvents called (delegation on #hse-cfg-meta-body)');
   }
 
   async _loadMeta() {
@@ -1225,7 +1233,8 @@ export class ConfigView {
     // Bind events for room/type actions and assignment pagination
     this._bindMetaListEvents();
     this._bindAsgPager();
-    // FIX: Rebind meta events after every render (delegation sur #hse-cfg-asg-body détruit au innerHTML)
+    // FIX: _bindMetaEvents() est appelé dans _renderMeta() pour les éléments qui persistent (toolbar, modal)
+    // La délégation d'événements pour les assignations est gérée dans _buildDOM() sur #hse-cfg-meta-body
     this._bindMetaEvents(this._el);
   }
 
@@ -1401,12 +1410,12 @@ export class ConfigView {
     const btn = this._el?.querySelector(`[data-type-delete="${this._attrVal(typeName)}"]`);
     if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
     try {
-      // Utilise fetch direct avec AbortController pour timeout fiable (non bloquant)
+      // FIX bug #3: timeout réduit à 10s + fallback si AbortError
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s max
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
       const resp = await fetch(this._ctx.hassUrl + '/api/hse/meta', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this._ctx.hass?.auth?.accessToken || ''}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this._ctx.hass?.auth?.accessToken || window.__hseToken || ''}` },
         body: JSON.stringify({ action: 'delete_type', name: typeName }),
         signal: controller.signal,
       });
@@ -1418,7 +1427,10 @@ export class ConfigView {
       this._metaSig = null; await this._loadMeta();
     } catch (e) {
       if (e.name === 'AbortError') {
-        alert('Suppression expirée (15s) — le serveur a peut-être traité la requête. Rafraîchissez la page.');
+        // FIX: au lieu de bloquer, recharger les données et informer l'utilisateur
+        this._metaSig = null;
+        try { await this._loadMeta(); } catch (_) {}
+        alert('Suppression du type prend plus de temps que prévu. La page a été rafraîchie — vérifiez si le type a été supprimé.');
         return;
       }
       alert(`Erreur : ${e.message}`);

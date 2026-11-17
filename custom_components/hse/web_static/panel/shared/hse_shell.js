@@ -46,7 +46,7 @@ body {
   background: var(--hse-bg, #f7f9ff);
   height: 100%;
   min-height: 100dvh;
-  overflow: hidden;
+  overflow: auto;
   display: flex;
   flex-direction: column;
 }
