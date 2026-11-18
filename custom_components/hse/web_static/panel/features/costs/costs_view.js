@@ -62,6 +62,15 @@ table.hse-costs__table { width: 100%; border-collapse: collapse; font-size: 0.87
 @media(prefers-reduced-motion:reduce){ .hse-skeleton { animation:none; } }
 .hse-error { color:#f87171; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2); border-radius:10px; padding:12px 16px; font-size:0.875rem; }
 .hse-empty { text-align:center; padding:48px 16px; color:rgba(255,255,255,0.35); }
+.hse-cfg__abonnement { margin-top: 14px; padding: 12px 16px; background: rgba(232,121,249,0.05); border: 1px solid rgba(232,121,249,0.12); border-radius: 10px; display: flex; flex-direction: column; gap: 10px; }
+.hse-cfg__abonnement-header { display: flex; align-items: center; justify-content: space-between; }
+.hse-cfg__abonnement-title { font-size: 0.78rem; font-weight: 600; color: rgba(255,255,255,0.7); text-transform: uppercase; letter-spacing: 0.04em; }
+.hse-cfg__abonnement-badge { font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: rgba(232,121,249,0.15); color: #e879f9; }
+.hse-cfg__abonnement-grid { display: flex; gap: 16px; flex-wrap: wrap; }
+.hse-cfg__abonnement-item { display: flex; flex-direction: column; gap: 1px; }
+.hse-cfg__abonnement-label { font-size: 0.7rem; color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 0.03em; }
+.hse-cfg__abonnement-value { font-size: 0.92rem; font-weight: 600; color: rgba(255,255,255,0.9); }
+.hse-cfg__abonnement-value--ttc { color: #e879f9; font-weight: 700; }
 `;
 
 const POLLING_INTERVAL = 60000;
@@ -151,6 +160,28 @@ export class CostsView {
               <span class="hse-costs__total-value" id="hse-total-value">${totalTtc.toFixed(2)} €</span>
               <span class="hse-costs__total-sub" id="hse-total-kwh">${totalKwh.toFixed(2)} kWh</span>
             </div>
+            ${data.subscription ? `
+              <div class="hse-cfg__abonnement">
+                <div class="hse-cfg__abonnement-header">
+                  <span class="hse-cfg__abonnement-title">Abonnement énergie</span>
+                  <span class="hse-cfg__abonnement-badge">${data.subscription.ttc.toFixed(2)} € TTC/mois</span>
+                </div>
+                <div class="hse-cfg__abonnement-grid">
+                  <div class="hse-cfg__abonnement-item">
+                    <span class="hse-cfg__abonnement-label">HT</span>
+                    <span class="hse-cfg__abonnement-value">${data.subscription.ht.toFixed(2)} €</span>
+                  </div>
+                  <div class="hse-cfg__abonnement-item">
+                    <span class="hse-cfg__abonnement-label">TVA</span>
+                    <span class="hse-cfg__abonnement-value">${data.subscription.tva.toFixed(2)} €</span>
+                  </div>
+                  <div class="hse-cfg__abonnement-item">
+                    <span class="hse-cfg__abonnement-label">TTC</span>
+                    <span class="hse-cfg__abonnement-value hse-cfg__abonnement-value--ttc">${data.subscription.ttc.toFixed(2)} €</span>
+                  </div>
+                </div>
+              </div>
+            ` : ''}
           </div>
           <div id="hse-costs-ref" class="hse-costs__ref" data-level="ok"></div>
           <div class="hse-costs__table-wrap">
@@ -178,12 +209,27 @@ export class CostsView {
         totalKwh: this._el.querySelector('#hse-total-kwh'),
         tbody: this._el.querySelector('#hse-costs-tbody'),
         ref: this._el.querySelector('#hse-costs-ref'),
+        subHt: this._el.querySelector('.hse-cfg__abonnement-item:nth-child(1) .hse-cfg__abonnement-value'),
+        subTva: this._el.querySelector('.hse-cfg__abonnement-item:nth-child(2) .hse-cfg__abonnement-value'),
+        subTtc: this._el.querySelector('.hse-cfg__abonnement-item:nth-child(3) .hse-cfg__abonnement-value'),
+        subBadge: this._el.querySelector('.hse-cfg__abonnement-badge'),
+        subBox: this._el.querySelector('.hse-cfg__abonnement'),
       };
       this._bindEvents();
     } else {
       // Mises à jour textContent uniquement
       this._els.totalValue.textContent = totalTtc.toFixed(2) + ' €';
       this._els.totalKwh.textContent = totalKwh.toFixed(2) + ' kWh';
+      // Mise à jour de l'abonnement (HT / TVA / TTC)
+      if (data.subscription) {
+        if (this._els.subBox) this._els.subBox.style.display = 'flex';
+        if (this._els.subHt) this._els.subHt.textContent = data.subscription.ht.toFixed(2) + ' €';
+        if (this._els.subTva) this._els.subTva.textContent = data.subscription.tva.toFixed(2) + ' €';
+        if (this._els.subTtc) this._els.subTtc.textContent = data.subscription.ttc.toFixed(2) + ' €';
+        if (this._els.subBadge) this._els.subBadge.textContent = data.subscription.ttc.toFixed(2) + ' € TTC/mois';
+      } else if (this._els.subBox) {
+        this._els.subBox.style.display = 'none';
+      }
       // Rebuild tbody (peu de lignes, OK)
       this._els.tbody.innerHTML = items.length ? items.map(item => this._renderRow(item, totalTtc)).join('') : '<tr><td colspan="7" class="hse-empty">Aucun appareil sélectionné</td></tr>';
     }

@@ -74,7 +74,7 @@ def cost_eur(
 
 
 def subscription_eur_month(settings: dict[str, Any]) -> float:
-    """Abonnement mensuel HT en euros."""
+    """Abonnement mensuel TTC en euros (stocké en TTC)."""
     return round(_safe_float(settings.get("subscription_eur_month")), 2)
 
 
@@ -97,6 +97,26 @@ def subscription_prorata(settings: dict[str, Any], period: str) -> float:
     return 0.0
 
 
+def subscription_breakdown(settings: dict[str, Any]) -> dict[str, float]:
+    """Détail de l'abonnement mensuel : HT, TVA, TTC.
+
+    L'abonnement est stocké en TTC (`subscription_eur_month`).
+    La TVA est calculée à partir de `tax_rate_pct`.
+    Retourne {ht, tva, ttc, tax_rate_pct}.
+    """
+    ttc = subscription_eur_month(settings)
+    tax_pct = _safe_float(settings.get("tax_rate_pct"), 20.0)
+    tax = tax_pct / 100.0
+    ht = round(ttc / (1 + tax), 2)
+    tva = round(ttc - ht, 2)
+    return {"ht": ht, "tva": tva, "ttc": ttc, "tax_rate_pct": round(tax_pct, 1)}
+
+
+def subscription_prorata_ttc(settings: dict[str, Any], period: str) -> float:
+    """Abonnement proratisé TTC selon la période."""
+    return subscription_prorata(settings, period)
+
+
 def cost_summary(
     energy_kwh: float,
     settings: dict[str, Any],
@@ -113,9 +133,10 @@ def cost_summary(
     """
     costs = cost_eur(energy_kwh, settings, is_hc=is_hc)
     sub = subscription_eur_month(settings) if include_subscription else 0.0
+    tax = _safe_float(settings.get("tax_rate_pct"), 20.0) / 100.0
     return {
         "energy_kwh": round(energy_kwh, 3),
-        "cost_ht_eur": round(costs["ht"] + sub / (1.0 + _safe_float(settings.get("tax_rate_pct"), 20.0) / 100.0), 2),
+        "cost_ht_eur": round(costs["ht"] + sub / (1 + tax), 2),
         "cost_ttc_eur": round(costs["ttc"] + sub, 2),
         "subscription_eur": round(sub, 2),
     }

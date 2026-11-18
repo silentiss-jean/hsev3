@@ -1,6 +1,6 @@
 /**
  * config_view.js — Onglet Configuration HSE V3
- * Onglet C : saisie libre HT + TTC, pas de champ TVA, pas de calcul auto
+ * Onglet C : Abonnement en TTC (€/mois TTC), TVA auto-calculée depuis HT/TTC
  */
 
 const CSS = `
@@ -13,6 +13,8 @@ const CSS = `
 .hse-cfg__panel.active { display:block; }
 .hse-btn { padding:7px 14px; border-radius:6px; border:1px solid transparent; font-size:0.82rem; font-family:inherit; cursor:pointer; transition:opacity 150ms,background 150ms; white-space:nowrap; }
 .hse-btn:disabled { opacity:0.38; cursor:not-allowed; }
+.hse-btn--primary:disabled { background:rgba(232,121,249,0.3); }
+.hse-btn--danger:disabled { background:rgba(239,68,68,0.1); }
 .hse-btn--primary { background:#e879f9; color:#000; font-weight:600; }
 .hse-btn--primary:hover:not(:disabled) { opacity:0.85; }
 .hse-btn--ghost { background:rgba(255,255,255,0.07); border-color:rgba(255,255,255,0.15); color:rgba(255,255,255,0.8); }
@@ -38,6 +40,11 @@ const CSS = `
 .hse-cfg__search:focus { border-color:#e879f9; }
 .hse-cfg__search::placeholder { color:rgba(255,255,255,0.3); }
 .hse-cfg__filter { padding:7px 12px; border:1px solid rgba(255,255,255,0.12); border-radius:6px; background:rgba(255,255,255,0.05); color:inherit; font-size:0.875rem; font-family:inherit; cursor:pointer; outline:none; }
+.hse-cfg__filter:focus { border-color:#e879f9; }
+.hse-cfg__filter--advanced { max-width:160px; }
+.hse-cfg__filter-count { font-size:0.78rem; color:rgba(255,255,255,0.4); white-space:nowrap; }
+.hse-cfg__filter-count.has-filters { color:#e879f9; font-weight:600; }
+.hse-cfg__filter-reset.hidden { display:none; }
 .hse-cfg__bulk { display:none; align-items:center; gap:8px; flex-wrap:wrap; padding:7px 12px; background:rgba(232,121,249,0.08); border:1px solid rgba(232,121,249,0.2); border-radius:8px; font-size:0.82rem; margin-bottom:8px; }
 .hse-cfg__bulk.visible { display:flex; }
 .hse-cfg__bulk-label { flex:1; color:rgba(255,255,255,0.6); }
@@ -50,6 +57,10 @@ const CSS = `
 .hse-cfg__group-name { font-size:0.82rem; font-weight:600; color:rgba(255,255,255,0.85); }
 .hse-cfg__group-count { margin-left:4px; font-size:0.72rem; font-weight:600; padding:1px 6px; border-radius:999px; background:rgba(232,121,249,0.15); color:#e879f9; }
 .hse-cfg__group-summary { margin-left:auto; display:flex; gap:6px; align-items:center; font-size:0.72rem; color:rgba(255,255,255,0.4); }
+.hse-cfg__group-badge { padding:2px 6px; border-radius:4px; font-size:0.68rem; font-weight:500; white-space:nowrap; }
+.hse-cfg__group-badge--selected { background:rgba(74,222,128,0.15); color:#4ade80; }
+.hse-cfg__group-badge--ignored { background:rgba(255,255,255,0.08); color:rgba(255,255,255,0.5); }
+.hse-cfg__group-badge--pending { background:rgba(250,204,21,0.12); color:#facc15; }
 .hse-cfg__group-selall { display:flex; gap:6px; padding:6px 12px; border-bottom:1px solid rgba(255,255,255,0.06); flex-wrap:wrap; align-items:center; }
 .hse-cfg__group-body { display:none; }
 .hse-cfg__group.open .hse-cfg__group-body { display:block; }
@@ -95,6 +106,7 @@ const CSS = `
 .hse-cfg__hp-hc.visible { display:flex; }
 .hse-cfg__save-row { display:flex; align-items:center; gap:10px; }
 .hse-cfg__save-status { font-size:0.8rem; color:rgba(255,255,255,0.4); }
+.hse-cfg__auto-badge { font-size:0.65rem; font-weight:600; color:#e879f9; background:rgba(232,121,249,0.15); padding:1px 6px; border-radius:999px; margin-left:6px; vertical-align:middle; }
 .hse-cfg__grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
 @media(max-width:600px){ .hse-cfg__grid { grid-template-columns:1fr; } }
 .hse-cfg__card { border:1px solid rgba(255,255,255,0.08); border-radius:10px; background:rgba(255,255,255,0.02); overflow:hidden; }
@@ -200,10 +212,29 @@ export class ConfigView {
           <select id="hse-cfg-status-filter" class="hse-cfg__filter">
             <option value="all">Tous</option><option value="selected">Sélectionnés</option><option value="ignored">Ignorés</option><option value="pending">En attente</option>
           </select>
-          <button id="hse-cfg-refresh-btn" class="hse-btn hse-btn--ghost hse-btn--sm">🔄 Rafraîchir</button>
-          <button id="hse-cfg-expand-btn" class="hse-btn hse-btn--ghost hse-btn--sm" title="Tout déplier / Replier">⊞ Déplier tout</button>
-          <button id="hse-cfg-select-all-btn" class="hse-btn hse-btn--ghost hse-btn--sm">✓ Tout sélectionner</button>
-          <button id="hse-cfg-select-none-btn" class="hse-btn hse-btn--ghost hse-btn--sm">✕ Tout désélectionner</button>
+          <select id="hse-cfg-type-filter" class="hse-cfg__filter hse-cfg__filter--advanced" title="Filtrer par type">
+            <option value="all">📁 Tous les types</option>
+          </select>
+          <select id="hse-cfg-integ-filter" class="hse-cfg__filter hse-cfg__filter--advanced" title="Filtrer par intégration">
+            <option value="all">🔌 Toutes intégrations</option>
+          </select>
+          <select id="hse-cfg-device-filter" class="hse-cfg__filter hse-cfg__filter--advanced" title="Filtrer par appareil">
+            <option value="all">📱 Tous appareils</option>
+          </select>
+          <select id="hse-cfg-score-filter" class="hse-cfg__filter hse-cfg__filter--advanced" title="Filtrer par score qualité">
+            <option value="all">⭐ Tous scores</option>
+            <option value="BON">🟢 BON (≥80)</option>
+            <option value="ACCEPTABLE">🟡 ACCEPTABLE (≥50)</option>
+            <option value="MOYEN">🟠 MOYEN (≥30)</option>
+            <option value="MAUVAIS">🔴 MAUVAIS (&lt;30)</option>
+            <option value="none">⚪ Non évalué</option>
+          </select>
+          <button id="hse-cfg-filter-reset" class="hse-btn hse-btn--ghost hse-btn--sm hse-cfg__filter-reset hidden" title="Réinitialiser tous les filtres">↺ Reset</button>
+          <span id="hse-cfg-filter-count" class="hse-cfg__filter-count"></span>
+          <button id="hse-cfg-refresh-btn" class="hse-btn hse-btn--ghost hse-btn--sm">🔄</button>
+          <button id="hse-cfg-expand-btn" class="hse-btn hse-btn--ghost hse-btn--sm" title="Tout déplier / Replier">⊞</button>
+          <button id="hse-cfg-bulk-activate-all" class="hse-btn hse-btn--primary hse-btn--sm" title="Activer tous les capteurs filtrés">⭐ Tout activer</button>
+          <button id="hse-cfg-bulk-ignore-all" class="hse-btn hse-btn--danger hse-btn--sm" title="Ignorer tous les capteurs filtrés">🚫 Tout ignorer</button>
         </div>
         <div id="hse-cfg-bulk" class="hse-cfg__bulk">
           <span id="hse-cfg-bulk-label" class="hse-cfg__bulk-label">0 sélectionné(s)</span>
@@ -397,11 +428,28 @@ export class ConfigView {
     let deb;
     root.querySelector('.hse-cfg__search').addEventListener('input', e => {
       clearTimeout(deb);
-      deb = setTimeout(() => { this._catQ = e.target.value.trim(); this._catPage = 1; this._catSig = null; this._loadCatalogue(); }, 350);
+      deb = setTimeout(() => { this._catQ = e.target.value.trim(); this._catPage = 1; this._catSig = null; this._applyFilters(); }, 350);
     });
     root.querySelector('#hse-cfg-status-filter').addEventListener('change', e => {
-      this._catStatus = e.target.value; this._catPage = 1; this._catSig = null; this._loadCatalogue();
+      this._catStatus = e.target.value; this._catPage = 1; this._catSig = null; this._applyFilters();
     });
+    // Nouveaux filtres avancés
+    const typeFilter = root.querySelector('#hse-cfg-type-filter');
+    const integFilter = root.querySelector('#hse-cfg-integ-filter');
+    const deviceFilter = root.querySelector('#hse-cfg-device-filter');
+    const scoreFilter = root.querySelector('#hse-cfg-score-filter');
+    if (typeFilter) typeFilter.addEventListener('change', e => { this._catType = e.target.value; this._catPage = 1; this._catSig = null; this._applyFilters(); });
+    if (integFilter) integFilter.addEventListener('change', e => { this._catInteg = e.target.value; this._catPage = 1; this._catSig = null; this._applyFilters(); });
+    if (deviceFilter) deviceFilter.addEventListener('change', e => { this._catDevice = e.target.value; this._catPage = 1; this._catSig = null; this._applyFilters(); });
+    if (scoreFilter) scoreFilter.addEventListener('change', e => { this._catScore = e.target.value; this._catPage = 1; this._catSig = null; this._applyFilters(); });
+    // Bouton reset filtres
+    const resetBtn = root.querySelector('#hse-cfg-filter-reset');
+    if (resetBtn) resetBtn.addEventListener('click', () => this._resetFilters());
+    // Actions globales
+    const activateAllBtn = root.querySelector('#hse-cfg-bulk-activate-all');
+    if (activateAllBtn) activateAllBtn.addEventListener('click', () => this._bulkActionAll('select'));
+    const ignoreAllBtn = root.querySelector('#hse-cfg-bulk-ignore-all');
+    if (ignoreAllBtn) ignoreAllBtn.addEventListener('click', () => this._bulkActionAll('ignore'));
     root.querySelector('#hse-cfg-refresh-btn').addEventListener('click', () => { this._catSig = null; this._loadCatalogue(); });
     // FIX feat : bouton Déplier tout / Replier tout
     root.querySelector('#hse-cfg-expand-btn').addEventListener('click', () => {
@@ -426,14 +474,424 @@ export class ConfigView {
     root.querySelector('#hse-cfg-mode-conseiller').addEventListener('click', () => this._setMode('conseiller'));
     root.querySelector('#hse-cfg-mode-custom').addEventListener('click', () => this._setMode('custom'));
     root.querySelector('#hse-cfg-mode-reflexion').addEventListener('click', () => this._setMode('reflexion'));
-    root.querySelector('#hse-cfg-select-all-btn').addEventListener('click', () => {
+    root.querySelector('#hse-cfg-select-all-btn')?.addEventListener('click', () => {
       const cbs = this._el?.querySelectorAll('.hse-cfg__cb');
       cbs.forEach(cb => { cb.checked = true; cb.dispatchEvent(new Event('change')); });
     });
-    root.querySelector('#hse-cfg-select-none-btn').addEventListener('click', () => {
+    root.querySelector('#hse-cfg-select-none-btn')?.addEventListener('click', () => {
       const cbs = this._el?.querySelectorAll('.hse-cfg__cb');
       cbs.forEach(cb => { cb.checked = false; cb.dispatchEvent(new Event('change')); });
     });
+  }
+
+  _applyFilters() {
+    // Si des filtres avancés sont actifs, filtrer côté client
+    // Sinon, charger depuis l'API (comportement existant)
+    const hasAdvanced = (this._catType && this._catType !== 'all') ||
+                        (this._catInteg && this._catInteg !== 'all') ||
+                        (this._catDevice && this._catDevice !== 'all') ||
+                        (this._catScore && this._catScore !== 'all');
+    if (hasAdvanced && this._catData?.items) {
+      this._renderFilteredCatalogue();
+    } else {
+      this._loadCatalogue();
+    }
+  }
+
+  _renderFilteredCatalogue() {
+    const d = this._catData;
+    if (!d) return;
+    let items = d.items ?? [];
+    const totalBefore = items.length;
+
+    // Filtre par type
+    if (this._catType && this._catType !== 'all') {
+      items = items.filter(i => (i.type ?? '').toLowerCase() === this._catType.toLowerCase());
+    }
+    // Filtre par intégration
+    if (this._catInteg && this._catInteg !== 'all') {
+      items = items.filter(i => (i.integration_domain ?? i.integration ?? 'inconnu') === this._catInteg);
+    }
+    // Filtre par device
+    if (this._catDevice && this._catDevice !== 'all') {
+      if (this._catDevice === '__none__') {
+        items = items.filter(i => !i.device_id);
+      } else {
+        items = items.filter(i => i.device_id === this._catDevice);
+      }
+    }
+    // Filtre par score
+    if (this._catScore && this._catScore !== 'all') {
+      const score = this._catScore;
+      items = items.filter(i => {
+        const s = i.quality_score ?? i.score;
+        if (s === null || s === undefined) return score === 'none';
+        if (score === 'BON') return s >= 80;
+        if (score === 'ACCEPTABLE') return s >= 50 && s < 80;
+        if (score === 'MOYEN') return s >= 30 && s < 50;
+        if (score === 'MAUVAIS') return s < 30;
+        return true;
+      });
+    }
+
+    // Mettre à jour le compteur
+    this._updateFilterCount(totalBefore, items.length);
+
+    // Rendre les groupes filtrés
+    if (!items.length) {
+      this._setCatBody(`<div class="hse-empty"><div class="hse-empty-icon">🔍</div><p>Aucun appareil ne correspond aux filtres.</p></div>`);
+      return;
+    }
+
+    const groups = {};
+    for (const item of items) {
+      const key = item.integration_domain ?? item.integration ?? 'inconnu';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    }
+    if (this._openGroups.size === 0) Object.keys(groups).forEach(k => this._openGroups.add(k));
+
+    const modePanel = this._renderModePanel(this._activeMode || 'custom', d);
+    const html = Object.entries(groups).sort(([a],[b]) => a.localeCompare(b))
+      .map(([integ, gItems]) => this._renderGroup(integ, gItems)).join('');
+    this._setCatBody(`${modePanel}<div class="hse-cfg__groups">${html}</div>`);
+    this._bindGroupEvents(); this._bindModeEvents(); this._renderCatPager(d);
+    this._syncExpandBtn();
+  }
+
+  _updateFilterCount(before, after) {
+    const countEl = this._el?.querySelector('#hse-cfg-filter-count');
+    const resetBtn = this._el?.querySelector('#hse-cfg-filter-reset');
+    const hasFilters = (this._catType && this._catType !== 'all') ||
+                       (this._catInteg && this._catInteg !== 'all') ||
+                       (this._catDevice && this._catDevice !== 'all') ||
+                       (this._catScore && this._catScore !== 'all');
+    if (countEl) {
+      if (hasFilters) {
+        countEl.textContent = `${after} / ${before} affichés`;
+        countEl.classList.add('has-filters');
+      } else {
+        countEl.textContent = '';
+        countEl.classList.remove('has-filters');
+      }
+    }
+    if (resetBtn) {
+      resetBtn.classList.toggle('hidden', !hasFilters);
+    }
+  }
+
+  _resetFilters() {
+    this._catType = 'all';
+    this._catInteg = 'all';
+    this._catDevice = 'all';
+    this._catScore = 'all';
+    this._catQ = '';
+    this._catStatus = 'all';
+    this._catPage = 1;
+    this._catSig = null;
+    // Reset UI
+    const root = this._el;
+    if (root) {
+      const search = root.querySelector('.hse-cfg__search');
+      if (search) search.value = '';
+      const selects = ['#hse-cfg-status-filter', '#hse-cfg-type-filter', '#hse-cfg-integ-filter', '#hse-cfg-device-filter', '#hse-cfg-score-filter'];
+      selects.forEach(sel => {
+        const el = root.querySelector(sel);
+        if (el) el.value = 'all';
+      });
+      const countEl = root.querySelector('#hse-cfg-filter-count');
+      if (countEl) { countEl.textContent = ''; countEl.classList.remove('has-filters'); }
+      const resetBtn = root.querySelector('#hse-cfg-filter-reset');
+      if (resetBtn) resetBtn.classList.add('hidden');
+    }
+    this._loadCatalogue();
+  }
+
+  _bulkActionAll(action) {
+    const items = this._catData?.items ?? [];
+    // Filtrer les items selon les filtres actifs
+    let filtered = items;
+    if (this._catType && this._catType !== 'all') filtered = filtered.filter(i => (i.type ?? '').toLowerCase() === this._catType.toLowerCase());
+    if (this._catInteg && this._catInteg !== 'all') filtered = filtered.filter(i => (i.integration_domain ?? i.integration ?? 'inconnu') === this._catInteg);
+    if (this._catDevice && this._catDevice !== 'all') {
+      filtered = this._catDevice === '__none__' ? filtered.filter(i => !i.device_id) : filtered.filter(i => i.device_id === this._catDevice);
+    }
+    if (this._catScore && this._catScore !== 'all') {
+      filtered = this._catScore === 'none' ? filtered.filter(i => (i.quality_score ?? i.score ?? null) === null) : filtered.filter(i => (i.quality_level ?? i.quality ?? '') === this._catScore);
+    }
+    if (!filtered.length) {
+      alert('ℹ Aucun capteur ne correspond aux filtres actuels.');
+      return;
+    }
+
+    const count = filtered.length;
+    const actionLabel = action === 'select' ? 'activer' : 'ignorer';
+    const actionEmoji = action === 'select' ? '⭐' : '🚫';
+    const actionColor = action === 'select' ? '#4ade80' : '#f87171';
+    
+    // Confirmation pour les actions importantes
+    if (count > 20) {
+      const confirmed = confirm(`${actionEmoji} ATTENTION : ${count} capteurs vont être ${actionLabel}s.\n\nCette action est irréversible. Confirmer ?`);
+      if (!confirmed) return;
+    } else if (count > 5) {
+      const confirmed = confirm(`${actionEmoji} ${count} capteurs vont être ${actionLabel}s. Confirmer ?`);
+      if (!confirmed) return;
+    }
+
+    // Afficher un indicateur de chargement
+    const btn = this._el?.querySelector(`#hse-cfg-bulk-${action === 'select' ? 'activate' : 'ignore'}-all`);
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '⏳ En cours...';
+    }
+
+    // Collecter les entity_ids
+    const eids = filtered.map(i => i.entity_id);
+    // Envoyer au serveur (format: items = [{entity_id, action}])
+    this._ctx.hseFetch('/api/hse/catalogue/triage/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: eids.map(eid => ({ entity_id: eid, action })) }),
+    }).then(r => r.json()).then((data) => {
+      // Afficher le résultat
+      const processed = data.processed ?? count;
+      const errors = data.errors ?? [];
+      
+      if (errors.length > 0) {
+        alert(`${actionEmoji} Action effectuée : ${processed} capteur(s) ${actionLabel}(s), ${errors.length} erreur(s).`);
+      } else {
+        alert(`${actionEmoji} Succès : ${processed} capteur(s) ${actionLabel}(s).`);
+      }
+      
+      // Recharger
+      this._catSig = null;
+      this._loadCatalogue();
+    }).catch(e => {
+      console.error('Bulk action all failed:', e);
+      alert('❌ Erreur lors de l\'action groupée. Veuillez réessayer.');
+    }).finally(() => {
+      // Restaurer le bouton
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = action === 'select' ? '⭐ Tout activer' : '🚫 Tout ignorer';
+      }
+    });
+  }
+
+  _syncExpandBtn() {
+    const btn = this._el?.querySelector('#hse-cfg-expand-btn');
+    if (btn) {
+      const anyOpen = Array.from(this._el?.querySelectorAll('.hse-cfg__group') ?? []).some(g => g.classList.contains('open'));
+      btn.textContent = anyOpen ? '⊟ Replier tout' : '⊞ Déplier tout';
+    }
+  }
+
+  _populateFilterOptions(items) {
+    // Populer les options des filtres à partir des données du catalogue
+    const typeEl = this._el?.querySelector('#hse-cfg-type-filter');
+    const integEl = this._el?.querySelector('#hse-cfg-integ-filter');
+    const deviceEl = this._el?.querySelector('#hse-cfg-device-filter');
+    if (!typeEl && !integEl && !deviceEl) return;
+
+    // Types uniques
+    const types = new Set();
+    const integs = new Set();
+    const devices = new Set();
+    for (const item of items) {
+      if (item.type) types.add(item.type);
+      const integ = item.integration_domain ?? item.integration ?? 'inconnu';
+      integs.add(integ);
+      if (item.device_id) devices.add(item.device_id);
+    }
+
+    // Filtre type : masquer si aucun type défini
+    if (typeEl) {
+      if (types.size === 0) {
+        typeEl.style.display = 'none';
+      } else {
+        typeEl.style.display = '';
+        const typeOpts = ['<option value="all">📁 Tous les types</option>'];
+        for (const t of [...types].sort()) {
+          const icon = this._getTypeIcon(t);
+          typeOpts.push(`<option value="${this._esc(t)}">${icon} ${this._esc(t)}</option>`);
+        }
+        typeEl.innerHTML = typeOpts.join('');
+      }
+    }
+
+    // Filtre intégration : toujours visible
+    if (integEl) {
+      const integOpts = ['<option value="all">🔌 Toutes intégrations</option>'];
+      for (const i of [...integs].sort()) {
+        const label = this._getIntegLabel(i);
+        const icon = this._getIntegIcon(i);
+        integOpts.push(`<option value="${this._esc(i)}">${icon} ${this._esc(label)}</option>`);
+      }
+      integEl.innerHTML = integOpts.join('');
+    }
+
+    // Filtre device : masquer si aucun device_id
+    if (deviceEl) {
+      if (devices.size === 0) {
+        deviceEl.style.display = 'none';
+      } else {
+        deviceEl.style.display = '';
+        const deviceOpts = ['<option value="all">📱 Tous appareils</option>'];
+        for (const d of [...devices].sort()) {
+          const short = d.length > 20 ? d.substring(0, 20) + '…' : d;
+          deviceOpts.push(`<option value="${this._esc(d)}">${this._esc(short)}</option>`);
+        }
+        deviceOpts.push('<option value="__none__">📱 Non assigné</option>');
+        deviceEl.innerHTML = deviceOpts.join('');
+      }
+    }
+  }
+
+  _getTypeIcon(type) {
+    const key = (type ?? '').toLowerCase();
+    return TYPE_ICON[key] ?? '❓';
+  }
+
+  _getIntegLabel(domain) {
+    const labels = {
+      'integration': 'Intégration générique',
+      'tapo': 'Tapo',
+      'tplink': 'TP-Link',
+      'tuya': 'Tuya',
+      'hue': 'Philips Hue',
+      'utility_meter': 'Compteurs utilitaires',
+      'sensor': 'Capteurs',
+      'template': 'Template',
+      'mqtt': 'MQTT',
+      'esphome': 'ESPHome',
+      'zha': 'ZHA',
+      'zigbee2mqtt': 'Zigbee2MQTT',
+      'deconz': 'deCONZ',
+      'homekit': 'HomeKit',
+      'homekit_controller': 'HomeKit Controller',
+      'matter': 'Matter',
+      'smartthings': 'SmartThings',
+      'wemo': 'Wemo',
+      'kasa': 'Kasa',
+      'shelly': 'Shelly',
+      'lifx': 'LIFX',
+      'nanoleaf': 'Nanoleaf',
+      'yeelight': 'Yeelight',
+      'wiz': 'WiZ',
+      'tradfri': 'IKEA TRÅDFRI',
+      'ikea': 'IKEA',
+      'philips_js': 'Philips TV',
+      'samsungtv': 'Samsung TV',
+      'lg': 'LG',
+      'sonos': 'Sonos',
+      'chromecast': 'Chromecast',
+      'apple_tv': 'Apple TV',
+      'netatmo': 'Netatmo',
+      'withings': 'Withings',
+      'fitbit': 'Fitbit',
+      'google_fit': 'Google Fit',
+      'todoist': 'Todoist',
+      'google_tasks': 'Google Tasks',
+      'calendar': 'Calendrier',
+      'weather': 'Météo',
+      'meteo_france': 'Météo-France',
+      'openweathermap': 'OpenWeatherMap',
+      'darksky': 'Dark Sky',
+      'accuweather': 'AccuWeather',
+      'airvisual': 'AirVisual',
+      'purpleair': 'PurpleAir',
+      'waze': 'Waze',
+      'google_maps': 'Google Maps',
+      'icloud': 'iCloud',
+      'mobile_app': 'Application mobile',
+      'device_tracker': 'Suivi d\'appareil',
+      'person': 'Personne',
+      'zone': 'Zone',
+      'automation': 'Automatisation',
+      'script': 'Script',
+      'scene': 'Scène',
+      'group': 'Groupe',
+      'input_boolean': 'Booléen',
+      'input_number': 'Nombre',
+      'input_text': 'Texte',
+      'input_select': 'Sélection',
+      'input_datetime': 'Date/Heure',
+      'counter': 'Compteur',
+      'timer': 'Minuteur',
+      'schedule': 'Planification',
+    };
+    return labels[domain] ?? domain;
+  }
+
+  _getIntegIcon(domain) {
+    const icons = {
+      'integration': '🔌',
+      'tapo': '📷',
+      'tplink': '🔌',
+      'tuya': '💡',
+      'hue': '💡',
+      'utility_meter': '📊',
+      'sensor': '📡',
+      'template': '📝',
+      'mqtt': '📡',
+      'esphome': '🔧',
+      'zha': '📡',
+      'zigbee2mqtt': '📡',
+      'deconz': '📡',
+      'homekit': '🏠',
+      'homekit_controller': '🏠',
+      'matter': '📦',
+      'smartthings': '📱',
+      'wemo': '🔌',
+      'kasa': '🔌',
+      'shelly': '🔌',
+      'lifx': '💡',
+      'nanoleaf': '💡',
+      'yeelight': '💡',
+      'wiz': '💡',
+      'tradfri': '💡',
+      'ikea': '💡',
+      'philips_js': '📺',
+      'samsungtv': '📺',
+      'lg': '📺',
+      'sonos': '🔊',
+      'chromecast': '📺',
+      'apple_tv': '📺',
+      'netatmo': '🌡️',
+      'withings': '⚖️',
+      'fitbit': '⌚',
+      'google_fit': '⌚',
+      'todoist': '✅',
+      'google_tasks': '✅',
+      'calendar': '📅',
+      'weather': '🌤️',
+      'meteo_france': '🌤️',
+      'openweathermap': '🌤️',
+      'darksky': '🌤️',
+      'accuweather': '🌤️',
+      'airvisual': '🌫️',
+      'purpleair': '🌫️',
+      'waze': '🚗',
+      'google_maps': '🗺️',
+      'icloud': '☁️',
+      'mobile_app': '📱',
+      'device_tracker': '📱',
+      'person': '👤',
+      'zone': '📍',
+      'automation': '🤖',
+      'script': '📜',
+      'scene': '🎬',
+      'group': '📁',
+      'input_boolean': '🔘',
+      'input_number': '🔢',
+      'input_text': '📝',
+      'input_select': '📋',
+      'input_datetime': '📅',
+      'counter': '🔢',
+      'timer': '⏱️',
+      'schedule': '📅',
+    };
+    return icons[domain] ?? '🔌';
   }
 
   async _loadCatalogue() {
@@ -459,6 +917,8 @@ export class ConfigView {
     const d = this._catData; if (!d) return;
     const items = d.items ?? [];
     if (!items.length) { this._setCatBody(`<div class="hse-empty"><div class="hse-empty-icon">📦</div><p>Aucun appareil catalogué.</p></div>`); return; }
+    // Populer les options des filtres avec les données du catalogue
+    this._populateFilterOptions(items);
     const groups = {};
     for (const item of items) {
       const key = item.integration_domain ?? item.integration ?? 'inconnu';
@@ -482,18 +942,29 @@ export class ConfigView {
   _renderGroup(integ, items) {
     const isOpen = this._openGroups.has(integ);
     const selCount = items.filter(i => i.status === 'selected').length;
+    const ignCount = items.filter(i => i.status === 'ignored').length;
+    const penCount = items.filter(i => i.status === 'pending' || !i.status).length;
     const rows = items.map(item => this._renderSensorRow(item)).join('');
+    const displayName = this._getIntegLabel(integ);
+    const icon = this._getIntegIcon(integ);
     return `
       <div class="hse-cfg__group ${isOpen ? 'open' : ''}" data-group="${this._attrVal(integ)}">
         <div class="hse-cfg__group-head">
           <span class="hse-cfg__group-arrow">▶</span>
-          <span class="hse-cfg__group-name">${this._esc(integ)}</span>
+          <span class="hse-cfg__type-icon">${icon}</span>
+          <span class="hse-cfg__group-name">${this._esc(displayName)}</span>
           <span class="hse-cfg__group-count">${items.length}</span>
-          <span class="hse-cfg__group-summary">${selCount} actif${selCount>1?'s':''}/ ${items.length}</span>
+          <span class="hse-cfg__group-summary">
+            ${selCount > 0 ? `<span class="hse-cfg__group-badge hse-cfg__group-badge--selected">✓ ${selCount} sélectionné${selCount > 1 ? 's' : ''}</span>` : ''}
+            ${ignCount > 0 ? `<span class="hse-cfg__group-badge hse-cfg__group-badge--ignored">✕ ${ignCount} ignoré${ignCount > 1 ? 's' : ''}</span>` : ''}
+            ${penCount > 0 ? `<span class="hse-cfg__group-badge hse-cfg__group-badge--pending">⏳ ${penCount} en attente</span>` : ''}
+          </span>
         </div>
         <div class="hse-cfg__group-selall">
-          <button class="hse-btn hse-btn--sm hse-btn--ghost" data-grp-sel="${this._attrVal(integ)}" data-grp-action="select_all">Tout sélectionner</button>
-          <button class="hse-btn hse-btn--sm hse-btn--ghost" data-grp-sel="${this._attrVal(integ)}" data-grp-action="deselect_all">Tout désélectionner</button>
+          <button class="hse-btn hse-btn--sm hse-btn--ghost" data-grp-sel="${this._attrVal(integ)}" data-grp-action="select_all">✓ Tout sélectionner</button>
+          <button class="hse-btn hse-btn--sm hse-btn--ghost" data-grp-sel="${this._attrVal(integ)}" data-grp-action="deselect_all">✕ Tout désélectionner</button>
+          <button class="hse-btn hse-btn--sm hse-btn--primary" data-grp-sel="${this._attrVal(integ)}" data-grp-action="select">⭐ Activer tout</button>
+          <button class="hse-btn hse-btn--sm hse-btn--danger" data-grp-sel="${this._attrVal(integ)}" data-grp-action="ignore">🚫 Ignorer tout</button>
         </div>
         <div class="hse-cfg__group-body">${rows}</div>
       </div>`;
@@ -562,15 +1033,38 @@ export class ConfigView {
         const grp = btn.getAttribute('data-grp-sel');
         const action = btn.getAttribute('data-grp-action');
         const items = (this._catData?.items ?? []).filter(i => (i.integration_domain ?? i.integration ?? 'inconnu') === grp);
-        items.forEach(i => action === 'select_all' ? this._selected.add(i.entity_id) : this._selected.delete(i.entity_id));
-        items.forEach(i => {
-          const esc = CSS.escape ? CSS.escape(i.entity_id) : i.entity_id;
-          const row = body.querySelector(`[data-eid="${esc}"]`);
-          const cb = body.querySelector(`[data-cb-eid="${esc}"]`);
-          if (cb) cb.checked = action === 'select_all';
-          if (row) row.classList.toggle('selected', action === 'select_all');
-        });
-        this._updateBulkBar();
+        // Actions de sélection/désélection (comportement existant)
+        if (action === 'select_all' || action === 'deselect_all') {
+          items.forEach(i => action === 'select_all' ? this._selected.add(i.entity_id) : this._selected.delete(i.entity_id));
+          items.forEach(i => {
+            const esc = CSS.escape ? CSS.escape(i.entity_id) : i.entity_id;
+            const row = body.querySelector(`[data-eid="${esc}"]`);
+            const cb = body.querySelector(`[data-cb-eid="${esc}"]`);
+            if (cb) cb.checked = action === 'select_all';
+            if (row) row.classList.toggle('selected', action === 'select_all');
+          });
+          this._updateBulkBar();
+        }
+        // Actions bulk serveur : "Activer tout" et "Ignorer tout"
+        if (action === 'select' || action === 'ignore') {
+          const eids = items.map(i => i.entity_id);
+          if (!eids.length) return;
+          const count = eids.length;
+          const actionLabel = action === 'select' ? 'activer' : 'ignorer';
+          if (count > 20) {
+            if (!confirm(`⚠ ${count} capteurs du groupe « ${grp} » vont être ${action === 'select' ? 'activés' : 'ignorés'}. Confirmer ?`)) return;
+          }
+          this._ctx.hseFetch('/api/hse/catalogue/triage/bulk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: eids.map(eid => ({ entity_id: eid, action })) }),
+          }).then(r => r.json()).then(() => {
+            this._catSig = null;
+            this._loadCatalogue();
+          }).catch(e => {
+            console.error('Group bulk action failed:', e);
+          });
+        }
       });
     });
     body.querySelectorAll('.hse-cfg__cb').forEach(cb => {
@@ -1588,17 +2082,17 @@ export class ConfigView {
                   </div>
                 </div>
               </div>
-              <div class="hse-cfg__pricing-section-title" style="margin-top:8px;">💶 Abonnement &amp; Fiscalité</div>
-              <div class="hse-cfg__pricing-body" style="padding:0;">
-                <div class="hse-cfg__field-row">
-                  <div class="hse-cfg__field"><label class="hse-cfg__label">Abonnement (€/mois HT)</label>
-                    <input id="hse-cfg-sub" name="subscription_eur_month" type="number" step="0.01" class="hse-cfg__input" value="${sub}" placeholder="9.47" />
-                  </div>
-                  <div class="hse-cfg__field"><label class="hse-cfg__label">Taux TVA (%)</label>
-                    <input id="hse-cfg-tax" name="tax_rate_pct" type="number" step="0.1" class="hse-cfg__input" value="${taxPct}" placeholder="20" />
-                  </div>
-                </div>
-              </div>
+              <div class="hse-cfg__pricing-section-title" style="margin-top:8px;">💶 Abonnement & Fiscalité</div>
+                            <div class="hse-cfg__pricing-body" style="padding:0;">
+                              <div class="hse-cfg__field-row">
+                                <div class="hse-cfg__field"><label class="hse-cfg__label">Abonnement (€/mois TTC)</label>
+                                  <input id="hse-cfg-sub" name="subscription_eur_month" type="number" step="0.01" class="hse-cfg__input" value="${sub}" placeholder="14.50" />
+                                </div>
+                                <div class="hse-cfg__field"><label class="hse-cfg__label">Taux TVA (%) <span class="hse-cfg__auto-badge">auto</span></label>
+                                  <input id="hse-cfg-tax" name="tax_rate_pct" type="number" step="0.1" class="hse-cfg__input" value="${taxPct}" placeholder="20" readonly />
+                                </div>
+                              </div>
+                            </div>
               <div class="hse-cfg__save-row">
                 <button type="submit" class="hse-btn hse-btn--primary">💾 Enregistrer</button>
                 <span id="hse-cfg-pricing-status" class="hse-cfg__save-status"></span>
@@ -1616,11 +2110,47 @@ export class ConfigView {
     const modeSel = form.querySelector('#hse-cfg-mode');
     const hphcWrap = form.querySelector('#hse-cfg-hphc-wrap');
     const flatWrap = form.querySelector('#hse-cfg-flat-wrap');
+    const taxInput = form.querySelector('#hse-cfg-tax');
+
+    const recalcTax = () => {
+      let ht, ttc;
+      if (modeSel?.value === 'hphc') {
+        // Pour HP/HC, on prend la moyenne pondérée ou le premier tarif dispo
+        const hpHt = parseFloat(form.querySelector('#hse-cfg-hp-ht')?.value) || 0;
+        const hpTtc = parseFloat(form.querySelector('#hse-cfg-hp-ttc')?.value) || 0;
+        const hcHt = parseFloat(form.querySelector('#hse-cfg-hc-ht')?.value) || 0;
+        const hcTtc = parseFloat(form.querySelector('#hse-cfg-hc-ttc')?.value) || 0;
+        ht = (hpHt + hcHt) / 2;
+        ttc = (hpTtc + hcTtc) / 2;
+        if (ht === 0 && hpHt > 0) { ht = hpHt; ttc = hpTtc; }
+        if (ht === 0 && hcHt > 0) { ht = hcHt; ttc = hcTtc; }
+      } else {
+        ht = parseFloat(form.querySelector('#hse-cfg-flat-ht')?.value) || 0;
+        ttc = parseFloat(form.querySelector('#hse-cfg-flat-ttc')?.value) || 0;
+      }
+      if (ht > 0 && ttc > 0) {
+        const taxPct = ((ttc / ht) - 1) * 100;
+        if (taxInput) taxInput.value = taxPct.toFixed(1);
+      }
+    };
+
+    // Recalcul à chaque changement de prix
+    ['#hse-cfg-flat-ht', '#hse-cfg-flat-ttc', '#hse-cfg-hp-ht', '#hse-cfg-hp-ttc', '#hse-cfg-hc-ht', '#hse-cfg-hc-ttc'].forEach(sel => {
+      const el = form.querySelector(sel);
+      if (el) el.addEventListener('input', recalcTax);
+    });
+
+    // Recalcul aussi au changement de mode
     modeSel?.addEventListener('change', () => {
       const hphc = modeSel.value === 'hphc';
       if (hphcWrap) hphcWrap.classList.toggle('visible', hphc);
       if (flatWrap) flatWrap.style.display = hphc ? 'none' : '';
+      recalcTax();
     });
+
+    // Calcul initial
+    recalcTax();
+
     form.addEventListener('submit', async e => { e.preventDefault(); await this._savePricing(form); });
   }
 
